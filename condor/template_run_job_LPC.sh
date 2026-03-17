@@ -15,6 +15,8 @@ is_data=$3
 year=$4
 output_Directory=$5
 cmssw_version=$6
+ifZ=$7
+ifH=$8 
 
 file_type="data"
 if [ "$is_data" == "F" ]; then file_type="mc"; fi
@@ -83,10 +85,10 @@ echo "input file: " $inputfilelist
 # Copy input files ahead of time
 ###################################
 mkdir inputs/
-for i in `cat $inputfilelist`
-do
-echo "Copying Input File: " $i
-xrdcp $i ./inputs/
+
+for i in `cat $inputfilelist`; do
+    echo "Copying Input File: " $i
+    xrdcp $i ./inputs/
 done
 ls inputs/* > tmp_input_list.txt 
 #echo
@@ -119,8 +121,8 @@ fi
 # Run executable
 ###########################
 echo "Executing Analysis executable:"
-echo "./${executable} tmp_input_list.txt ${output_name}_${job_number}.root ${file_type}"
-./${executable} tmp_input_list.txt ${output_name}_${job_number}.root ${file_type} ${is_data} ${year}
+echo "./${executable} tmp_input_list.txt ${output_name}_${job_number}.root ${file_type} ${is_data} ${year} ${ifZ} ${ifH}"
+./${executable} tmp_input_list.txt ${output_name}_${job_number}.root ${file_type} ${is_data} ${year} ${ifZ} ${ifH}
 
 
 ls -l

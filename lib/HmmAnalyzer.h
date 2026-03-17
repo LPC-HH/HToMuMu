@@ -54,7 +54,7 @@ class HmmAnalyzer : public MainEvent {
     HmmAnalyzer(const TString &inputFileList = "foo.txt",
                 const char *outFileName = "histo.root",
                 TString dataset = "data", bool is_data_input = false,
-                TString year_num = "2017");
+                TString year_num = "2017",  bool include_Z_ = false, bool include_H_ = true);
     virtual ~HmmAnalyzer();
     // void Analyze(bool is_data, int option, string outputFileName, string
     // label);
@@ -80,6 +80,8 @@ class HmmAnalyzer : public MainEvent {
     void BookTreeBranches();
     bool is_data;
     TString year;
+    bool include_Z; /**< Flag indicating if save Z region. */
+    bool include_H; /**< Flag indicating if save H region. */
     std::string yearst;
     std::map<std::string, float> muon_pt_cut;
     std::map<std::string, float> btagLoose_cut;
@@ -108,6 +110,7 @@ class HmmAnalyzer : public MainEvent {
     TH1D *h_nNoExtraMuon = new TH1D("h_nNoExtraMuon", "h_nNoExtraMuon", 1, 0, 1);
     TH1D *h_nNoExtraElectron = new TH1D("h_nNoExtraElectron", "h_nNoExtraElectron", 1, 0, 1);
     TH1D *h_nTriggerMatch = new TH1D("h_nTriggerMatch", "h_nTriggerMatch", 1, 0, 1);
+    TH1D *h_nInMassRegion = new TH1D("h_nInMassRegion", "h_nInMassRegion", 1, 0, 1);
     TH1D *h_nBjetRejection = new TH1D("h_nBjetRejection", "h_nBjetRejection", 1, 0, 1);
     TH1D *h_nInZPeak= new TH1D("h_nInZPeak", "h_nInZPeak", 1, 0, 1);
 
@@ -200,6 +203,7 @@ class HmmAnalyzer : public MainEvent {
     std::vector<bool> *t_Mu_isPFcand;
     std::vector<bool> *t_Mu_istracker;
     std::vector<bool> *t_Mu_isglobal;
+    std::vector<bool> *t_Mu_looseId;
     std::vector<bool> *t_Mu_mediumId;
     std::vector<bool> *t_Mu_softId;
     std::vector<bool> *t_Mu_tightId;
@@ -341,13 +345,24 @@ class HmmAnalyzer : public MainEvent {
 
 #ifdef HmmAnalyzer_cxx
 HmmAnalyzer::HmmAnalyzer(const TString &inputFileList, const char *outFileName,
-                         TString dataset, bool is_data_input, TString year_num) {
+                         TString dataset, bool is_data_input, TString year_num, 
+                         bool include_Z_, bool include_H_) {
     // if parameter tree is not specified (or zero), connect the file
     // used to generate this class and read the Tree.
 
     is_data = is_data_input;
     year = year_num;
+    include_Z = include_Z_;
+    include_H = include_H_;
     yearst = std::string(year.Data());
+    
+    if(include_Z){
+        std::cout << "Z range included" << std::endl;
+    }
+    if(include_H){
+        std::cout << "H range included" << std::endl;
+    }
+
     std::string path_RochCor = "./data/Rocco/RoccoR" + yearst + ".txt";
     std::cout << "Rochester correction files: " << path_RochCor << std::endl;
     _Roch_calib.init(path_RochCor);
@@ -374,8 +389,8 @@ HmmAnalyzer::HmmAnalyzer(const TString &inputFileList, const char *outFileName,
     btagLoose_cut["2022EE"] = 0.0499;
     btagLoose_cut["2023"] = 0.0358;
     btagLoose_cut["2023BPix"] = 0.0359;
-    btagLoose_cut["2024"] = 0.0359;// 2024 values NEED to be checked. Other values probaly too
-    btagLoose_cut["2025"] = 0.0359;
+    btagLoose_cut["2024"] = 0.0365;
+    btagLoose_cut["2025"] = 0.0365;// 2025 values NEED to be checked
 
     // b-tag deepFlav MEDIUM score selection
     btagMedium_cut["2016"] = 0.6321;
@@ -386,8 +401,8 @@ HmmAnalyzer::HmmAnalyzer(const TString &inputFileList, const char *outFileName,
     btagMedium_cut["2022EE"] = 0.2605;
     btagMedium_cut["2023"] = 0.1917;
     btagMedium_cut["2023BPix"] = 0.1919;
-    btagMedium_cut["2024"] = 0.1917;// 2024 values NEED to be checked. Other values probaly too
-    btagMedium_cut["2025"] = 0.1917;
+    btagMedium_cut["2024"] = 0.1990;
+    btagMedium_cut["2025"] = 0.1990; // 2025 values NEED to be checked
 
     if (!is_data) {
         getPileupHistograms();
@@ -623,7 +638,8 @@ bool HmmAnalyzer::isValidJet(int index) {
 
     else{ //nanoAODv15
         if (fabs(Jet_eta[index]) <= 2.6){
-            Jet_passJetIdTight = (Jet_neHEF[index] < 0.99) && (Jet_neEmEF[index] < 0.9) && (Jet_chMultiplicity[index]+Jet_neMultiplicity[index] > 1) && (Jet_chHEF[index] > 0.01) && (Jet_chMultiplicity[index] > 0);
+            Jet_passJetIdTight = (Jet_neHEF[index] < 0.99) && (Jet_neEmEF[index] < 0.9) && (Jet_chMultiplicity[index]+Jet_neMultiplicity[index] > 1) && 
+             (Jet_chHEF[index] > 0.01) && (Jet_chMultiplicity[index] > 0);
         }
         else if (fabs(Jet_eta[index]) > 2.6 && abs(Jet_eta[index]) <= 2.7){
             Jet_passJetIdTight = (Jet_neHEF[index] < 0.90) && (Jet_neEmEF[index] < 0.99);
@@ -783,6 +799,7 @@ HmmAnalyzer::~HmmAnalyzer() {
     h_nNoExtraMuon->Write();
     h_nNoExtraElectron->Write();
     h_nTriggerMatch->Write();
+    h_nInMassRegion->Write();
     h_nBjetRejection->Write();
     h_nInZPeak->Write();
     
@@ -894,6 +911,7 @@ void HmmAnalyzer::clearTreeVectors() {
     t_Mu_isPFcand->clear();
     t_Mu_isglobal->clear();
     t_Mu_istracker->clear();
+    t_Mu_looseId->clear();
     t_Mu_mediumId->clear();
     t_Mu_softId->clear();
     t_Mu_tightId->clear();
@@ -1148,6 +1166,7 @@ void HmmAnalyzer::BookTreeBranches() {
     t_Mu_isPFcand = new std::vector<bool>();
     t_Mu_isglobal = new std::vector<bool>();
     t_Mu_istracker = new std::vector<bool>();
+    t_Mu_looseId = new std::vector<bool>();
     t_Mu_mediumId = new std::vector<bool>();
     t_Mu_softId = new std::vector<bool>();
     t_Mu_tightId = new std::vector<bool>();
@@ -1188,6 +1207,7 @@ void HmmAnalyzer::BookTreeBranches() {
     tree->Branch("t_Mu_isPFcand", "vector<bool>", &t_Mu_isPFcand);
     tree->Branch("t_Mu_isglobal", "vector<bool>", &t_Mu_isglobal);
     tree->Branch("t_Mu_istracker", "vector<bool>", &t_Mu_istracker);
+    tree->Branch("t_Mu_looseId", "vector<bool>", &t_Mu_looseId);
     tree->Branch("t_Mu_mediumId", "vector<bool>", &t_Mu_mediumId);
     tree->Branch("t_Mu_softId", "vector<bool>", &t_Mu_softId);
     tree->Branch("t_Mu_tightId", "vector<bool>", &t_Mu_tightId);

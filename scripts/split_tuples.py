@@ -135,7 +135,7 @@ if __name__ == "__main__":
     print(f"[Config] Branching Ratio = {branching_ratio}")
     print(f"[Config] Use bsConstrain = {use_bsConstrain}")
 
-    out_path = f"./root_io/tuples/split_tuples_no_splitting/{channel}"
+    out_path = f"./root_io/tuples/split_tuples/{channel}"
     input_path = f"./root_io/tuples/BDT_score/{channel}/BFull_SNottH/"
     os.makedirs(out_path, exist_ok=True)
     if use_bsConstrain:

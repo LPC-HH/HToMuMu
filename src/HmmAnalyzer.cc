@@ -24,10 +24,10 @@
 
 int main(int argc, char *argv[]) {
 
-    if (argc != 6) {
-        std::cerr << "Please give 4 arguments " << "runList " << " "
+    if (argc != 8) {
+        std::cerr << "Please give 7 arguments " << "runList " << " "
                   << "outputFileName" << " " << "dataset"
-                  << "data type and year" << std::endl;
+                  << "data type year include_Z(T/F) and include_H(T/F)" << std::endl;
         return -1;
     }
     const char *inputFileList = argv[1];
@@ -36,6 +36,8 @@ int main(int argc, char *argv[]) {
     // const char *is_data = argv[4];
     const bool is_data_input = *argv[4] == 'T';
     TString year_num = argv[5];
+    const bool include_Z = *argv[6] == 'T';
+    const bool include_H = *argv[7] == 'T';
 
     //read run3 muon efficiency json files
     if (!is_data_input){
@@ -43,12 +45,15 @@ int main(int argc, char *argv[]) {
         corrector.initializeCorrections(year_num.Data());
     }
 
-    HmmAnalyzer Hmm(inputFileList, outFileName, data, is_data_input, year_num);
+    HmmAnalyzer Hmm(inputFileList, outFileName, data, is_data_input, year_num, include_Z, include_H);
     std::cout << "Running on: " << std::endl;
     std::cout << "  Dataset: " << data << " year " << year_num << std::endl;
     std::cout << "  Era:  " << year_num << std::endl;
     std::cout << std::boolalpha;
     std::cout << "  Is data? " << is_data_input << std::endl;
+    std::cout << "  Year num: " << year_num << std::endl;
+    std::cout << "  Include Z? " << include_Z << std::endl;
+    std::cout << "  Include H? " << include_H << std::endl;
     Hmm.EventLoop();
 
     return 0;
@@ -184,10 +189,15 @@ void HmmAnalyzer::EventLoop() {
             CorrectPtRoch(_Roch_calib, false, mu_raw, ptErr_raw, pt_Roch, ptErr_Roch,
                           pt_Roch_sys_up, pt_Roch_sys_down, Muon_charge[i],
                           Muon_nTrackerLayers[i], gen_pt, is_data);
-            
-            mu_pt_Roch_corr.push_back(pt_Roch);
-            mu_ptErr_Roch_corr.push_back(ptErr_Roch);
 
+            if ((pt_Roch > 10 && fabs(Muon_eta[i]) < 2.4 && Muon_isGlobal[i] && Muon_pfRelIso04_all[i] < 0.25 && Muon_looseId[i])){
+                mu_pt_Roch_corr.push_back(pt_Roch);
+                mu_ptErr_Roch_corr.push_back(ptErr_Roch);
+            }
+        }
+
+        if(mu_pt_Roch_corr.size() < 2){
+            continue;
         }
 
         for (int muon_index_1 = 0; muon_index_1 < nMuon; muon_index_1++) {
@@ -235,8 +245,10 @@ void HmmAnalyzer::EventLoop() {
 
 
         for (int i = 0; i < nElectron; i++) {
-            if (Electron_pt[i] < 5.0)
+            if ((fabs(Electron_eta[i]) > 2.5 || Electron_pt[i] < 10.0 || fabs(Electron_dz[i]) > 1.0 
+                    || fabs(Electron_dxy[i]) > 0.5 || !Electron_mvaIso_WP90[i])) {
                 continue;
+            }
             // t_El_genPartIdx->push_back(Electron_genPartIdx[i]);
             // t_El_genPartFlav->push_back(Electron_genPartFlav[i]);
             t_El_charge->push_back(Electron_charge[i]);
@@ -353,6 +365,7 @@ void HmmAnalyzer::EventLoop() {
             t_Mu_isPFcand->push_back(Muon_isPFcand[i]);
             // t_Mu_isglobal->push_back(Muon_isglobal[i]);
             // t_Mu_istracker->push_back(Muon_istracker[i]);
+            t_Mu_looseId->push_back(Muon_looseId[i]);
             t_Mu_mediumId->push_back(Muon_mediumId[i]);
             t_Mu_softId->push_back(Muon_softId[i]);
             t_Mu_tightId->push_back(Muon_tightId[i]);
@@ -438,6 +451,25 @@ void HmmAnalyzer::EventLoop() {
         t_diMuon_bsConstrainedPt = dimuBSC.Pt();
         t_diMuon_bsConstrainedMass = dimuBSC.M();
 
+        if ((include_Z && include_H) || (!include_Z && !include_H)){
+            if (t_diMuon_bsConstrainedMass < 70 || t_diMuon_bsConstrainedMass > 180){
+                continue;
+            }    
+        }
+        else if (include_Z){
+            if(t_diMuon_bsConstrainedMass < 76 || t_diMuon_bsConstrainedMass > 106){
+                continue;
+            }
+        }
+        else{
+            //in Higgs region
+            if(t_diMuon_bsConstrainedMass < 100 || t_diMuon_bsConstrainedMass > 180){
+                continue;
+            }
+        }
+
+        h_nInMassRegion->Fill(0.5);
+
         t_nSoftActivityJet = nSoftActivityJet;
         t_SoftActivityJetNjets10 = SoftActivityJetNjets10;
         t_SoftActivityJetNjets2 = SoftActivityJetNjets2;
@@ -448,9 +480,9 @@ void HmmAnalyzer::EventLoop() {
         t_SoftActivityJetHT5 = SoftActivityJetHT5;
 
 
-        if(t_diMuon_bsConstrainedMass < 80 || t_diMuon_bsConstrainedMass > 180){
+        /*if(t_diMuon_bsConstrainedMass < 80 || t_diMuon_bsConstrainedMass > 180){
             continue; //not in signal + Z range
-        }
+        }*/
 
         for (int j = 0; j < nJet; j++) {
             if (!isValidJet(j)) {
@@ -535,7 +567,9 @@ void HmmAnalyzer::EventLoop() {
             t_bJet_SFup->push_back(jet_scalefactor_up);
             t_bJet_SFdown->push_back(jet_scalefactor_do);
         }
+
         if(t_nbJet_Loose > 1 || t_nbJet > 0){
+            //std::cout << "Too many bJets" << std::endl;
             continue;
         }
 

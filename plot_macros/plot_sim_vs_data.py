@@ -101,7 +101,7 @@ variables = [
 
 #variables = ["leading_jet_eta"]#, "subleading_jet_eta"]
 #variables = ["diMuon_bsConstrainedMass"]
-variables = []
+#variables = []
 
 # eras = ["2022EE", "2022", "2023", "2023BPix", "2024"]#, "2025"]
 eras = ["2022", "2022EE", "2023", "2023BPix", "2024", "2025", "Combined"]

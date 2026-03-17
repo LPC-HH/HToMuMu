@@ -43,18 +43,34 @@ skip_pattern = [
     "s-channel",
     "ZZto2Nu2Q",
     "WWto4Q",
+    "WWtoLNu2Q",
+    "WZtoLNu2Q",
+    "DYto2Mu-2Jets",
 ]
 
 list_datasets = datasets_info.keys()
 # # Use in case you want to run over a specific list of datasets!
 #list_datasets = [
-     #"DY50to120_Summer24",
-     #"DY120to200_Summer24",
-#     "WWtoLNu2Q_Summer22",
-#     "Muon_2022C",
-#     "Muon_2022D",
-#     "SingleMuon_2022C",
+    #"VBF_Summer22",
+    #"VBF_Summer22EE",
+    #"VBF_Summer23",
+    #"VBF_Summer23BPix",
+    #"VBF_Summer24",
+    #"ggH_Summer22",
+    #"ggH_Summer22EE",
+    #"ggH_Summer23",
+    #"ggH_Summer23BPix",
+    #"ggH_Summer24",
+#    "DY50to120_Summer22",
+#    "DY120to200_Summer24",
+#    "WWtoLNu2Q_Summer22",
+#    "Muon_2022C",
+#    "Muon_2022D",
+#    "SingleMuon_2022C",
 #]
+
+include_Z = "F"
+include_H = "T"
 
 # cmsswReleaseVersion = "CMSSW_10_6_5"
 CMSSW_BASE_DIR = os.getenv('CMSSW_BASE')
@@ -169,7 +185,7 @@ for dataset_name in list_datasets:
 
     EOS_SUBPATH = os.getenv('LOGNAME') + "/analyzer_%s/"%(outputfile) + type_info + "/%s/"%(dataset_name)
     os.system("xrdfs root://cmseos.fnal.gov mkdir -p /store/group/lpchmumu/"+ EOS_SUBPATH)
-    args = outputfile + " $(I) " + isData + " " + year + " " + EOS_SUBPATH + " " + cmsswReleaseVersion
+    args = outputfile + " $(I) " + isData + " " + year + " " + EOS_SUBPATH + " " + cmsswReleaseVersion + " "  + include_Z + " " + include_H
     jobfile_JDL.write("Arguments = " + args + "\n")
 
     jobfile_JDL.write("Log = log/jobR$(I).$(Cluster).$(Process).log" + "\n")
