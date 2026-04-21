@@ -25,6 +25,9 @@ for dataset_name in datasets_info.keys():
     jsonFile = open("tmpOutput.json", "r")
     data = json.load(jsonFile)
 
+    if(len(data) == 0):
+        print("*************** NO ROOTFILES FOUND ***************")
+        quit()
     for p in data:
         blockName = p["file"][0]["block.name"]
         fileName = p["file"][0]["name"]

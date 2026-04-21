@@ -87,7 +87,7 @@ total_job_number = 0
 # Create directory for condor jobs
 for dataset_name in list_datasets:
     match_pattern = [True for pattern in skip_pattern if pattern in dataset_name]
-    if (dataset_name in skip_dataset) or ("ext1" in dataset_name) or (True in match_pattern):
+    if (dataset_name in skip_dataset) or (True in match_pattern): #or ("ext1" in dataset_name) or (True in match_pattern):
         continue
 
     print("\n----- %s -----"%(dataset_name))
@@ -111,10 +111,9 @@ for dataset_name in list_datasets:
         print("Merged file does not exist. Skipping!")
         continue
 
-    if(isData=='T'):
-        INPUT_FILE = EOS_BASE_DIR + type_info + "/%s/"%(dataset_name) + f"HiggsMuMu_" + v.ANALYZER_VERSION_NUMBER + "_$(I)_goodLumi.root"
-    else:
-        INPUT_FILE = EOS_BASE_DIR + type_info + "/%s/"%(dataset_name) + f"HiggsMuMu_" + v.ANALYZER_VERSION_NUMBER + "_$(I).root"
+    #if(isData=='T'):
+    #    INPUT_FILE = EOS_BASE_DIR + type_info + "/%s/"%(dataset_name) + f"HiggsMuMu_" + v.ANALYZER_VERSION_NUMBER + "_$(I)_goodLumi.root"
+    INPUT_FILE = EOS_BASE_DIR + type_info + "/%s/"%(dataset_name) + f"HiggsMuMu_" + v.ANALYZER_VERSION_NUMBER + "_$(I).root"
 
     OUTPUT_DIR = EOS_BASE_DIR + "tuples_" + v.TUPLES_VERSION_NUMBER  + "/%s/"%(dataset_name)
     os.system("xrdfs root://cmseos.fnal.gov mkdir -p "+ OUTPUT_DIR)

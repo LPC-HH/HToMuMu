@@ -46,7 +46,7 @@ constexpr float FLOAT_NULL_VALUE = -999.;
 constexpr int INT_NULL_VALUE = -999;
 
 std::map<TString, TString> NANOAOD_VERSION = {
-    {"2022", "v12"},  {"2023", "v12"}, {"2024", "v15"}, {"2025", "v15"}
+    {"2022", "v12"}, {"2022EE", "v12"},  {"2023", "v12"}, {"2023BPix", "v12"}, {"2024", "v15"}, {"2025", "v15"}
 };
 
 class HmmAnalyzer : public MainEvent {
@@ -631,12 +631,14 @@ float HmmAnalyzer::getPileupWeightDown(int NPU) {
 bool HmmAnalyzer::isValidJet(int index) {
     bool Jet_passJetIdTight = false;
     if(NANOAOD_VERSION[year] == "v12"){ //nanoAODv12
+        //std::cout << "Running v12" << std::endl;
         if (fabs(Jet_eta[index]) <= 2.7) Jet_passJetIdTight = Jet_jetId[index] & (1 << 1);
         else if (fabs(Jet_eta[index]) > 2.7 && fabs(Jet_eta[index]) <= 3.0) Jet_passJetIdTight = (Jet_jetId[index] & (1 << 1)) && (Jet_neHEF[index] < 0.99);
         else if (fabs(Jet_eta[index]) > 3.0) Jet_passJetIdTight = (Jet_jetId[index] & (1 << 1)) && (Jet_neEmEF[index] < 0.4);
     }
 
     else{ //nanoAODv15
+        //std::cout << "Running v15" << std::endl;
         if (fabs(Jet_eta[index]) <= 2.6){
             Jet_passJetIdTight = (Jet_neHEF[index] < 0.99) && (Jet_neEmEF[index] < 0.9) && (Jet_chMultiplicity[index]+Jet_neMultiplicity[index] > 1) && 
              (Jet_chHEF[index] > 0.01) && (Jet_chMultiplicity[index] > 0);

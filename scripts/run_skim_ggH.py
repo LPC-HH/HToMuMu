@@ -55,6 +55,8 @@ for era in eras:
     for dataset in background_datasets:
         input = base_input_directory + dataset + "_" + era + "_tuples.root"
         input_arguments.append([input, output_directory, era, dataset, "F"])
+
+input_arguments.append([base_input_directory + "Data_2025_tuples.root", output_directory, "2025", "Data", "T"])
 print(input_arguments)
 
 # Loop over each set of input arguments and execute the C++ program

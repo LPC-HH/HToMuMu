@@ -33,6 +33,8 @@ seconds_to_hms() {
 total_job_times=()
 running_job_times=()
 
+n_long_jobs=0
+
 for block in "$DIR"/*; do
     echo "Checking $block files"
     blockError=false
@@ -40,6 +42,10 @@ for block in "$DIR"/*; do
     #echo "$nFilesExpected expected files"
     nFilesOut=$(ls $block/out/ | wc -l)
     #echo "$nFilesOut out files"
+
+    #if [[ $block != "analyzer_HiggsMuMu_v1.5/Muon1_2024G" ]]; then
+    #    continue
+    #fi
 
     if [[ "$nFilesExpected" == *"Queue"* ]]; then
         nFilesExpected=1
@@ -84,7 +90,9 @@ for block in "$DIR"/*; do
         #echo "$file"
         first_line=$(head -n 1 "$file")
         second_line=$(head -n 3 "$file" | tail -n 1)
-        last_line=$(tail -n 20 "$file" | head -n 1)
+        #last_line=$(tail -n 20 "$file" | head -n 1)
+        #last_line=$(grep "Job terminated." "$file" | tail -n 1)
+        last_line=$(grep -E '^005 \([0-9]+\.[0-9]+\.[0-9]+\) [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} Job terminated\.$' "$file" | tail -n 1)
         #echo "$last_line"
 
         submission_time=$(grep -oE '[0-9]{2}:[0-9]{2}:[0-9]{2}' <<< "$first_line")
@@ -102,12 +110,17 @@ for block in "$DIR"/*; do
         total_job_time=$(( ft - st ))
         running_job_time=$(( ft - tt))
 
-        if (( total_job_time <= 0)); then
+        if (( $total_job_time <= 0)); then
             total_job_time=$(( 86400 - st + ft))
         fi
 
-        if (( running_job_time <= 0)); then
+        if (( $running_job_time <= 0)); then
             running_job_time=$(( 86400 - tt + ft))
+        fi
+
+        if (( $running_job_time >= 36000)); then
+            ((n_long_jobs++))
+            echo "long job in $file of $(seconds_to_hms "$running_job_time")"
         fi
 
         total_job_times+=( $total_job_time )
@@ -136,14 +149,23 @@ max_run_time=${running_job_times[0]}; for x in "${running_job_times[@]}"; do ((x
 min_run_time=${running_job_times[0]}; for x in "${running_job_times[@]}"; do ((x<min_run_time)) && min_run_time=$x; done
 
 sum=0; for x in "${running_job_times[@]}"; do ((sum+=x)); done;
-avg_run_time=$((sum/${#running_job_times[@]}))
+avg_run_time=$(($sum/${#running_job_times[@]}))
+echo "total running job time: $sum"
+echo "num jobs ${#running_job_times[@]}"
+
+sumTot=0; for x in "${total_job_times[@]}"; do ((sumTot+=x)); done;
+avg_run_timeTot=$(($sumTot/${#total_job_times[@]}))
+echo "total job time: $sumTot"
+echo "num jobs ${#running_job_times[@]}"
 
 echo "The total job time is $(seconds_to_hms "$max_job_time")"
 echo "The max run time is $(seconds_to_hms "$max_run_time")"
 echo "The min run time is $(seconds_to_hms "$min_run_time")"
 echo "The avg run time is $(seconds_to_hms "$avg_run_time")" 
+echo "The avg total time is $(seconds_to_hms "$avg_run_timeTot")" 
 
 echo "------------------------------ $DIR ------------------------------" >> "$OUTFILE"
+echo "Total num of long jobs: $n_long_jobs"
 echo "Total job num: ${#total_job_times[@]}" >> "$OUTFILE"
 
 echo "The total job time is $(seconds_to_hms "$max_job_time")" >> "$OUTFILE"

@@ -714,5 +714,7 @@ void HmmAnalyzer::EventLoop() {
     auto end_time = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
     std::cout << "Elapsed time: " << duration.count()/60000 << " minutes" << std::endl;
-    std::cout << "Time per event: " << duration.count()/nentries << " milliseconds" << std::endl;
+    if(nentries != 0) {
+        std::cout << "Time per event: " << duration.count()/nentries << " milliseconds" << std::endl;
+    }
 }

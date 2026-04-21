@@ -1,5 +1,5 @@
-ANALYZER_VERSION="v1.4"
-TUPLES_VERSION="v1.4.2"
+ANALYZER_VERSION="v1.5"
+TUPLES_VERSION="v1.5.0"
 inEOS_PATH="/store/group/lpchmumu/$USER/analyzer_HiggsMuMu_$ANALYZER_VERSION/tuples_$TUPLES_VERSION/"
 
 #echo eosmkdir ${inEOS_PATH}BDT_score/

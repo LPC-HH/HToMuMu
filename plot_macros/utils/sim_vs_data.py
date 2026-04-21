@@ -60,8 +60,10 @@ def get_histograms_from_tuple(
     era_reweight = 1
     if lumi_rescale:
         print("Re scaling lumi")
+        if era == "2024":
+            era_reweight = float(luminosity["2024"]) / (float(luminosity["2024"]) + float(luminosity["2025"]))
         if era == "2025":
-            era_reweight = float(luminosity["2025"]) / float(luminosity["2024"])
+            era_reweight = float(luminosity["2025"]) / (float(luminosity["2024"]) + float(luminosity["2025"]))
             era = "2024"
         if era == "Combined":
             era_reweight = float(luminosity["Combined"]) / 170.97
@@ -387,7 +389,7 @@ def draw_data_and_simul_and_ratio(
         production_channel,
         bdt_cuts,
         bdt_subset,
-        era in ["2025", "Combined"],
+        era in ["2024", "2025", "Combined"],
         Z_study=Z_study,
         jet_pT_study=jet_pT_study,
     )
@@ -401,7 +403,7 @@ def draw_data_and_simul_and_ratio(
         production_channel,
         bdt_cuts,
         bdt_subset,
-        era in ["2025", "Combined"],
+        era in ["2024", "2025", "Combined"],
         Z_study=Z_study,
         jet_pT_study=jet_pT_study,
     )

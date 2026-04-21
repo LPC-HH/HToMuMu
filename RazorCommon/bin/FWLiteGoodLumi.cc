@@ -1,5 +1,6 @@
 #include <iostream>
 #include <algorithm>
+#include <chrono>
 #include <TFile.h>
 #include <TSystem.h>
 #include <TTree.h>
@@ -18,9 +19,9 @@
 #include "FWCore/PythonParameterSet/interface/PyBind11ProcessDesc.h"
 #include "DataFormats/Provenance/interface/LuminosityBlockRange.h"
 
-std::string RUN_BRANCH = "run";
-std::string LUMI_BRANCH = "luminosityBlock";
-std::string EVENTS_TREE = "Events";
+std::string RUN_BRANCH = "t_run";
+std::string LUMI_BRANCH = "t_luminosityBlock";
+std::string EVENTS_TREE = "tree";
 
 bool jsonContainsEvent (const std::vector< edm::LuminosityBlockRange > &jsonVec, unsigned int run, unsigned int lumi)
 {
@@ -38,6 +39,79 @@ bool jsonContainsEvent (const std::vector< edm::LuminosityBlockRange > &jsonVec,
   }
   return false;
 }
+/*
+bool jsonContainsEvent(
+    const std::unordered_map<unsigned int, std::vector<std::pair<unsigned int, unsigned int>>>& jsonMap,
+    unsigned int run,
+    unsigned int lumi)
+{
+    if (jsonMap.empty()) return true;
+
+    auto it = jsonMap.find(run);
+    if (it == jsonMap.end()) return false;
+
+    const auto& lumiRanges = it->second;
+    for (const auto& range : lumiRanges) {
+        if (lumi >= range.first && lumi <= range.second)
+            return true;
+    }
+    return false;
+}*/
+/*bool jsonContainsEvent(
+    const std::map<unsigned int, std::vector<std::pair<unsigned int, unsigned int>>>& jsonMap,
+    unsigned int run,
+    unsigned int lumi)
+{
+    if (jsonMap.empty()) return true;
+
+    auto it = jsonMap.find(run);
+    if (it == jsonMap.end()) return false;
+
+    const auto& ranges = it->second;
+
+    int left = 0, right = ranges.size() - 1;
+    while (left <= right) {
+        int mid = (left + right) / 2;
+
+        if (lumi < ranges[mid].first) {
+            right = mid - 1;
+        } else if (lumi > ranges[mid].second) {
+            left = mid + 1;
+        } else {
+            return true;
+        }
+    }
+    return false;
+}*/
+/*
+bool jsonContainsEvent(const std::vector<edm::LuminosityBlockRange>& jsonVec,
+                       unsigned int run,
+                       unsigned int lumi)
+{
+    if (jsonVec.empty()) return true;
+
+    // Find first range with startRun >= run
+    auto it = std::lower_bound(
+        jsonVec.begin(), jsonVec.end(), run,
+        [](const edm::LuminosityBlockRange& range, unsigned int r) {
+            return range.startRun() < r;
+        });
+
+    // Check this and possibly previous element
+    for (int i = 0; i < 2; ++i) {
+        if (it == jsonVec.end()) break;
+
+        if (run >= it->startRun() && run <= it->endRun() &&
+            lumi >= it->startLumi() && lumi <= it->endLumi()) {
+            return true;
+        }
+
+        if (it == jsonVec.begin()) break;
+        --it;
+    }
+
+    return false;
+}*/
 
 int main(int argc, char ** argv){
   // load framework libraries
@@ -65,6 +139,42 @@ int main(int argc, char ** argv){
       copy( lumisTemp.begin(), lumisTemp.end(), jsonVector.begin() );
     }
 
+
+  /*std::unordered_map<unsigned int, std::vector<std::pair<unsigned int, unsigned int>>> jsonMap;
+
+  for (const auto& range : jsonVector) {
+    for (unsigned int r = range.startRun(); r <= range.endRun(); ++r) {
+        jsonMap[r].emplace_back(range.startLumi(), range.endLumi());
+    }
+}*/
+  /*std::map<unsigned int, std::vector<std::pair<unsigned int, unsigned int>>> jsonMap;
+  for (const auto& range : jsonVector) {
+    unsigned int run = range.startRun();  // usually == endRun()
+    jsonMap[run].emplace_back(range.startLumi(), range.endLumi());
+  }
+
+  for (auto& [run, ranges] : jsonMap) {
+    std::sort(ranges.begin(), ranges.end());
+
+    std::vector<std::pair<unsigned int, unsigned int>> merged;
+    for (const auto& r : ranges) {
+        if (merged.empty() || r.first > merged.back().second + 1) {
+            merged.push_back(r);
+        } else {
+            merged.back().second = std::max(merged.back().second, r.second);
+        }
+    }
+    ranges = std::move(merged);
+  }
+
+  std::sort(jsonVector.begin(), jsonVector.end(),
+          [](const edm::LuminosityBlockRange& a,
+             const edm::LuminosityBlockRange& b) {
+              if (a.startRun() != b.startRun())
+                  return a.startRun() < b.startRun();
+              return a.startLumi() < b.startLumi();
+          });
+*/
   std::string inputFilename = argv[2];
   std::string outputFilename = argv[3];
 
@@ -73,6 +183,11 @@ int main(int argc, char ** argv){
   
   //loop over all TTrees in the file and add the weight branch to each of them
   TFile *inputFile = TFile::Open(inputFilename.c_str(), "READ");
+  if (!inputFile || inputFile->IsZombie()) {
+    std::cerr << "Error: cannot open file" << std::endl;
+    return 1;
+  }
+
   assert(inputFile);
   inputFile->cd();
   TIter nextkey(inputFile->GetListOfKeys());
@@ -111,18 +226,43 @@ int main(int argc, char ** argv){
     
     UInt_t run = 0;
     UInt_t lumi = 0;
-    inputTree->SetBranchAddress(RUN_BRANCH.c_str(), &run);
-    inputTree->SetBranchAddress(LUMI_BRANCH.c_str(), &lumi);
+    int status = 0;
+    status = inputTree->SetBranchAddress(RUN_BRANCH.c_str(), &run);
+    if (status < 0) {
+      std::cerr << "Error setting branch address for " << RUN_BRANCH << std::endl;
+      return 1;
+    }
 
+    status = inputTree->SetBranchAddress(LUMI_BRANCH.c_str(), &lumi);
+    if (status < 0) {
+      std::cerr << "Error setting branch address for " << LUMI_BRANCH << std::endl;
+      return 1;
+    }
 
+    std::cout << "Input Tree loaded" << std::endl;
+
+    std::cout << "JSON ranges: " << jsonVector.size() << std::endl;
+
+    auto start = std::chrono::high_resolution_clock::now();
     //store the weights
     for (int n=0;n<inputTree->GetEntries();n++) { 
-      if (n%1000000==0) std::cout << "Processed Event " << n << "\n";
+      if (n == 0) std::cout << "Processing Events" << std::endl;
+      if (n%10000==0){ 
+        std::cout << "Processed Event " << n << "\n";
+        auto now = std::chrono::high_resolution_clock::now();
+        std::cout << "Time per 10k events: "
+              << std::chrono::duration<double>(now - start).count()
+              << " s\n";
+        start = now;
+      }
+
       inputTree->GetEntry(n);
 
-      if(jsonContainsEvent( jsonVector, run, lumi) ) {	
-	outputTree->Fill(); 
+      if(jsonContainsEvent(jsonVector, run, lumi) ) {	
+      //if(jsonContainsEvent(jsonMap, run, lumi) ) {	
+	        outputTree->Fill(); 
       }
+      if (n == 0) std::cout << "1st Event Processed" << std::endl;
     }
     //save
     outputTree->Write();

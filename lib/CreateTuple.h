@@ -534,8 +534,8 @@ void CreateTuple::fillOutputTree() {
         }
 
         else{
-            weight = 0;
-            weight_no_lumi = 0;
+            weight = 1;
+            weight_no_lumi = 1;
         }
 
         // DiMuon variables

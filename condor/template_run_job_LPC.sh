@@ -93,29 +93,6 @@ done
 ls inputs/* > tmp_input_list.txt 
 #echo
 
-###########################
-# Run goodLumi Validation
-###########################
-if [[ "$file_type" == "data" ]]; then
-    echo "Executing goodLumi check:"
-    cd RazorCommon/bin
-    cert_file=$(ls ../data/)
-
-    for file in "../../inputs/"*; do
-        echo "./FWLiteGoodLumi ../python/loadJson.py $file $outfile"
-        sed -i "/JSONfile =/c\JSONfile = '../data/${cert_file}'" ../python/loadJson.py
-        outfile="${file%.root}goodLumi.root"
-        echo "Output goodLumi file: " $outfile
-        ./FWLiteGoodLumi ../python/loadJson.py $file $outfile
-
-        echo "changing outfile to be named like infile"
-        mv $outfile $file
-    done
-
-    cd ../../
-fi
-
-#exit 1
 
 ###########################
 # Run executable
@@ -126,6 +103,27 @@ echo "./${executable} tmp_input_list.txt ${output_name}_${job_number}.root ${fil
 
 
 ls -l
+
+###########################
+# Run goodLumi Validation
+###########################
+
+if [[ "$file_type" == "data" ]]; then
+    echo "Executing goodLumi check:"
+    cd RazorCommon/bin
+    cert_file=$(ls ../data/)
+
+    echo "./FWLiteGoodLumi ../python/loadJson.py ../../${output_name}_${job_number}.root ../../${output_name}_${job_number}_GoodLumi.root"
+    sed -i "/JSONfile =/c\JSONfile = '../data/${cert_file}'" ../python/loadJson.py
+    #echo "Output goodLumi file: " $outfile
+    ./FWLiteGoodLumi ../python/loadJson.py ../../${output_name}_${job_number}.root ../../${output_name}_${job_number}_GoodLumi.root
+
+    cd ../../
+    
+    echo "changing outfile to be named like infile"
+    mv ${output_name}_${job_number}_GoodLumi.root ${output_name}_${job_number}.root
+fi
+
 ################################################################
 # Copy output file to /eos space -- define in submitter code
 ################################################################

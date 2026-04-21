@@ -51,6 +51,16 @@ skip_pattern = [
 list_datasets = datasets_info.keys()
 # # Use in case you want to run over a specific list of datasets!
 #list_datasets = [
+    #"DY120to200_Summer22",
+    #"EWK_2L2J_Summer24",
+    #"Muon_2022E",
+    #"Muon0_2023C_v1",
+    #"Muon0_2024I_v2",
+    #"Muon0_2025B",
+    #"Muon0_2025G",
+    #"TTto2L2Nu_Summer23",
+    #"VBF_Summer22",
+    #"WZZ_Summer23BPix",
     #"VBF_Summer22",
     #"VBF_Summer22EE",
     #"VBF_Summer23",

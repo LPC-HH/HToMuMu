@@ -83,11 +83,19 @@ for block in "$DIR"/*; do
     for file in "$block"/log/*.log; do
         first_line=$(head -n 1 "$file")
         second_line=$(head -n 3 "$file" | tail -n 1)
-        last_line=$(tail -n 2 "$file" | head -n 1)
+        last_line=$(tail -n 20 "$file" | head -n 1)
+
+        #echo "1: $first_line\n"
+        #echo "2: $second_line\n"
+        #echo "-1: $last_line\n"
 
         submission_time=$(grep -oE '[0-9]{2}:[0-9]{2}:[0-9]{2}' <<< "$first_line")
         transfer_time=$(grep -oE '[0-9]{2}:[0-9]{2}:[0-9]{2}' <<< "$second_line")
         finish_time=$(grep -oE '[0-9]{2}:[0-9]{2}:[0-9]{2}' <<< "$last_line")
+
+        #echo "SubTime: $submission_time"
+        #echo "TransTime: $transfer_time"
+        #echo "FinTime: $finish_time"
 
         st=$(to_seconds "$submission_time")
         tt=$(to_seconds "$transfer_time")
