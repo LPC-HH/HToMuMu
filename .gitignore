@@ -7,3 +7,6 @@ scripts/*.csv
 scripts/makeDataPileupHist.sh
 *.log
 *.ipynb_checkpoints/
+*.png
+*.pdf
+*.jpeg

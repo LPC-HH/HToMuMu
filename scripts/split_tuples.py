@@ -86,8 +86,8 @@ def split_tuples_by_category(
                 (branches["BDT_" + channel] > bdt_cuts[channel][category])
                 & (branches["BDT_" + channel] < bdt_cuts[channel][category + 1])
                 & (branches["is_" + channel + "_category"] == 1)
-                & (branches["CMS_hgg_mass"] < 180)
-                & (branches["CMS_hgg_mass"] > 100)
+                & (branches["CMS_hgg_mass"] < 150)
+                & (branches["CMS_hgg_mass"] > 109.999)
             )
 
             selected_events = {name: array[cuts] for name, array in branches.items()}
