@@ -18,14 +18,18 @@ voms-proxy-init -voms cms
 ```
 
 ## Run the analyzer 
+The format for running the analyzer is
+```
+./bin/HmmAnalyzer runList.txt(or .list) out.root mc/data is_data year_num if_include_Z_region if_include_H_region
+```
 For simulations
 ```
-./bin/HmmAnalyzer runList.txt out.root mc F 2016
+./bin/HmmAnalyzer runList.txt out.root mc F 2024 F T
 ```
 
 For data
 ```
-./bin/HmmAnalyzer runList.txt out.root data T 2016
+./bin/HmmAnalyzer runList.txt out.root data T 2024 F T
 ```
 
 To run over all the data sets look at condor/README.md to run it in condor jobs
