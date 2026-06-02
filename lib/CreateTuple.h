@@ -158,7 +158,7 @@ class CreateTuple {
         pt_centrality, min_delta_eta_diMuon_jet, min_delta_phi_diMuon_jet;
     
     /** histograms */
-    TH1D *h_nEntries, *h_nTrigger, *h_nTwoMuons, *h_nNoExtraMuon, *h_nNoExtraElectron, *h_nTriggerMatch, *h_nBjetRejection;
+    TH1D *h_nEntries, *h_nTrigger, *h_nTwoMuons, *h_nNoExtraMuon, *h_nNoExtraElectron, *h_nTriggerMatch, *h_nBjetRejection, *h_nJets, *h_nValidJets, *h_nValidSeperatedJets, *h_nValidNotVetoedJets;
     TH1D *h_nInFinalMassRange = new TH1D("h_nInFinalMassRange", "h_nInFinalMassRange", 1, 0, 1);
     //TH1D *h_nJMEJets = new TH1D("h_nJMEJets", "h_nJMEJets", 1, 0, 1);
     TH1D *h_n2Jets = new TH1D("h_n2Jets", "h_n2Jets", 1, 0, 1);
@@ -250,6 +250,14 @@ CreateTuple::CreateTuple(TString input, TString weightFile, TString output, TStr
     h_nTriggerMatch->SetDirectory(0);
     h_nBjetRejection = (TH1D*)f_input->Get("h_nBjetRejection");
     h_nBjetRejection->SetDirectory(0);
+    h_nJets = (TH1D*)f_input->Get("h_nJets");
+    h_nJets->SetDirectory(0);
+    h_nValidJets = (TH1D*)f_input->Get("h_nValidJets");
+    h_nValidJets->SetDirectory(0);
+    h_nValidSeperatedJets = (TH1D*)f_input->Get("h_nValidSeperatedJets");
+    h_nValidSeperatedJets->SetDirectory(0);
+    h_nValidNotVetoedJets = (TH1D*)f_input->Get("h_nValidNotVetoedJets");
+    h_nValidNotVetoedJets->SetDirectory(0);
     f_input->Close();
 
     fillChain();
@@ -658,6 +666,10 @@ void CreateTuple::saveTree() {
     h_nTriggerMatch->Write();
     h_nInFinalMassRange->Write();
     h_nBjetRejection->Write();
+    h_nJets->Write();
+    h_nValidJets->Write();
+    h_nValidSeperatedJets->Write();
+    h_nValidNotVetoedJets->Write();
     //h_nJMEJets->Write();
     h_n2Jets->Write();
     h_nBothVBFJets->Write();

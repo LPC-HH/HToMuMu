@@ -11,6 +11,7 @@ LIBS  := $(shell root-config --libs) $(shell correction config --cflags --ldflag
 
 # Analyzer sources and header
 ANALYZER_SRC := $(SRC)/LeptonEfficiencyCorrector.cc \
+				$(SRC)/JetCorrector.cc \
 				$(SRC)/MainEvent.cc \
 				$(SRC)/RoccoR.cc \
 				$(SRC)/WeightCalculatorFromHistogram.cc \
@@ -18,6 +19,7 @@ ANALYZER_SRC := $(SRC)/LeptonEfficiencyCorrector.cc \
 
 ANALYZER_HEADERS := $(LIB)/BTagCalibrationStandalone.h \
 				$(LIB)/LeptonEfficiencyCorrector.h \
+				$(LIB)/JetCorrector.h \
 				$(LIB)/MainEvent.h \
 				$(LIB)/RoccoR.h \
 				$(LIB)/WeightCalculatorFromHistogram.h \
@@ -38,6 +40,7 @@ SOURCES := $(ANALYZER_SRC) $(HISTOGRAM_SRC) $(SKIM_ggH_SRC) $(SKIM_VBF_SRC) $(TU
 
 # Object files
 ANALYZER_OBJECTS := LeptonEfficiencyCorrector.o \
+				JetCorrector.o \
 				MainEvent.o \
 				RoccoR.o \
 				WeightCalculatorFromHistogram.o \

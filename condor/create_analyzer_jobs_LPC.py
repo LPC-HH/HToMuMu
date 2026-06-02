@@ -54,6 +54,7 @@ list_datasets = datasets_info.keys()
     #"DY120to200_Summer22",
     #"EWK_2L2J_Summer24",
     #"Muon_2022E",
+    #"Muon0_2024C",
     #"Muon0_2023C_v1",
     #"Muon0_2024I_v2",
     #"Muon0_2025B",
@@ -73,8 +74,8 @@ list_datasets = datasets_info.keys()
     #"ggH_Summer24",
 #    "DY50to120_Summer22",
 #    "DY120to200_Summer24",
-#    "WWtoLNu2Q_Summer22",
-#    "Muon_2022C",
+    #"WWtoLNu2Q_Summer22",
+    #"Muon_2022C",
 #    "Muon_2022D",
 #    "SingleMuon_2022C",
 #]
@@ -166,6 +167,8 @@ for dataset_name in list_datasets:
     os.system("cp " + "%s/btagSF/DeepCSV_94XSF_V3_B_F.csv"%(Analyzer_Data_DIR) + " " + "%s/btagSF/"%(Job_Data_DIR))
     # os.system("mkdir -p " + Job_Data_DIR + "leptonSF/%s"%(year))
     # os.system("cp " + "%s/leptonSF/%s/*.root"%(Analyzer_Data_DIR, year) + " " + "%s/leptonSF/%s/"%(Job_Data_DIR, year))
+    os.system("mkdir -p " + Job_Data_DIR + "jetCorrections/%s/"%(year))
+    os.system("cp " + "%s/jetCorrections/%s/jetvetomaps.json.gz"%(Analyzer_Data_DIR, year) + " " + "%s/jetCorrections/%s/"%(Job_Data_DIR, year))
 
     #get RazorCommon as well
     if(isData=="T"):
@@ -208,6 +211,7 @@ for dataset_name in list_datasets:
     transfer_files += Job_DIR + "/" + analyzer + ", "
     transfer_files += Job_Data_DIR + "/Rocco/RoccoR" + year + ".txt, "
     transfer_files += Job_Data_DIR + "/btagSF/DeepCSV_94XSF_V3_B_F.csv, "
+    transfer_files += Job_Data_DIR + "/jetCorrections/" + year + "/jetvetomaps.json.gz, "
 
     if(year != "2025"):
         transfer_files += Job_Data_DIR + "/leptonSF/" + year + "/muon_Z.json.gz, "

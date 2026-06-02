@@ -65,6 +65,7 @@ class HmmAnalyzer : public MainEvent {
     float getPileupWeight(int);
     float getPileupWeightUp(int);
     float getPileupWeightDown(int);
+    bool passesJetPtSelection(int index);
     bool isValidJet(int index);
     void CorrectPtRoch(const RoccoR &_calib, const bool _doSys,
                        const ROOT::Math::PtEtaPhiMVector _mu_vec, const float _mu_ptErr_raw, float &_pt,
@@ -113,6 +114,12 @@ class HmmAnalyzer : public MainEvent {
     TH1D *h_nInMassRegion = new TH1D("h_nInMassRegion", "h_nInMassRegion", 1, 0, 1);
     TH1D *h_nBjetRejection = new TH1D("h_nBjetRejection", "h_nBjetRejection", 1, 0, 1);
     TH1D *h_nInZPeak= new TH1D("h_nInZPeak", "h_nInZPeak", 1, 0, 1);
+
+    //jet test histograms
+    TH1D *h_nJets = new TH1D("h_nJets", "h_nJets", 1, 0, 1);
+    TH1D *h_nValidJets = new TH1D("h_nValidJets", "h_nValidJets", 1, 0, 1);
+    TH1D *h_nValidSeperatedJets = new TH1D("h_nValidSeperatedJets", "h_nValidSeperatedJets", 1, 0, 1);
+    TH1D *h_nValidNotVetoedJets = new TH1D("h_nValidNotVetoedJets", "h_nValidNotVetoedJets", 1, 0, 1);
 
     /*
     LeptonEfficiencyCorrector Mu_eff_SF_TRIG;
@@ -628,6 +635,34 @@ float HmmAnalyzer::getPileupWeightDown(int NPU) {
     }
 }
 
+bool HmmAnalyzer::passesJetPtSelection(int index) {
+    if (yearst == "2022" || yearst == "2022EE" || yearst == "2023" || yearst == "2023BPix"){
+        if (fabs(Jet_eta[index]) < 2.5){
+            return true;
+        }
+        else if (fabs(Jet_eta[index]) < 5){
+            return (Jet_pt[index] > 50);
+        }
+
+    } else if (yearst == "2024"){
+        if (fabs(Jet_eta[index]) < 2.5){ //TODO: Fix this
+            return true;
+        }
+        else if (fabs(Jet_eta[index]) < 3){
+            return (Jet_pt[index] > 50);
+        }
+        else {
+            return true;
+        }
+    } else if (yearst == "2025"){
+        return true;
+
+    } else {
+        std::cerr << "Jet pT era not found" << std::endl;
+        return false;
+    }
+}
+
 bool HmmAnalyzer::isValidJet(int index) {
     bool Jet_passJetIdTight = false;
     if(NANOAOD_VERSION[year] == "v12"){ //nanoAODv12
@@ -655,7 +690,7 @@ bool HmmAnalyzer::isValidJet(int index) {
     }
 
     return (Jet_pt[index] > 25. && fabs(Jet_eta[index]) < 4.7 &&
-            Jet_passJetIdTight /* && Jet_puId[index]>=1 */);
+            Jet_passJetIdTight && passesJetPtSelection(index) /* && Jet_puId[index]>=1 */);
 }
 
 void HmmAnalyzer::CorrectPtRoch(const RoccoR &_calib, const bool _doSys,
@@ -804,6 +839,12 @@ HmmAnalyzer::~HmmAnalyzer() {
     h_nInMassRegion->Write();
     h_nBjetRejection->Write();
     h_nInZPeak->Write();
+
+    //jet tests
+    h_nJets->Write();
+    h_nValidJets->Write();
+    h_nValidSeperatedJets->Write();
+    h_nValidNotVetoedJets->Write();
     
     oFile->Write();
     oFile->Close();

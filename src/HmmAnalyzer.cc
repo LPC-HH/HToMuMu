@@ -11,6 +11,7 @@
 
 #include "correction.h"
 #include "../lib/LeptonEfficiencyCorrector.h"
+#include "../lib/JetCorrector.h"
 
 #ifdef MAKECINT
 #pragma link C++ class vector < float> + ;
@@ -45,6 +46,8 @@ int main(int argc, char *argv[]) {
         corrector.initializeCorrections(year_num.Data());
     }
 
+    //std::cout << year_num.Data() << std::endl;
+
     HmmAnalyzer Hmm(inputFileList, outFileName, data, is_data_input, year_num, include_Z, include_H);
     std::cout << "Running on: " << std::endl;
     std::cout << "  Dataset: " << data << " year " << year_num << std::endl;
@@ -66,6 +69,9 @@ void HmmAnalyzer::EventLoop() {
 
     //read run3 muon efficiency json files
     LeptonEfficiencyCorrector corrector;
+    //JetCorrector jetCorrector;
+    JetCorrector jetCorrector;
+    jetCorrector.initializeCorrections(yearst);
 
     // btag SF
     BTagCalibration calib("deepcsv", "./data/btagSF/DeepCSV_94XSF_V3_B_F.csv");
@@ -80,7 +86,7 @@ void HmmAnalyzer::EventLoop() {
     std::cout << "Btag calibration loaded" << std::endl;           
     long nentries = fChain->GetEntriesFast();
     //h_nEntries->SetBinContent(1, nentries);
-    //nentries = 500;
+    //nentries = 5000;
     long nbytes = 0;
     long nb = 0;
     
@@ -451,6 +457,8 @@ void HmmAnalyzer::EventLoop() {
         t_diMuon_bsConstrainedPt = dimuBSC.Pt();
         t_diMuon_bsConstrainedMass = dimuBSC.M();
 
+        //std::cout << "looking at diMuon mass" << std::endl;
+
         if ((include_Z && include_H) || (!include_Z && !include_H)){
             if (t_diMuon_bsConstrainedMass < 70 || t_diMuon_bsConstrainedMass > 180){
                 continue;
@@ -483,11 +491,18 @@ void HmmAnalyzer::EventLoop() {
         /*if(t_diMuon_bsConstrainedMass < 80 || t_diMuon_bsConstrainedMass > 180){
             continue; //not in signal + Z range
         }*/
-
+        
+        
+        //std::cout << "There are " << nJet << " jets in event " << jentry << std::endl;
         for (int j = 0; j < nJet; j++) {
+            h_nJets->Fill(0.5);
+            //std::cout << "looking at jet " << j << std::endl;
             if (!isValidJet(j)) {
+                //std::cout << "Jet " << j << " invalid" << std::endl;
                 continue;
             }
+            h_nValidJets->Fill(0.5);
+            //std::cout << "Valid jet" << std::endl;
             // if (!(Jet_pt[j] > 25. && fabs(Jet_eta[j]) < 4.7 &&
             // Jet_jetId[j] >= 2 [> && Jet_puId[j]>=1 <])) {
             // continue;
@@ -497,8 +512,25 @@ void HmmAnalyzer::EventLoop() {
             double dR2 = DeltaR(Muon_eta[index_mu2], Muon_phi[index_mu2],
                                 Jet_eta[j], Jet_phi[j]);
             if (dR1 < 0.4 || dR2 < 0.4) {
+                //std::cout << "Jet " << j << " not well seperated" << std::endl;
                 continue;
             }
+            h_nValidSeperatedJets->Fill(0.5);
+
+            /*if((Jet_chEmEF[j] + Jet_neEmEF[j]) > 0.9){
+                std::cout << "Vetoing jet with total Em Frac: " << (Jet_chEmEF[j] + Jet_neEmEF[j]) << std::endl;
+                continue;
+            }*/
+            //std::cout << "Jet pass dR and EmEF" << std::endl;
+
+            if(jetCorrector.jetVeto(Jet_eta[j], Jet_phi[j])){
+                //std::cout << "Jet " << j << " vetoed" << std::endl;
+                continue;
+                //add hist for jet veto
+            }
+            h_nValidNotVetoedJets->Fill(0.5);
+
+            //std::cout << "Jet pass jetVeto" << std::endl;
 
             t_nJet++;
             t_Jet_area->push_back(Jet_area[j]);

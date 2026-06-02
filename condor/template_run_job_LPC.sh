@@ -46,6 +46,9 @@ mkdir -p ${DATA_FOLDER}/btagSF/
 cp DeepCSV_94XSF_V3_B_F.csv ${DATA_FOLDER}/btagSF/
 
 mkdir -p ${DATA_FOLDER}/leptonSF/${year}/
+mkdir -p ${DATA_FOLDER}/jetCorrections/${year}/
+cp jetvetomaps.json.gz ${DATA_FOLDER}/jetCorrections/${year}/
+
 mkdir -p ${cmssw_version}/src/RazorCommon/data/
 mkdir -p ${cmssw_version}/src/RazorCommon/bin/
 mkdir -p ${cmssw_version}/src/RazorCommon/python/
@@ -67,6 +70,7 @@ cp RunII_*.root ${DATA_FOLDER}/pileup/
 cp data/Rocco/RoccoR${year}.txt ${DATA_FOLDER}/Rocco/
 cp data/btagSF/DeepCSV_94XSF_V3_B_F.csv ${DATA_FOLDER}/btagSF/
 #cp data/leptonSF/2016/*.root ${DATA_FOLDER}/leptonSF/2016/
+cp data/jetCorrections/${year}/jetvetomaps.json.gz ${DATA_FOLDER}/jetCorrections/${year}/
 if [ "$year" != "2025" ]; then 
     cp data/leptonSF/${year}/muon_Z.json.gz ${DATA_FOLDER}/leptonSF/${year}/
 fi
@@ -91,6 +95,8 @@ for i in `cat $inputfilelist`; do
     xrdcp $i ./inputs/
 done
 ls inputs/* > tmp_input_list.txt 
+ls -lh inputs/*.root
+file inputs/*.root
 #echo
 
 
