@@ -623,12 +623,12 @@ datasets_info = {
             "/VBFHto2Mu_M-125_TuneCP5_withDipoleRecoil_13p6TeV_powheg-pythia8/Run3Summer22NanoAODv12-130X_mcRun3_2022_realistic_v5-v3/NANOAODSIM"],
     "ttH_Summer22": ["F", 2, "2022", "MC_signal",
             "/TTH_Hto2Mu_M-125_TuneCP5_13p6TeV_powheg-pythia8/Run3Summer22NanoAODv12-130X_mcRun3_2022_realistic_v5-v3/NANOAODSIM"],
-    #"WplusH_Summer22": ["F", 2, "2022", "MC_signal",
-    #        "/WplusH_Hto2Mu_WtoAll_M-125_TuneCP5_13p6TeV_powheg-pythia8/Run3Summer22NanoAODv12-130X_mcRun3_2022_realistic_v5-v3/NANOAODSIM"],
-    #"WminusH_Summer22": ["F", 2, "2022", "MC_signal",
-    #        "/WminusH_Hto2Mu_WtoAll_M-125_TuneCP5_13p6TeV_powheg-pythia8/Run3Summer22NanoAODv12-130X_mcRun3_2022_realistic_v5-v3/NANOAODSIM"],
-    #"ZH_Summer22": ["F", 2, "2022", "MC_signal",
-    #        "/ZH_Hto2Mu_ZtoAll_M-125_TuneCP5_13p6TeV_powheg-pythia8/Run3Summer22NanoAODv12-130X_mcRun3_2022_realistic_v5-v3/NANOAODSIM"],
+    "WplusH_Summer22": ["F", 2, "2022", "MC_signal",
+            "/WplusH_Hto2Mu_WtoAll_M-125_TuneCP5_13p6TeV_powheg-pythia8/Run3Summer22NanoAODv12-130X_mcRun3_2022_realistic_v5-v3/NANOAODSIM"],
+    "WminusH_Summer22": ["F", 2, "2022", "MC_signal",
+            "/WminusH_Hto2Mu_WtoAll_M-125_TuneCP5_13p6TeV_powheg-pythia8/Run3Summer22NanoAODv12-130X_mcRun3_2022_realistic_v5-v3/NANOAODSIM"],
+    "ZH_Summer22": ["F", 2, "2022", "MC_signal",
+            "/ZH_Hto2Mu_ZtoAll_M-125_TuneCP5_13p6TeV_powheg-pythia8/Run3Summer22NanoAODv12-130X_mcRun3_2022_realistic_v5-v3/NANOAODSIM"],
     ####################################################################################################
     # 2022EE Simulations Signal
     ####################################################################################################
@@ -638,12 +638,12 @@ datasets_info = {
             "/VBFHto2Mu_M-125_TuneCP5_withDipoleRecoil_13p6TeV_powheg-pythia8/Run3Summer22EENanoAODv12-130X_mcRun3_2022_realistic_postEE_v6-v3/NANOAODSIM"],
     "ttH_Summer22EE": ["F", 2, "2022EE", "MC_signal",
             "/TTH_Hto2Mu_M-125_TuneCP5_13p6TeV_powheg-pythia8/Run3Summer22EENanoAODv12-130X_mcRun3_2022_realistic_postEE_v6-v3/NANOAODSIM"],
-    #"WplusH_Summer22EE": ["F", 2, "2022EE", "MC_signal",
-    #        "/WplusH_Hto2Mu_WtoAll_M-125_TuneCP5_13p6TeV_powheg-pythia8/Run3Summer22EENanoAODv12-130X_mcRun3_2022_realistic_postEE_v6-v3/NANOAODSIM"],
-    #"WminusH_Summer22EE": ["F", 2, "2022EE", "MC_signal",
-    #        "/WminusH_Hto2Mu_WtoAll_M-125_TuneCP5_13p6TeV_powheg-pythia8/Run3Summer22EENanoAODv12-130X_mcRun3_2022_realistic_postEE_v6-v3/NANOAODSIM"],
-    #"ZH_Summer22EE": ["F", 2, "2022EE", "MC_signal",
-    #        "/ZH_Hto2Mu_ZtoAll_M-125_TuneCP5_13p6TeV_powheg-pythia8/Run3Summer22EENanoAODv12-130X_mcRun3_2022_realistic_postEE_v6-v3/NANOAODSIM"],
+    "WplusH_Summer22EE": ["F", 2, "2022EE", "MC_signal",
+            "/WplusH_Hto2Mu_WtoAll_M-125_TuneCP5_13p6TeV_powheg-pythia8/Run3Summer22EENanoAODv12-130X_mcRun3_2022_realistic_postEE_v6-v3/NANOAODSIM"],
+    "WminusH_Summer22EE": ["F", 2, "2022EE", "MC_signal",
+            "/WminusH_Hto2Mu_WtoAll_M-125_TuneCP5_13p6TeV_powheg-pythia8/Run3Summer22EENanoAODv12-130X_mcRun3_2022_realistic_postEE_v6-v3/NANOAODSIM"],
+    "ZH_Summer22EE": ["F", 2, "2022EE", "MC_signal",
+            "/ZH_Hto2Mu_ZtoAll_M-125_TuneCP5_13p6TeV_powheg-pythia8/Run3Summer22EENanoAODv12-130X_mcRun3_2022_realistic_postEE_v6-v3/NANOAODSIM"],
     ####################################################################################################
     # 2023 Simulations Signal
     ####################################################################################################
@@ -653,12 +653,12 @@ datasets_info = {
             "/VBFHto2Mu_M-125_TuneCP5_13p6TeV_powheg-pythia8/Run3Summer23NanoAODv12-130X_mcRun3_2023_realistic_v15-v2/NANOAODSIM"],
     "ttH_Summer23": ["F", 2, "2023", "MC_signal",
             "/TTH_Hto2Mu_M-125_TuneCP5_13p6TeV_powheg-pythia8/Run3Summer23NanoAODv12-130X_mcRun3_2023_realistic_v15-v2/NANOAODSIM"],
-    #"WplusH_Summer23": ["F", 2, "2023", "MC_signal",
-    #        "/WplusH_Hto2Mu_WtoAll_M-125_TuneCP5_13p6TeV_powheg-minlo-pythia8/Run3Summer23NanoAODv12-130X_mcRun3_2023_realistic_v15-v2/NANOAODSIM"],
-    #"WminusH_Summer23": ["F", 2, "2023", "MC_signal",
-    #        "/WminusH_Hto2Mu_WtoAll_M-125_TuneCP5_13p6TeV_powheg-minlo-pythia8/Run3Summer23NanoAODv12-130X_mcRun3_2023_realistic_v15-v2/NANOAODSIM"],
-    #"ZH_Summer23": ["F", 2, "2023", "MC_signal",
-    #        "/ZH_Hto2Mu_ZtoAll_M-125_TuneCP5_13p6TeV_powheg-minlo-pythia8/Run3Summer23NanoAODv12-130X_mcRun3_2023_realistic_v15-v2/NANOAODSIM"],
+    "WplusH_Summer23": ["F", 2, "2023", "MC_signal",
+            "/WplusH_Hto2Mu_M-125_TuneCP5_13p6TeV_powheg-minlo-pythia8/Run3Summer23NanoAODv12-130X_mcRun3_2023_realistic_v15-v2/NANOAODSIM"],
+    "WminusH_Summer23": ["F", 2, "2023", "MC_signal",
+            "/WminusH_Hto2Mu_M-125_TuneCP5_13p6TeV_powheg-minlo-pythia8/Run3Summer23NanoAODv12-130X_mcRun3_2023_realistic_v15-v2/NANOAODSIM"],
+    "ZH_Summer23": ["F", 2, "2023", "MC_signal",
+            "/ZH_Hto2Mu_M-125_TuneCP5_13p6TeV_powheg-minlo-pythia8/Run3Summer23NanoAODv12-130X_mcRun3_2023_realistic_v15-v2/NANOAODSIM"],
     ####################################################################################################
     # 2023BPix Simulations Signal
     ####################################################################################################
@@ -668,12 +668,12 @@ datasets_info = {
             "/VBFHto2Mu_M-125_TuneCP5_13p6TeV_powheg-pythia8/Run3Summer23BPixNanoAODv12-130X_mcRun3_2023_realistic_postBPix_v6-v2/NANOAODSIM"],
     "ttH_Summer23BPix": ["F", 2, "2023BPix", "MC_signal",
             "/TTH_Hto2Mu_M-125_TuneCP5_13p6TeV_powheg-pythia8/Run3Summer23BPixNanoAODv12-130X_mcRun3_2023_realistic_postBPix_v6-v2/NANOAODSIM"],
-    #"WplusH_Summer23BPix": ["F", 2, "2023BPix", "MC_signal",
-    #        "/WplusH_Hto2Mu_WtoAll_M-125_TuneCP5_13p6TeV_powheg-minlo-pythia8/Run3Summer23BPixNanoAODv12-130X_mcRun3_2023_realistic_postBPix_v6-v2/NANOAODSIM"],
-    #"WminusH_Summer23BPix": ["F", 2, "2023BPix", "MC_signal",
-    #        "/WminusH_Hto2Mu_WtoAll_M-125_TuneCP5_13p6TeV_powheg-minlo-pythia8/Run3Summer23BPixNanoAODv12-130X_mcRun3_2023_realistic_postBPix_v6-v2/NANOAODSIM"],
-    #"ZH_Summer23BPix": ["F", 2, "2023BPix", "MC_signal",
-    #        "/ZH_Hto2Mu_ZtoAll_M-125_TuneCP5_13p6TeV_powheg-minlo-pythia8/Run3Summer23BPixNanoAODv12-130X_mcRun3_2023_realistic_postBPix_v6-v2/NANOAODSIM"],
+    "WplusH_Summer23BPix": ["F", 2, "2023BPix", "MC_signal",
+            "/WplusH_Hto2Mu_M-125_TuneCP5_13p6TeV_powheg-minlo-pythia8/Run3Summer23BPixNanoAODv12-130X_mcRun3_2023_realistic_postBPix_v6-v2/NANOAODSIM"],
+    "WminusH_Summer23BPix": ["F", 2, "2023BPix", "MC_signal",
+            "/WminusH_Hto2Mu_M-125_TuneCP5_13p6TeV_powheg-minlo-pythia8/Run3Summer23BPixNanoAODv12-130X_mcRun3_2023_realistic_postBPix_v6-v2/NANOAODSIM"],
+    "ZH_Summer23BPix": ["F", 2, "2023BPix", "MC_signal",
+            "/ZH_Hto2Mu_M-125_TuneCP5_13p6TeV_powheg-minlo-pythia8/Run3Summer23BPixNanoAODv12-130X_mcRun3_2023_realistic_postBPix_v6-v2/NANOAODSIM"],
 
     ####################################################################################################
     # 2024 Simulations Signal
@@ -685,10 +685,10 @@ datasets_info = {
             "/VBFH-Hto2Mu_Par-M-125_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v2/NANOAODSIM"],
     "ttH_Summer24": ["F", 2, "2024", "MC_signal",
             "/TTH-Hto2Mu_Par-M-125_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v2/NANOAODSIM"],
-    #"WplusH_Summer24": ["F", 2, "2024", "MC_signal",
-    #        "/WplusH-Hto2Mu_Par-M-125_TuneCP5_13p6TeV_powhegMINLO-pythia8/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v3/NANOAODSIM"],
-    #"WminusH_Summer24": ["F", 2, "2024", "MC_signal",
-    #        "/WminusH-Hto2Mu_Par-M-125_TuneCP5_13p6TeV_powhegMINLO-pythia8/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v3/NANOAODSIM"],
-    #"ZH_Summer24": ["F", 2, "2024", "MC_signal",
-    #        "/ZH-Hto2Mu_Par-M-125_TuneCP5_13p6TeV_powhegMINLO-pythia8/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v3/NANOAODSIM"],
+    "WplusH_Summer24": ["F", 2, "2024", "MC_signal",
+            "/WplusH-Hto2Mu_Par-M-125_TuneCP5_13p6TeV_powhegMINLO-pythia8/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v3/NANOAODSIM"],
+    "WminusH_Summer24": ["F", 2, "2024", "MC_signal",
+            "/WminusH-Hto2Mu_Par-M-125_TuneCP5_13p6TeV_powhegMINLO-pythia8/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v3/NANOAODSIM"],
+    "ZH_Summer24": ["F", 2, "2024", "MC_signal",
+            "/ZH-Hto2Mu_Par-M-125_TuneCP5_13p6TeV_powhegMINLO-pythia8/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v3/NANOAODSIM"],
 }
