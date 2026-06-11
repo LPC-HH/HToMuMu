@@ -3,20 +3,22 @@
 
 #include "Constants.h"
 #include "Run3Constants.h"
+#include "TF1.h"
 #include "Utils.h"
 #include <TChain.h>
 #include <TFile.h>
-#include "TF1.h"
 #include <TH1F.h>
 #include <TLorentzVector.h>
 #include <TString.h>
 #include <TTree.h>
 #include <cmath>
 #include <iostream>
-#include <math.h>
 #include <map>
+#include <math.h>
 
-std::map<TString, int> MC_CAMPAIGN_MAP = { {"2022", 1}, {"2022EE", 2}, {"2023", 3}, {"2023BPix", 4}, {"2024", 5}, {"2025", 6}};
+std::map<TString, int> MC_CAMPAIGN_MAP = {{"2022", 1}, {"2022EE", 2},
+                                          {"2023", 3}, {"2023BPix", 4},
+                                          {"2024", 5}, {"2025", 6}};
 
 /**
  * @class CreateTuple
@@ -107,10 +109,19 @@ class CreateTuple {
 
     /** Read event variables */
     float gen_weight, pileup_weight, pileup_weight_up, pileup_weight_down;
+
+    std::vector<float> *mu_trig_eff_SF_vec, *mu_trig_eff_SF_error_vec;
+    std::vector<float> *mu_ID_eff_SF_vec, *mu_ID_eff_SF_stat_vec,
+        *mu_ID_eff_SF_syst_vec;
+    std::vector<float> *mu_ISO_eff_SF_vec, *mu_ISO_eff_SF_stat_vec,
+        *mu_ISO_eff_SF_syst_vec;
+
+
     int n_SoftJet_pt2, n_SoftJet_pt5, n_SoftJet_pt10;
     float HT, HT_pt2, HT_pt5, HT_pt10;
     /** Read DiMuon variables */
-    float diMuon_mass, diMuon_bsConstrainedMass, diMuon_pt, diMuon_bsConstrainedPt, diMuon_phi, diMuon_eta;
+    float diMuon_mass, diMuon_bsConstrainedMass, diMuon_pt,
+        diMuon_bsConstrainedPt, diMuon_phi, diMuon_eta;
 
     /** Read MET variables **/
     float PuppiMET_phi, PuppiMET_pt, PuppiMET_sumEt;
@@ -135,6 +146,10 @@ class CreateTuple {
     double scale_factor; // luminosity * cross_section / gen_weight_sum
     Double_t weight;
     double weight_no_lumi;
+    float mu_trig_eff_SF, mu_trig_eff_SF_down, mu_trig_eff_SF_up;
+    float mu_ID_eff_SF, mu_ID_eff_SF_down, mu_ID_eff_SF_up;
+    float mu_ISO_eff_SF, mu_ISO_eff_SF_down, mu_ISO_eff_SF_up;
+
     float rho;
     int pv;
     // int is_data_int, is_signal_int, pv;
@@ -145,20 +160,25 @@ class CreateTuple {
 
     /** New Muon variables*/
     float mu1_pt_mass_ratio, mu2_pt_mass_ratio, mu1_bsConstrainedPt_mass_ratio,
-          mu2_bsConstrainedPt_mass_ratio, mu1_eta, mu2_eta, phi_CS, cos_theta_CS;
-    float mu1_pt, mu2_pt, mu1_bsConstrainedPt, mu2_bsConstrainedPt, mu1_ptErr, mu2_ptErr, mu1_bsConstrainedPtErr, mu2_bsConstrainedPtErr, mu1_dz, mu2_dz, mu1_dzErr, mu2_dzErr;
+        mu2_bsConstrainedPt_mass_ratio, mu1_eta, mu2_eta, phi_CS, cos_theta_CS;
+    float mu1_pt, mu2_pt, mu1_bsConstrainedPt, mu2_bsConstrainedPt, mu1_ptErr,
+        mu2_ptErr, mu1_bsConstrainedPtErr, mu2_bsConstrainedPtErr, mu1_dz,
+        mu2_dz, mu1_dzErr, mu2_dzErr;
     /** New Error variables*/
     float relative_diMuon_mass_error, relative_diMuon_bsConstrainedMass_error;
 
     /** New jets variables*/
-    float leading_jet_pt, leading_jet_eta, leading_jet_btagPNetB, subleading_jet_pt, subleading_jet_eta, subleading_jet_btagPNetB;
+    float leading_jet_pt, leading_jet_eta, leading_jet_btagPNetB,
+        subleading_jet_pt, subleading_jet_eta, subleading_jet_btagPNetB;
 
     /** New DiJets variables*/
     float delta_eta_diJet, delta_phi_diJet, z_zeppenfeld, pt_balance,
         pt_centrality, min_delta_eta_diMuon_jet, min_delta_phi_diMuon_jet;
-    
+
     /** histograms */
-    TH1D *h_nEntries, *h_nTrigger, *h_nTwoMuons, *h_nNoExtraMuon, *h_nNoExtraElectron, *h_nTriggerMatch, *h_nBjetRejection, *h_nJets, *h_nValidJets, *h_nValidSeperatedJets, *h_nValidNotVetoedJets;
+    TH1D *h_nEntries, *h_nTrigger, *h_nTwoMuons, *h_nNoExtraMuon,
+        *h_nNoExtraElectron, *h_nTriggerMatch, *h_nBjetRejection, *h_nJets,
+        *h_nValidJets, *h_nValidSeperatedJets, *h_nValidNotVetoedJets;
     TH1D *h_nInFinalMassRange = new TH1D("h_nInFinalMassRange", "h_nInFinalMassRange", 1, 0, 1);
     //TH1D *h_nJMEJets = new TH1D("h_nJMEJets", "h_nJMEJets", 1, 0, 1);
     TH1D *h_n2Jets = new TH1D("h_n2Jets", "h_n2Jets", 1, 0, 1);
@@ -234,6 +254,15 @@ CreateTuple::CreateTuple(TString input, TString weightFile, TString output, TStr
     jet_mass = nullptr;
     jet_btagPNetB = nullptr;
 
+    mu_trig_eff_SF_vec = nullptr;
+    mu_trig_eff_SF_error_vec = nullptr;
+    mu_ID_eff_SF_vec = nullptr;
+    mu_ID_eff_SF_stat_vec = nullptr;
+    mu_ID_eff_SF_syst_vec = nullptr;
+    mu_ISO_eff_SF_vec = nullptr;
+    mu_ISO_eff_SF_stat_vec = nullptr;
+    mu_ISO_eff_SF_syst_vec = nullptr;
+
     TFile *f_input = TFile::Open(input_name);
     h_nEntries = (TH1D*)f_input->Get("h_nEntries");
     h_nEntries->SetDirectory(0);
@@ -242,7 +271,7 @@ CreateTuple::CreateTuple(TString input, TString weightFile, TString output, TStr
     h_nTrigger->SetDirectory(0);
     h_nTwoMuons = (TH1D*)f_input->Get("h_nTwoMuons");
     h_nTwoMuons->SetDirectory(0);
-    h_nNoExtraMuon= (TH1D*)f_input->Get("h_nNoExtraMuon");
+    h_nNoExtraMuon = (TH1D*)f_input->Get("h_nNoExtraMuon");
     h_nNoExtraMuon->SetDirectory(0);
     h_nNoExtraElectron = (TH1D*)f_input->Get("h_nNoExtraElectron");
     h_nNoExtraElectron->SetDirectory(0);
@@ -292,6 +321,23 @@ void CreateTuple::setBranchesAddressesOutput() {
     // tree_output->Branch("is_signal", &is_signal_int, "signal/i");
     tree_output->Branch("rho", &rho, "rho/f");
     tree_output->Branch("PV", &pv, "PV/i");
+
+    tree_output->Branch("mu_trig_eff_SF", &mu_trig_eff_SF, "mu_trig_eff_SF/f");
+    tree_output->Branch("mu_trig_eff_SF_down", &mu_trig_eff_SF_down,
+                        "mu_trig_eff_SF_down/f");
+    tree_output->Branch("mu_trig_eff_SF_up", &mu_trig_eff_SF_up,
+                        "mu_trig_eff_SF_up/f");
+    tree_output->Branch("mu_ID_eff_SF", &mu_ID_eff_SF, "mu_ID_eff_SF/f");
+    tree_output->Branch("mu_ID_eff_SF_down", &mu_ID_eff_SF_down,
+                        "mu_ID_eff_SF_down/f");
+    tree_output->Branch("mu_ID_eff_SF_up", &mu_ID_eff_SF_up,
+                        "mu_ID_eff_SF_up/f");
+    tree_output->Branch("mu_ISO_eff_SF", &mu_ISO_eff_SF, "mu_ISO_eff_SF/f");
+    tree_output->Branch("mu_ISO_eff_SF_down", &mu_ISO_eff_SF_down,
+                        "mu_ISO_eff_SF_down/f");
+    tree_output->Branch("mu_ISO_eff_SF_up", &mu_ISO_eff_SF_up,
+                        "mu_ISO_eff_SF_up/f");
+
     tree_output->Branch("n_SoftJet_pt2", &n_SoftJet_pt2, "n_SoftJet_pt2/i");
     tree_output->Branch("n_SoftJet_pt5", &n_SoftJet_pt5, "n_SoftJet_pt5/i");
     tree_output->Branch("n_SoftJet_pt10", &n_SoftJet_pt10, "n_SoftJet_pt10/i");
@@ -310,9 +356,11 @@ void CreateTuple::setBranchesAddressesOutput() {
 
     // DiMuon variables
     tree_output->Branch("diMuon_mass", &diMuon_mass, "diMuon_mass/f");
-    tree_output->Branch("diMuon_bsConstrainedMass", &diMuon_bsConstrainedMass, "diMuon_bsConstrainedMass/f");
+    tree_output->Branch("diMuon_bsConstrainedMass", &diMuon_bsConstrainedMass,
+                        "diMuon_bsConstrainedMass/f");
     tree_output->Branch("diMuon_pt", &diMuon_pt, "diMuon_pt/f");
-    tree_output->Branch("diMuon_bsConstrainedPt", &diMuon_bsConstrainedPt, "diMuon_bsConstrainedPt/f");
+    tree_output->Branch("diMuon_bsConstrainedPt", &diMuon_bsConstrainedPt,
+                        "diMuon_bsConstrainedPt/f");
     tree_output->Branch("diMuon_phi", &diMuon_phi, "diMuon_phi/f");
     tree_output->Branch("diMuon_eta", &diMuon_eta, "diMuon_eta/f");
     tree_output->Branch("diMuon_rapidity", &diMuon_rapidity,
@@ -328,20 +376,26 @@ void CreateTuple::setBranchesAddressesOutput() {
                         "mu1_pt_mass_ratio/f");
     tree_output->Branch("mu2_pt_mass_ratio", &mu2_pt_mass_ratio,
                         "mu2_pt_mass_ratio/f");
-    tree_output->Branch("mu1_bsConstrainedPt_mass_ratio", &mu1_bsConstrainedPt_mass_ratio,
+    tree_output->Branch("mu1_bsConstrainedPt_mass_ratio",
+                        &mu1_bsConstrainedPt_mass_ratio,
                         "mu1_bsConstrainedPt_mass_ratio/f");
-    tree_output->Branch("mu2_bsConstrainedPt_mass_ratio", &mu2_bsConstrainedPt_mass_ratio,
-                         "mu2_bsConstrainedPt_mass_ratio/f");
+    tree_output->Branch("mu2_bsConstrainedPt_mass_ratio",
+                        &mu2_bsConstrainedPt_mass_ratio,
+                        "mu2_bsConstrainedPt_mass_ratio/f");
     tree_output->Branch("mu1_eta", &mu1_eta, "mu1_eta/f");
     tree_output->Branch("mu2_eta", &mu2_eta, "mu2_eta/f");
     tree_output->Branch("mu1_pt", &mu1_pt, "mu1_pt/f");
     tree_output->Branch("mu2_pt", &mu2_pt, "mu2_pt/f");
-    tree_output->Branch("mu1_bsConstrainedPt", &mu1_bsConstrainedPt, "mu1_bsConstrainedPt/f");
-    tree_output->Branch("mu2_bsConstrainedPt", &mu2_bsConstrainedPt, "mu2_bsConstrainedPt/f");
+    tree_output->Branch("mu1_bsConstrainedPt", &mu1_bsConstrainedPt,
+                        "mu1_bsConstrainedPt/f");
+    tree_output->Branch("mu2_bsConstrainedPt", &mu2_bsConstrainedPt,
+                        "mu2_bsConstrainedPt/f");
     tree_output->Branch("mu1_ptErr", &mu1_ptErr, "mu1_ptErr/f");
     tree_output->Branch("mu2_ptErr", &mu2_ptErr, "mu2_ptErr/f");
-    tree_output->Branch("mu1_bsConstrainedPtErr", &mu1_bsConstrainedPtErr, "mu1_bsConstrainedPtErr/f");
-    tree_output->Branch("mu2_bsConstrainedPtErr", &mu2_bsConstrainedPtErr, "mu2_bsConstrainedPtErr/f");
+    tree_output->Branch("mu1_bsConstrainedPtErr", &mu1_bsConstrainedPtErr,
+                        "mu1_bsConstrainedPtErr/f");
+    tree_output->Branch("mu2_bsConstrainedPtErr", &mu2_bsConstrainedPtErr,
+                        "mu2_bsConstrainedPtErr/f");
     tree_output->Branch("mu1_dz", &mu1_dz, "mu1_dz/f");
     tree_output->Branch("mu2_dz", &mu2_dz, "mu2_dz/f");
     tree_output->Branch("mu1_dzErr", &mu1_dzErr, "mu1_dzErr/f");
@@ -350,8 +404,12 @@ void CreateTuple::setBranchesAddressesOutput() {
     tree_output->Branch("cos_theta_CS", &cos_theta_CS, "cos_theta_CS/f");
 
     // Error variables
-    tree_output->Branch("relative_diMuon_mass_error", &relative_diMuon_mass_error, "relative_diMuon_mass_error/f");
-    tree_output->Branch("relative_diMuon_bsConstrainedMass_error", &relative_diMuon_bsConstrainedMass_error, "relative_diMuon_bsConstrainedMass_error/f");
+    tree_output->Branch("relative_diMuon_mass_error",
+                        &relative_diMuon_mass_error,
+                        "relative_diMuon_mass_error/f");
+    tree_output->Branch("relative_diMuon_bsConstrainedMass_error",
+                        &relative_diMuon_bsConstrainedMass_error,
+                        "relative_diMuon_bsConstrainedMass_error/f");
 
     // Jet variables
     tree_output->Branch("n_jet", &n_jet, "n_jet/i");
@@ -398,6 +456,26 @@ void CreateTuple::setBranchesAddressesInput() {
     tree_input->SetBranchAddress("t_puWeightDown", &pileup_weight_down);
     tree_input->SetBranchStatus("t_genWeight", 1);
     tree_input->SetBranchAddress("t_genWeight", &gen_weight);
+    tree_input->SetBranchStatus("t_Mu_EffSF_TRIG", 1);
+    tree_input->SetBranchAddress("t_Mu_EffSF_TRIG", &mu_trig_eff_SF_vec);
+    tree_input->SetBranchStatus("t_Mu_EffSFErr_TRIG", 1);
+    tree_input->SetBranchAddress("t_Mu_EffSFErr_TRIG",
+                                 &mu_trig_eff_SF_error_vec);
+    tree_input->SetBranchStatus("t_Mu_EffSF_ID", 1);
+    tree_input->SetBranchAddress("t_Mu_EffSF_ID", &mu_ID_eff_SF_vec);
+    tree_input->SetBranchStatus("t_Mu_EffSF_ID_stat", 1);
+    tree_input->SetBranchAddress("t_Mu_EffSF_ID_stat", &mu_ID_eff_SF_stat_vec);
+    tree_input->SetBranchStatus("t_Mu_EffSF_ID_syst", 1);
+    tree_input->SetBranchAddress("t_Mu_EffSF_ID_syst", &mu_ID_eff_SF_syst_vec);
+    tree_input->SetBranchStatus("t_Mu_EffSF_ISO", 1);
+    tree_input->SetBranchAddress("t_Mu_EffSF_ISO", &mu_ISO_eff_SF_vec);
+    tree_input->SetBranchStatus("t_Mu_EffSF_ISO_stat", 1);
+    tree_input->SetBranchAddress("t_Mu_EffSF_ISO_stat",
+                                 &mu_ISO_eff_SF_stat_vec);
+    tree_input->SetBranchStatus("t_Mu_EffSF_ISO_syst", 1);
+    tree_input->SetBranchAddress("t_Mu_EffSF_ISO_syst",
+                                 &mu_ISO_eff_SF_syst_vec);
+
     tree_input->SetBranchStatus("t_Rho", 1);
     tree_input->SetBranchAddress("t_Rho", &rho);
     tree_input->SetBranchStatus("t_PV_npvsGood", 1);
@@ -422,9 +500,11 @@ void CreateTuple::setBranchesAddressesInput() {
     tree_input->SetBranchAddress("t_genWeight", &gen_weight);
     // DiMuon variables
     tree_input->SetBranchStatus("t_diMuon_bsConstrainedMass", 1);
-    tree_input->SetBranchAddress("t_diMuon_bsConstrainedMass", &diMuon_bsConstrainedMass);
+    tree_input->SetBranchAddress("t_diMuon_bsConstrainedMass",
+                                 &diMuon_bsConstrainedMass);
     tree_input->SetBranchStatus("t_diMuon_bsConstrainedPt", 1);
-    tree_input->SetBranchAddress("t_diMuon_bsConstrainedPt", &diMuon_bsConstrainedPt);
+    tree_input->SetBranchAddress("t_diMuon_bsConstrainedPt",
+                                 &diMuon_bsConstrainedPt);
     tree_input->SetBranchStatus("t_diMuon_mass", 1);
     tree_input->SetBranchAddress("t_diMuon_mass", &diMuon_mass);
     tree_input->SetBranchStatus("t_diMuon_pt", 1);
@@ -456,7 +536,8 @@ void CreateTuple::setBranchesAddressesInput() {
     tree_input->SetBranchStatus("t_Mu_ptErr", 1);
     tree_input->SetBranchAddress("t_Mu_ptErr", &mu_ptErr);
     tree_input->SetBranchStatus("t_Mu_bsConstrainedPtErr", 1);
-    tree_input->SetBranchAddress("t_Mu_bsConstrainedPtErr", &mu_bsConstrainedPtErr);
+    tree_input->SetBranchAddress("t_Mu_bsConstrainedPtErr",
+                                 &mu_bsConstrainedPtErr);
     tree_input->SetBranchStatus("t_Mu_phi", 1);
     tree_input->SetBranchAddress("t_Mu_phi", &mu_phi);
     tree_input->SetBranchStatus("t_Mu_eta", 1);
@@ -525,7 +606,7 @@ void CreateTuple::fillOutputTree() {
                 continue;
         }
         else{
-            //in Higgs region
+            // in Higgs region
             if(diMuon_bsConstrainedMass < 100 || diMuon_bsConstrainedMass > 180)
                 continue;
         }
@@ -533,19 +614,85 @@ void CreateTuple::fillOutputTree() {
         // if (diMuon_mass < 100 || diMuon_mass > 180)
         if (diMuon_bsConstrainedMass < 70 || diMuon_bsConstrainedMass > 180)
             continue;
-        
-        h_nInFinalMassRange->Fill(0.5);
-        
-        if(!is_data){
-            weight = GetEventWeight(gen_weight, pileup_weight, scale_factor);
-            weight_no_lumi = weight / luminosity;
-        }
 
-        else{
+        h_nInFinalMassRange->Fill(0.5);
+
+        if (!is_data) {
+
+            float mu_ID_eff_SF_error_1 =
+                std::sqrt(std::pow((*mu_ID_eff_SF_stat_vec)[mu1_index], 2) +
+                          std::pow((*mu_ID_eff_SF_syst_vec)[mu1_index], 2));
+            float mu_ID_eff_SF_error_2 =
+                std::sqrt(std::pow((*mu_ID_eff_SF_stat_vec)[mu2_index], 2) +
+                          std::pow((*mu_ID_eff_SF_syst_vec)[mu2_index], 2));
+
+
+            float mu_ISO_eff_SF_error_1 =
+                std::sqrt(std::pow((*mu_ISO_eff_SF_stat_vec)[mu1_index], 2) +
+                          std::pow((*mu_ISO_eff_SF_syst_vec)[mu1_index], 2));
+            float mu_ISO_eff_SF_error_2 =
+                std::sqrt(std::pow((*mu_ISO_eff_SF_stat_vec)[mu2_index], 2) +
+                          std::pow((*mu_ISO_eff_SF_syst_vec)[mu2_index], 2));
+
+
+            mu_trig_eff_SF = (*mu_trig_eff_SF_vec)[mu1_index] *
+                             (*mu_trig_eff_SF_vec)[mu2_index];
+
+            mu_trig_eff_SF_down = ((*mu_trig_eff_SF_vec)[mu1_index] -
+                                   (*mu_trig_eff_SF_error_vec)[mu1_index]) *
+                                  ((*mu_trig_eff_SF_vec)[mu2_index] -
+                                   (*mu_trig_eff_SF_error_vec)[mu2_index]);
+            mu_trig_eff_SF_up = ((*mu_trig_eff_SF_vec)[mu1_index] +
+                                   (*mu_trig_eff_SF_error_vec)[mu1_index]) *
+                                  ((*mu_trig_eff_SF_vec)[mu2_index] +
+                                   (*mu_trig_eff_SF_error_vec)[mu2_index]);
+
+            mu_ISO_eff_SF = (*mu_ISO_eff_SF_vec)[mu1_index] *
+                             (*mu_ISO_eff_SF_vec)[mu2_index];
+
+            mu_ISO_eff_SF_down = ((*mu_ISO_eff_SF_vec)[mu1_index] -
+                                   mu_ISO_eff_SF_error_1)*
+                                  ((*mu_ISO_eff_SF_vec)[mu2_index] -
+                                   mu_ISO_eff_SF_error_2);
+            mu_ISO_eff_SF_up = ((*mu_ISO_eff_SF_vec)[mu1_index] +
+                                   mu_ISO_eff_SF_error_1)*
+                                  ((*mu_ISO_eff_SF_vec)[mu2_index] +
+                                   mu_ISO_eff_SF_error_2);
+            
+            mu_ID_eff_SF = (*mu_ID_eff_SF_vec)[mu1_index] *
+                             (*mu_ID_eff_SF_vec)[mu2_index];
+
+            mu_ID_eff_SF_down = ((*mu_ID_eff_SF_vec)[mu1_index] -
+                                   mu_ID_eff_SF_error_1)*
+                                  ((*mu_ID_eff_SF_vec)[mu2_index] -
+                                   mu_ID_eff_SF_error_2);
+            mu_ID_eff_SF_up = ((*mu_ID_eff_SF_vec)[mu1_index] +
+                                   mu_ID_eff_SF_error_1)*
+                                  ((*mu_ID_eff_SF_vec)[mu2_index] +
+                                   mu_ID_eff_SF_error_2);
+
+            weight =
+                GetEventWeight(gen_weight, pileup_weight, scale_factor,
+                               mu_trig_eff_SF, mu_ID_eff_SF, mu_ISO_eff_SF);
+            weight_no_lumi = weight / luminosity;
+
+        } else {
+
+            mu_trig_eff_SF = 1;
+            mu_ID_eff_SF = 1;
+            mu_ISO_eff_SF = 1;
+            mu_trig_eff_SF_down = 1;
+            mu_ID_eff_SF_down= 1;
+            mu_ISO_eff_SF_down= 1;
+            mu_trig_eff_SF_up = 1;
+            mu_ID_eff_SF_up= 1;
+            mu_ISO_eff_SF_up= 1;
+            
             weight = 1;
             weight_no_lumi = 1;
+        
         }
-
+        
         // DiMuon variables
         diMuon_rapidity = (mu1_vector + mu2_vector).Rapidity();
 
@@ -554,10 +701,12 @@ void CreateTuple::fillOutputTree() {
                                 (*mu_phi)[mu1_index], MUON_MASS);
         mu2_vector.SetPtEtaPhiM((*mu_pt)[mu2_index], (*mu_eta)[mu2_index],
                                 (*mu_phi)[mu2_index], MUON_MASS);
-        mu1BSC_vector.SetPtEtaPhiM((*mu_bsConstrainedPt)[mu1_index], (*mu_eta)[mu1_index],
-                                (*mu_phi)[mu1_index], MUON_MASS);
-        mu2BSC_vector.SetPtEtaPhiM((*mu_bsConstrainedPt)[mu2_index], (*mu_eta)[mu2_index],
-                                (*mu_phi)[mu2_index], MUON_MASS);
+        mu1BSC_vector.SetPtEtaPhiM((*mu_bsConstrainedPt)[mu1_index],
+                                   (*mu_eta)[mu1_index], (*mu_phi)[mu1_index],
+                                   MUON_MASS);
+        mu2BSC_vector.SetPtEtaPhiM((*mu_bsConstrainedPt)[mu2_index],
+                                   (*mu_eta)[mu2_index], (*mu_phi)[mu2_index],
+                                   MUON_MASS);
 
         mu1_pt = (*mu_pt)[mu1_index];
         mu2_pt = (*mu_pt)[mu2_index];
@@ -571,15 +720,20 @@ void CreateTuple::fillOutputTree() {
         mu2_dz = (*mu_dz)[mu2_index];
         mu1_dzErr = (*mu_dzErr)[mu1_index];
         mu2_dzErr = (*mu_dzErr)[mu2_index];
-        relative_diMuon_mass_error = std::sqrt(std::pow(mu1_ptErr/mu1_pt, 2) + std::pow(mu2_ptErr/mu2_pt, 2));
-        relative_diMuon_bsConstrainedMass_error = std::sqrt(std::pow(mu1_bsConstrainedPtErr/mu1_bsConstrainedPt, 2) + std::pow(mu2_bsConstrainedPtErr/mu2_bsConstrainedPt, 2));
-        
+        relative_diMuon_mass_error = std::sqrt(std::pow(mu1_ptErr / mu1_pt, 2) +
+                                               std::pow(mu2_ptErr / mu2_pt, 2));
+        relative_diMuon_bsConstrainedMass_error = std::sqrt(
+            std::pow(mu1_bsConstrainedPtErr / mu1_bsConstrainedPt, 2) +
+            std::pow(mu2_bsConstrainedPtErr / mu2_bsConstrainedPt, 2));
+
         angles_CS = CSAngles(mu1_vector, mu2_vector, (*mu_charge)[mu1_index]);
 
         mu1_pt_mass_ratio = (*mu_pt)[mu1_index] / diMuon_mass;
         mu2_pt_mass_ratio = (*mu_pt)[mu2_index] / diMuon_mass;
-        mu1_bsConstrainedPt_mass_ratio = (*mu_bsConstrainedPt)[mu1_index] / diMuon_bsConstrainedMass;
-        mu2_bsConstrainedPt_mass_ratio = (*mu_bsConstrainedPt)[mu2_index] / diMuon_bsConstrainedMass;
+        mu1_bsConstrainedPt_mass_ratio =
+            (*mu_bsConstrainedPt)[mu1_index] / diMuon_bsConstrainedMass;
+        mu2_bsConstrainedPt_mass_ratio =
+            (*mu_bsConstrainedPt)[mu2_index] / diMuon_bsConstrainedMass;
         mu1_eta = (*mu_eta)[mu1_index];
         mu2_eta = (*mu_eta)[mu2_index];
         phi_CS = angles_CS.second;
@@ -625,9 +779,8 @@ void CreateTuple::fillOutputTree() {
             delta_phi_diJet = DeltaPhi(jet_phi->at(0), jet_phi->at(1));
             z_zeppenfeld = GetZZeppenfeldVariable(diMuon_rapidity, jet_pt,
                                                   jet_phi, jet_eta, jet_mass);
-            pt_balance = GetPtBalanceVariable(mu1_vector + mu2_vector,
-                                              jet_pt, jet_phi, jet_eta,
-                                              jet_mass);
+            pt_balance = GetPtBalanceVariable(mu1_vector + mu2_vector, jet_pt,
+                                              jet_phi, jet_eta, jet_mass);
             pt_centrality = GetPtCentralityVariable(diMuon_pt, jet_pt, jet_phi,
                                                     jet_eta, jet_mass);
             min_delta_eta_diMuon_jet =
@@ -670,7 +823,7 @@ void CreateTuple::saveTree() {
     h_nValidJets->Write();
     h_nValidSeperatedJets->Write();
     h_nValidNotVetoedJets->Write();
-    //h_nJMEJets->Write();
+    // h_nJMEJets->Write();
     h_n2Jets->Write();
     h_nBothVBFJets->Write();
     h_nVBFEtaSeperated->Write();
