@@ -383,7 +383,7 @@ void HmmAnalyzer::EventLoop() {
                 continue;
             }
 
-            if(year == "2024" || year == "2025"){
+            if(year == "2025"){
                 t_Mu_EffSF_TRIG->push_back(1);
                 t_Mu_EffSFErr_TRIG->push_back(0);
             }

@@ -40,8 +40,10 @@ double GetScaleFactor(const float &luminosity, const float &cross_section,
 }
 
 double GetEventWeight(const float &gen_weight, const float &pileup_weight,
-                      const float &scale_factor) {
-    return gen_weight * pileup_weight * scale_factor;
+                      const float &scale_factor, const float &mu_trig_eff_SF,
+                      const float &mu_ID_eff_SF, const float &mu_ISO_eff_SF) {
+    return gen_weight * pileup_weight * scale_factor * mu_trig_eff_SF *
+           mu_ID_eff_SF * mu_ISO_eff_SF;
 }
 
 std::pair<float, float> CSAngles(TLorentzVector vector_1,
