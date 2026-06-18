@@ -503,6 +503,30 @@ def save_model(model, test_name, use_bsConstrain):
     model.get_booster().dump_model(f"models/model_{test_name}.txt")
     model.get_booster().save_model(f"models/model_{test_name}.xgb")
 
+def plot_loss(test_loss, train_loss, test_name, plot_path, era):
+    plt.style.use(hep.style.CMS)
+
+    f = plt.figure()
+    plt.plot(train_loss, label="Train")
+    plt.plot(test_loss, label="Test")
+    plt.xlabel("Boosting round")
+    plt.ylabel("Log loss")
+    plt.legend()
+    #hep.cms.label("Preliminary", data=False, lumi=170.905, com=13.6)
+    hep.cms.label(
+        data="False",
+        label="",
+        year=era,
+        com="13.6",
+        lumi=str(luminosity[era]),
+    )
+    plt.tight_layout()
+    plt.show()
+
+    os.makedirs(f"{plot_path}training/", exist_ok=True)
+    plt.savefig(f"{plot_path}training/loss_{test_name}.pdf")
+    plt.savefig(f"{plot_path}training/loss_{test_name}.png")
+
 '''
 if __name__ == "__main__":
     import sys

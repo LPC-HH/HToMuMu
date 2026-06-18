@@ -18,6 +18,8 @@ pip3 install uproot
 pip3 install matplotlib
 pip3 install graphviz
 pip3 install mplhep
+pip3 install optuna
+pip3 install plotly
 
 ```
 

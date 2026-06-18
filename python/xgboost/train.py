@@ -12,16 +12,23 @@ import os
 import shutil
 import uproot
 import sys
+import optuna
+import optuna.visualization as vis
+import matplotlib.pyplot as plt
+import mplhep as hep
+import plotly.io as pio
+from plotly.io import show
 
-if len(sys.argv) != 3 and len(sys.argv) != 6:
+if len(sys.argv) != 4 and len(sys.argv) != 7:
     print(
-        "[ERROR] python3 train.py <Channel_under_study> <era> <ifRetrain T/F> [bkg_subset sig_subset]"
+        "[ERROR] python3 train.py <Channel_under_study> <era> <ifRetrain T/F> <ifOptimize T/F> [bkg_subset sig_subset]"
     )
     exit()
 channel_US, era = sys.argv[1], sys.argv[2]
 ifRetrain = True if sys.argv[3] == "T" else False
-background_subset = sys.argv[4] if len(sys.argv) == 6 else "Full"
-signal_subset = sys.argv[5] if len(sys.argv) == 6 else "NottH"
+ifOptimize = True if sys.argv[4] == "T" else False
+background_subset = sys.argv[5] if len(sys.argv) == 6 else "Full"
+signal_subset = sys.argv[6] if len(sys.argv) == 6 else "NottH"
 
 
 print("Channel under study: ", channel_US)
@@ -35,8 +42,9 @@ DRAW_CORRELATIONS = False
 DO_STANDARDIZATION = True
 USE_WEIGHT = False
 USE_WEIGHT_MASS_RES = True
-APPEND_VARIABLES = True
+APPEND_VARIABLES = False
 USE_BSCONSTRAIN = True 
+PLOT_LOSS = True
 SEED = 7
 TEST_SIZE = 0.4
 SAMPLE_SIZE = 1.0
@@ -160,16 +168,136 @@ if DO_STANDARDIZATION:
 
 print("x_train standaried:", x_train)
 
-if(ifRetrain):
-    # fit model no training data
+w_train = np.absolute(sample_weights_train) / np.array(x_train_p[:, -2])
+w_test = np.absolute(sample_weights_test) / np.array(x_test_p[:, -2])
+
+def objective(trial):
+
+    params = {
+        "max_depth": trial.suggest_int("max_depth", 2, 5),
+        "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.2, log=True),
+        "n_estimators": 2000,
+        "device": "cuda",
+
+        "min_child_weight": trial.suggest_float("min_child_weight", 1.0, 20.0, log=True),
+        "subsample": trial.suggest_float("subsample", 0.6, 1.0),
+        "colsample_bytree": trial.suggest_float("colsample_bytree", 0.6, 1.0),
+
+        "reg_lambda": trial.suggest_float("reg_lambda", 0.1, 10.0, log=True),
+        "reg_alpha": trial.suggest_float("reg_alpha", 1e-4, 1.0, log=True),
+
+        "objective": "binary:logistic",
+        "eval_metric": "logloss",
+        "n_jobs": 4,
+        "verbosity": 0,
+        "early_stopping_rounds": 50,
+    }
+
+    model = xgb.XGBClassifier(**params)
+
+    model.fit(
+        x_train,
+        y_train,
+        sample_weight=w_train,
+        eval_set=[(x_train, y_train), (x_test, y_test)],
+        sample_weight_eval_set=[w_train, w_test],
+        verbose=False,
+    )
+
+    y_pred = model.predict_proba(x_test)[:, 1]
+    
+    #Z = compute_significance(y_test, y_pred, w_test)
+
+    auc = roc_auc_score(
+        y_test,
+        y_pred,
+        sample_weight=w_test,
+    )
+
+    return auc
+
+nTrials = 1000
+if(ifOptimize):
+    optimization_plot_path = "optunaPlots/" + channel_US + "/"
+    os.makedirs(optimization_plot_path, exist_ok=True)
+    study = optuna.create_study(direction="maximize")
+    study.optimize(objective, n_trials=nTrials)
+
+    print("Best AUC:", study.best_value)
+    print("Best parameters:")
+    print(study.best_params)
+
+    fig = vis.plot_optimization_history(study)
+    fig.write_html(optimization_plot_path + "optimization_history.html")
+    #fig.show()
+
+    fig = vis.plot_param_importances(study)
+    fig.write_html(optimization_plot_path + "param_importance.html")
+    #fig.show()
+
+    fig = vis.plot_slice(
+    study,
+    params=[
+        "max_depth",
+        "learning_rate",
+        "min_child_weight",
+        "subsample",
+        "colsample_bytree",
+        "reg_lambda",
+        "reg_alpha",
+    ],
+    )
+
+    fig.write_html(optimization_plot_path + "optuna_slice.html")
+    best_params = study.best_params   
     model = xgb.XGBClassifier(
-        max_depth=3,
-        learning_rate=0.1,
-        n_estimators=400,
+        **best_params,
+        n_estimators=2000,
         verbosity=2,
         n_jobs=4,
-        reg_lambda=1.0,
+        eval_metric=["logloss", "auc"],
+        early_stopping_rounds=50
     )
+
+    model.fit(
+        x_train,
+        y_train,
+        sample_weight=w_train,
+        eval_set=[(x_train, y_train), (x_test, y_test)],
+        sample_weight_eval_set=[w_train, w_test],
+    )
+
+    results = model.evals_result()
+
+    train_loss = results["validation_0"]["logloss"]
+    test_loss  = results["validation_1"]["logloss"]
+
+    xgb_utils.plot_loss(test_loss, train_loss, test_name, optimization_plot_path, era)
+    
+
+if(ifRetrain):
+    # fit model no training data
+    if(ifOptimize):
+        model = xgb.XGBClassifier(
+            **best_params,
+            n_estimators=2000,
+            verbosity=2,
+            n_jobs=4,
+            eval_metric=["logloss", "auc"],
+            early_stopping_rounds=50
+        )
+
+    else:
+        model = xgb.XGBClassifier(
+            max_depth=4,
+            learning_rate=0.1,
+            n_estimators=1000,
+            verbosity=2,
+            n_jobs=4,
+            reg_lambda=1.0,
+            eval_metric=["logloss", "auc"],
+            early_stopping_rounds=50
+        )
 
     print("weights: ", sample_weights_train)
     print("abs(weights): ", np.absolute(sample_weights_train[y_train == 1]))
@@ -188,7 +316,9 @@ if(ifRetrain):
         model.fit(
             x_train,
             y_train,
-            sample_weight=np.absolute(sample_weights_train) / np.array(x_train_p[:, -2]),
+            sample_weight=w_train,
+            eval_set=[(x_train, y_train), (x_test, y_test)],
+            sample_weight_eval_set=[w_train, w_test],
         )
 
     y_pred = model.predict_proba(x_test)[:, 1]
@@ -203,7 +333,9 @@ if(ifRetrain):
     print("Accuracy: %.2f%%" % (accuracy * 100.0))
 
     AUC = roc_auc_score(y_test, y_pred)
+    AUC_weighted = roc_auc_score(y_test, y_pred, sample_weight=w_test)
     print("AUC: " + str(AUC))
+    print("Weighted AUC: " + str(AUC_weighted))
     diMuon_mass_test = x_test_p[:, -3]
     print(
         "diMuon_mass: ",
@@ -276,10 +408,19 @@ if(ifRetrain):
         plot_path,
         scale="linear",
     )
+
+    results = model.evals_result()
+
+    train_loss = results["validation_0"]["logloss"]
+    test_loss  = results["validation_1"]["logloss"]
+
     xgb_utils.draw_roc_curve(fpr, tpr, test_name, plot_path, era, AUC)
+    xgb_utils.draw_roc_curve(fpr, tpr, "weighted_" + test_name, plot_path, era, AUC_weighted)
     xgb_utils.save_model(model, test_name, USE_BSCONSTRAIN)
     xgb_utils.plot_feature_importances(model, variables, test_name, plot_path)
     xgb_utils.plot_xgb_tree(model, variables, test_name, plot_path)
+    xgb_utils.plot_loss(test_loss, train_loss, test_name, plot_path, era)
+
 
 
 if not APPEND_VARIABLES:
