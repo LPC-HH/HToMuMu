@@ -104,12 +104,12 @@ variables = [
 #variables = []
 
 # eras = ["2022EE", "2022", "2023", "2023BPix", "2024"]#, "2025"]
-eras = ["2022", "2022EE", "2023", "2023BPix", "2024", "2025", "Combined"]
+#eras = ["2022", "2022EE", "2023", "2023BPix", "2024", "2025", "Combined"]
 # eras = ["2022", "2022EE"]
 # eras = ["2023", "2023BPix"]
 #eras = ["2023BPix"]
 #eras = ["2024", "Combined"]
-#eras = ["Combined"]
+eras = ["Combined"]
 #eras = ["2025"]
 
 for era in eras:

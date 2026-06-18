@@ -58,7 +58,7 @@ BDT_score_path = "../root_io/tuples/BDT_score/" + channel_US + "/" + subset_titl
 use_bsConstrain = True
 #signal_region = (122.5 , 127.5)
 signal_region = (121 , 129)
-draw_data = True
+draw_data = False
 
 if use_bsConstrain:
     diMuon_mass_name = "diMuon_bsConstrainedMass"
@@ -653,16 +653,16 @@ def draw_bdt_categories(era):
         linewidth=2,
         color="red",
     )
-
-    hep.histplot(
-        data_hist / np.sum(data_hist),
-        data_bins,
-        label="Data",
-        ax=axs[0],
-        stack=True,
-        linewidth=2,
-        color="black",
-    )
+    if draw_data:
+        hep.histplot(
+            data_hist / np.sum(data_hist),
+            data_bins,
+            label="Data",
+            ax=axs[0],
+            stack=True,
+            linewidth=2,
+            color="black",
+        )
 
     hep.histplot(
         signal_hist / np.sum(signal_hist),

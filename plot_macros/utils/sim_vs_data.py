@@ -66,7 +66,7 @@ def get_histograms_from_tuple(
             era_reweight = float(luminosity["2025"]) / (float(luminosity["2024"]) + float(luminosity["2025"]))
             era = "2024"
         if era == "Combined":
-            era_reweight = float(luminosity["Combined"]) / 170.97
+            era_reweight = 1#float(luminosity["Combined"]) #/ 170.97
 
     variable_bin = variables[0]
 

@@ -41,11 +41,14 @@ variables = [
     "HT_pt10",
 ]
 
+#variables = ["diMuon_pt", "leading_jet_eta"]
+
 # eras = ["2022", "2022EE"]
 # eras = ["2023", "2023BPix"]
 # eras = ["2022", "2022EE", "2023", "2023BPix"]
-eras = ["2022", "2022EE", "2022Combined", "2023", "2023BPix", "2023Combined", "2024", "Combined"]
+#eras = ["2022", "2022EE", "2022Combined", "2023", "2023BPix", "2023Combined", "2024", "Combined"]
 #eras = ["2024", "Combined"]
+eras = ["Combined"]
 background_subset = ["Full"]
 # background_subset = ["NoDY50"]
 # signal_subset = ["Full", "NottH", "VBF"]
