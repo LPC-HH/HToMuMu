@@ -4,8 +4,8 @@ SRC := ./src
 LIB := ./lib
 
 # C++ compiler flags.
-CXX   := g++ -g -Wall 
-FLAGS := -std=c++17 $(shell root-config --cflags) $(shell correction config --cflags --ldflags) -I/cvmfs/cms.cern.ch/el9_amd64_gcc12/external/boost/1.80.0-4e27c6908892e3529bfbcf4445a96fe6/include
+CXX   := g++ -g -Wall
+FLAGS := -std=c++17 $(shell root-config --cflags) $(shell correction config --cflags --ldflags) -I$(LIB) -I/cvmfs/cms.cern.ch/el9_amd64_gcc12/external/boost/1.80.0-4e27c6908892e3529bfbcf4445a96fe6/include
 
 LIBS  := $(shell root-config --libs) $(shell correction config --cflags --ldflags) -L/cvmfs/cms.cern.ch/el9_amd64_gcc12/external/boost/1.80.0-4e27c6908892e3529bfbcf4445a96fe6/lib
 
@@ -39,6 +39,11 @@ SOURCES := $(ANALYZER_SRC) $(HISTOGRAM_SRC) $(SKIM_ggH_SRC) $(SKIM_VBF_SRC) $(TU
 
 
 # Object files
+JERC_OBJECTS := JecConfigReader.o \
+				JecApplication.o \
+				JvmConfigReader.o \
+				JvmApplication.o
+
 ANALYZER_OBJECTS := LeptonEfficiencyCorrector.o \
 				JetCorrector.o \
 				MainEvent.o \
@@ -87,6 +92,12 @@ $(OBJECTS): %.o: $(SRC)/%.cc $(LIB)/%.h
 	@echo "Compiling $<..."
 	$(CXX) $(FLAGS) -c $< -o $@
 
+$(JERC_OBJECTS): %.o: $(SRC)/%.cc $(LIB)/%.h
+	@echo "Compiling $<..."
+	$(CXX) $(FLAGS) -c $< -o $@
+
+HmmAnalyzer.o: $(LIB)/JecApplication.h $(LIB)/JecConfigReader.h $(LIB)/JvmApplication.h $(LIB)/JvmConfigReader.h
+
 # Special rule for SkimTuplesggH.o without a header file
 $(SKIM_ggH_OBJECTS): %.o: $(SRC)/%.cc
 	@echo "Compiling $<..."
@@ -98,7 +109,7 @@ $(SKIM_VBF_OBJECTS): %.o: $(SRC)/%.cc
 	$(CXX) $(FLAGS) -c $< -o $@
 
 # Linking for HmmAnalyzer
-$(ANALYZER_EXECUTABLE): $(ANALYZER_OBJECTS)
+$(ANALYZER_EXECUTABLE): $(ANALYZER_OBJECTS) $(JERC_OBJECTS)
 	@echo "Linking $(ANALYZER_EXECUTABLE)..."
 	$(CXX) $(FLAGS) -o $@ $^ $(LIBS)
 	@echo "done"
@@ -128,9 +139,9 @@ $(SKIM_VBF_EXECUTABLE): $(SKIM_VBF_OBJECTS)
 	@echo "done"
 	
 # Specifying the object files as intermediates deletes them automatically after the build process.
-.INTERMEDIATE: $(ANALYZER_OBJECTS) $(HISTOGRAM_OBJECTS) $(SKIM_ggH_OBJECTS) $(SKIM_VBF_OBJECTS) $(TUPLE_OBJECTS)
+.INTERMEDIATE: $(ANALYZER_OBJECTS) $(JERC_OBJECTS) $(HISTOGRAM_OBJECTS) $(SKIM_ggH_OBJECTS) $(SKIM_VBF_OBJECTS) $(TUPLE_OBJECTS)
 
 # Clean target
 .PHONY: clean
 clean:
-	rm -f $(ANALYZER_OBJECTS) $(HISTOGRAM_OBJECTS) $(SKIM_ggH_OBJECTS) $(SKIM_VBF_OBJECTS) $(TUPLE_OBJECTS)	$(ANALYZER_EXECUTABLE) $(HISTOGRAM_EXECUTABLE) $(SKIM_ggH_EXECUTABLE) $(SKIM_VBF_EXECUTABLE) $(TUPLE_EXECUTABLE)
+	rm -f $(ANALYZER_OBJECTS) $(JERC_OBJECTS) $(HISTOGRAM_OBJECTS) $(SKIM_ggH_OBJECTS) $(SKIM_VBF_OBJECTS) $(TUPLE_OBJECTS)	$(ANALYZER_EXECUTABLE) $(HISTOGRAM_EXECUTABLE) $(SKIM_ggH_EXECUTABLE) $(SKIM_VBF_EXECUTABLE) $(TUPLE_EXECUTABLE)

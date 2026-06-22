@@ -1,0 +1,54 @@
+{
+  "2016Pre": {
+    "jvmFilePath": "./data/jetCorrections/jetvetomaps.json.gz",
+    "jvmTagName": "Summer19UL16_V1",
+    "jvmKeyName": "jetvetomap_hot"
+  },
+  "2016Post": {
+    "jvmFilePath": "./data/jetCorrections/jetvetomaps.json.gz",
+    "jvmTagName": "Summer19UL16_V1",
+    "jvmKeyName": "jetvetomap_hot"
+  },
+  "2017": {
+    "jvmFilePath": "./data/jetCorrections/jetvetomaps.json.gz",
+    "jvmTagName": "Summer19UL17_V1",
+    "jvmKeyName": "jetvetomap_hot"
+  },
+  "2018": {
+    "jvmFilePath": "./data/jetCorrections/jetvetomaps.json.gz",
+    "jvmTagName": "Summer19UL18_V1",
+    "jvmKeyName": "jetvetomap_hot"
+  },
+  "2022Pre": {
+    "jvmFilePath": "./data/jetCorrections/jetvetomaps.json.gz",
+    "jvmTagName": "Summer22_23Sep2023_RunCD_V1",
+    "jvmKeyName": "jetvetomap"
+  },
+  "2022Post": {
+    "jvmFilePath": "./data/jetCorrections/jetvetomaps.json.gz",
+    "jvmTagName": "Summer22EE_23Sep2023_RunEFG_V1",
+    "jvmKeyName": "jetvetomap"
+  },
+  "2023Pre": {
+    "jvmFilePath": "./data/jetCorrections/jetvetomaps.json.gz",
+    "jvmTagName": "Summer23Prompt23_RunC_V1",
+    "jvmKeyName": "jetvetomap"
+  },
+  "2023Post": {
+    "jvmFilePath": "./data/jetCorrections/jetvetomaps.json.gz",
+    "jvmTagName": "Summer23BPixPrompt23_RunD_V1",
+    "jvmKeyName": "jetvetomap"
+  },
+  "2024": {
+    "jvmFilePath": "./data/jetCorrections/jetvetomaps.json.gz",
+    "jvmTagName": "Summer24Prompt24_RunBCDEFGHI_V1",
+    "jvmKeyName": "jetvetomap"
+  },
+  "2025": {
+    "jvmFilePath": "./data/jetCorrections/jetvetomaps.json.gz",
+    "jvmTagName": "Winter25Prompt25_RunCDEFG_V1",
+    "jvmKeyName": "jetvetomap"
+  }
+}
+
+

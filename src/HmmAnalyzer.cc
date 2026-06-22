@@ -9,9 +9,15 @@
 #include <vector>
 #include <chrono>
 
-#include "correction.h"
-#include "../lib/LeptonEfficiencyCorrector.h"
+#include <Math/Vector4D.h>
+
+#include "../lib/JecApplication.h"
+#include "../lib/JecConfigReader.h"
 #include "../lib/JetCorrector.h"
+#include "../lib/JvmApplication.h"
+#include "../lib/JvmConfigReader.h"
+#include "../lib/LeptonEfficiencyCorrector.h"
+#include "correction.h"
 
 #ifdef MAKECINT
 #pragma link C++ class vector < float> + ;
@@ -70,8 +76,33 @@ void HmmAnalyzer::EventLoop() {
     //read run3 muon efficiency json files
     LeptonEfficiencyCorrector corrector;
     //JetCorrector jetCorrector;
-    JetCorrector jetCorrector;
-    jetCorrector.initializeCorrections(yearst);
+    //JetCorrector jetCorrector;
+    //jetCorrector.initializeCorrections(yearst);
+
+    JecConfigReader::ConfigPaths jecConfigPaths;
+    jecConfigPaths.ak4 = "./data/jetCorrections/JecConfigAK4.json";
+    jecConfigPaths.ak8 = "./data/jetCorrections/JecConfigAK8.json";
+    JecConfigReader::JecConfig::setDefaultPaths(jecConfigPaths);
+
+    JecConfigReader::JecConfig::setDefaultJerSmearPath(
+        "./data/jetCorrections/jer_smear.json.gz");
+    JvmConfigReader::JvmConfig::setDefaultConfigPath(
+        "./data/jetCorrections/JvmConfig.json");
+
+    JecConfigReader::JecConfig &jec_config =
+        JecConfigReader::JecConfig::defaultInstance();
+    const std::string jec_year = GetJercYear(yearst);
+    const std::string jec_data_era = GetJercEra(jec_year);
+
+    JvmConfigReader::Jvm jvm_config =
+        JvmConfigReader::JvmConfig::defaultInstance().getJvmForYear(jec_year);
+    JvmApplication::VetoChecker jvm_checker(jvm_config.ref, jvm_config.key);
+
+    std::unique_ptr<JecApplication::Applier> mc_jec_applier;
+    if (!is_data) {
+        mc_jec_applier = std::make_unique<JecApplication::Applier>(
+            JecApplication::Applier::McAK4(jec_config, jec_year, false));
+    }
 
     // btag SF
     BTagCalibration calib("deepcsv", "./data/btagSF/DeepCSV_94XSF_V3_B_F.csv");
@@ -292,38 +323,45 @@ void HmmAnalyzer::EventLoop() {
         }
 
         h_nNoExtraElectron->Fill(0.5);
-
-
+    
+        bool trig_match_mu1 = false;
+        bool trig_match_mu2 = false;
         for (int trigger_index = 0; trigger_index < nTrigObj; trigger_index++) {
             //  float dR_TrigObj = 999.;
             if (TrigObj_id[trigger_index] != 13)
                 continue;
             float dR_TrigObj;
-            dR_TrigObj =
-                DeltaR(Muon_eta[index_mu1], Muon_phi[index_mu1],
-                       TrigObj_eta[trigger_index], TrigObj_phi[trigger_index]);
-            if (dR_TrigObj < 0.1 && Muon_tightId[index_mu1] &&
-                Muon_pfRelIso04_all[index_mu1] < 0.15 &&
-                mu_pt_Roch_corr[index_mu1] > muon_pt_cut.at(yearst)) {
-                trig_match = true;
-                t_index_trigm_mu = 1;
-                break;
+            if (!trig_match_mu1){
+                dR_TrigObj =
+                    DeltaR(Muon_eta[index_mu1], Muon_phi[index_mu1],
+                           TrigObj_eta[trigger_index], TrigObj_phi[trigger_index]);
+                if (dR_TrigObj < 0.1 && Muon_tightId[index_mu1] &&
+                    Muon_pfRelIso04_all[index_mu1] < 0.15 &&
+                    mu_pt_Roch_corr[index_mu1] > muon_pt_cut.at(yearst)) {
+                    //trig_match = true;
+                    t_index_trigm_mu = 1;
+                    trig_match_mu1 = true;
+                    //break;
+                }
             }
-            dR_TrigObj =
-                DeltaR(Muon_eta[index_mu2], Muon_phi[index_mu2],
-                       TrigObj_eta[trigger_index], TrigObj_phi[trigger_index]);
-            if (mu_pt_Roch_corr[index_mu2] > muon_pt_cut.at(yearst) &&
-                Muon_tightId[index_mu2] &&
-                Muon_pfRelIso04_all[index_mu2] < 0.15 && dR_TrigObj < 0.1) {
-                trig_match = true;
-                t_index_trigm_mu = 2;
-                break;
+            if (!trig_match_mu2){
+                dR_TrigObj =
+                    DeltaR(Muon_eta[index_mu2], Muon_phi[index_mu2],
+                           TrigObj_eta[trigger_index], TrigObj_phi[trigger_index]);
+                if (mu_pt_Roch_corr[index_mu2] > muon_pt_cut.at(yearst) &&
+                    Muon_tightId[index_mu2] &&
+                    Muon_pfRelIso04_all[index_mu2] < 0.15 && dR_TrigObj < 0.1) {
+                    //trig_match = true;
+                    t_index_trigm_mu = 2;
+                    trig_match_mu2 = true;
+                    //break;
+                }
             }
         } // end of triger match, end of loop over trigger objects
+        trig_match= trig_match_mu1 || trig_match_mu2;
 
         //std::cout << "Checking trig match" << std::endl; 
         if (!trig_match) {
-            //std::cout << "No trig match" << std::endl; 
             continue;
         }
 
@@ -344,14 +382,38 @@ void HmmAnalyzer::EventLoop() {
             if (!(fabs(Muon_eta[i]) < 2.4 && Muon_mediumId[i])) {
                 continue;
             }
-            if (i == index_mu1)
+            
+            bool this_muon_trig_matched = false;
+
+            if (i == index_mu1) {
                 t_index_mu1 = t_index;
-            if (i == index_mu2)
+                this_muon_trig_matched = trig_match_mu1;
+            }
+            else if (i == index_mu2) {
                 t_index_mu2 = t_index;
+                this_muon_trig_matched = trig_match_mu2;
+            }
+
+            if (!is_data) {
+                if(year == "2024" || year == "2025"){
+                    t_Mu_EffSF_TRIG->push_back(1.0);
+                    t_Mu_EffSFErr_TRIG->push_back(0.0);
+                } else {
+                    if (this_muon_trig_matched) {
+                    t_Mu_EffSF_TRIG->push_back(corrector.give_eff(
+                        "Muon_eff_SF_TRIG", Muon_pt[i], Muon_eta[i]));
+
+                    t_Mu_EffSFErr_TRIG->push_back(corrector.give_eff(
+                        "Muon_eff_SFerr_TRIG", Muon_pt[i], Muon_eta[i]));
+                    } else {
+                        t_Mu_EffSF_TRIG->push_back(1.0);
+                        t_Mu_EffSFErr_TRIG->push_back(0.0);
+                    }
+                }
+            }
+
 
             t_Mu_charge->push_back(Muon_charge[i]);
-            t_Mu_pt->push_back(mu_pt_Roch_corr[i]);
-            t_Mu_ptErr->push_back(mu_ptErr_Roch_corr[i]);
             t_Mu_bsConstrainedPt->push_back(Muon_bsConstrainedPt[i]);
             t_Mu_bsConstrainedPtErr->push_back(Muon_bsConstrainedPtErr[i]);
             t_Mu_phi->push_back(Muon_phi[i]);
@@ -383,16 +445,6 @@ void HmmAnalyzer::EventLoop() {
                 continue;
             }
 
-            if(year == "2025"){
-                t_Mu_EffSF_TRIG->push_back(1);
-                t_Mu_EffSFErr_TRIG->push_back(0);
-            }
-
-            else{
-                t_Mu_EffSF_TRIG->push_back(corrector.give_eff("Muon_eff_SF_TRIG", Muon_pt[i], Muon_eta[i]));
-                t_Mu_EffSFErr_TRIG->push_back(corrector.give_eff("Muon_eff_SFerr_TRIG", Muon_pt[i], Muon_eta[i]));
-            }
-
             t_Mu_EffSF_ID->push_back(corrector.give_eff("Muon_eff_SF_ID", Muon_pt[i], Muon_eta[i]));
             t_Mu_EffSF_ID_stat->push_back(corrector.give_eff("Muon_eff_SF_ID_stat", Muon_pt[i], Muon_eta[i]));
             t_Mu_EffSF_ID_syst->push_back(corrector.give_eff("Muon_eff_SF_ID_syst", Muon_pt[i], Muon_eta[i]));
@@ -400,23 +452,6 @@ void HmmAnalyzer::EventLoop() {
             t_Mu_EffSF_ISO->push_back(corrector.give_eff("Muon_eff_SF_ISO", Muon_pt[i], Muon_eta[i]));
             t_Mu_EffSF_ISO_stat->push_back(corrector.give_eff("Muon_eff_SF_ISO_stat", Muon_pt[i], Muon_eta[i]));
             t_Mu_EffSF_ISO_syst->push_back(corrector.give_eff("Muon_eff_SF_ISO_syst", Muon_pt[i], Muon_eta[i]));
-            //std::cout << "Corrector passed" << std::endl;
-
-
-            // if (year == "2016") {
-
-            //t_Mu_EffSF_TRIG->push_back(Mu_eff_SF_TRIG.getSFAve(11, Muon_pt[i], Muon_eta[i], 0.5548));
-            //t_Mu_EffSFErr_TRIG->push_back(Mu_eff_SF_TRIG.getSFErr(13, Muon_pt[i], Muon_eta[i]));
-        
-            /*t_Mu_EffSF_ID->push_back(Mu_eff_SF_ID.getSFAve(11, Muon_pt[i], Muon_eta[i], 0.5548));
-            t_Mu_EffSF_ID_stat->push_back(Mu_eff_SF_ID_stat.getSFAve(11, Muon_pt[i], Muon_eta[i], 0.5548));
-            t_Mu_EffSF_ID_syst->push_back(Mu_eff_SF_ID_syst.getSFAve(11, Muon_pt[i], Muon_eta[i], 0.5548));
-            
-            t_Mu_EffSF_ISO->push_back(Mu_eff_SF_ISO.getSFAve(11, Muon_pt[i], Muon_eta[i], 0.5548));
-            t_Mu_EffSF_ISO_stat->push_back(Mu_eff_SF_ISO_stat.getSFAve(11, Muon_pt[i], Muon_eta[i], 0.5548));
-            t_Mu_EffSF_ISO_syst->push_back(Mu_eff_SF_ISO_syst.getSFAve(11, Muon_pt[i], Muon_eta[i], 0.5548));
-            */
-            //}
         }
 
 
@@ -491,13 +526,76 @@ void HmmAnalyzer::EventLoop() {
         /*if(t_diMuon_bsConstrainedMass < 80 || t_diMuon_bsConstrainedMass > 180){
             continue; //not in signal + Z range
         }*/
-        
+      
+
+
+        std::unique_ptr<JecApplication::Applier> data_jec_applier;
+        const JecApplication::Applier *jet_applier = mc_jec_applier.get();
+        if (is_data) {
+            data_jec_applier = std::make_unique<JecApplication::Applier>(
+                JecApplication::Applier::DataAK4(jec_config, jec_year, jec_data_era,
+                                                 false,
+                                                 static_cast<double>(run)));
+            jet_applier = data_jec_applier.get();
+        }
         
         //std::cout << "There are " << nJet << " jets in event " << jentry << std::endl;
         for (int j = 0; j < nJet; j++) {
             h_nJets->Fill(0.5);
             //std::cout << "looking at jet " << j << std::endl;
-            if (!isValidJet(j)) {
+
+
+            JecApplication::JesInputs jesIn{Jet_pt[j],
+                                            Jet_eta[j],
+                                            Jet_phi[j],
+                                            Jet_area[j],
+                                            Rho_fixedGridRhoFastjetAll,
+                                            Jet_rawFactor[j]};
+            double jec_correction = jet_applier->jesFactorNominal(jesIn);
+            double corrected_jet_pt = Jet_pt[j] * jec_correction;
+            double corrected_jet_mass = Jet_mass[j] * jec_correction;
+
+            if (!is_data) {
+                JecApplication::JerInputs jer_inputs{};
+                jer_inputs.event = event;
+                jer_inputs.rho = Rho_fixedGridRhoFastjetAll;
+                jer_inputs.maxDr = 0.2;
+
+                double bestGenJetDR = jer_inputs.maxDr;
+                int bestGenJet = -1;
+                for (int genJetIndex = 0; genJetIndex < nGenJet;
+                     ++genJetIndex) {
+                    const double dR =
+                        DeltaR(Jet_eta[j], Jet_phi[j], GenJet_eta[genJetIndex],
+                               GenJet_phi[genJetIndex]);
+                    if (dR < bestGenJetDR) {
+                        bestGenJetDR = dR;
+                        bestGenJet = genJetIndex;
+                    }
+                }
+                if (bestGenJet >= 0) {
+                    jer_inputs.hasGen = true;
+                    jer_inputs.genPt = GenJet_pt[bestGenJet];
+                    jer_inputs.genEta = GenJet_eta[bestGenJet];
+                    jer_inputs.genPhi = GenJet_phi[bestGenJet];
+                }
+
+                JecApplication::JesInputs jet_after_jes{corrected_jet_pt,
+                                                        Jet_eta[j],
+                                                        Jet_phi[j],
+                                                        Jet_area[j],
+                                                        Rho_fixedGridRhoFastjetAll,
+                                                        0.0};
+                JecApplication::SystematicOptions systJerNom{};
+                systJerNom.jerVar = "nom";
+                const double jer_correction =
+                    jet_applier->jerFactor(jet_after_jes, jer_inputs, systJerNom);
+                corrected_jet_pt *= jer_correction;
+                corrected_jet_mass *= jer_correction;
+            }
+
+
+            if (!isValidJet(j, corrected_jet_pt)) {
                 //std::cout << "Jet " << j << " invalid" << std::endl;
                 continue;
             }
@@ -522,12 +620,13 @@ void HmmAnalyzer::EventLoop() {
                 continue;
             }*/
             //std::cout << "Jet pass dR and EmEF" << std::endl;
-
-            if(jetCorrector.jetVeto(Jet_eta[j], Jet_phi[j])){
-                //std::cout << "Jet " << j << " vetoed" << std::endl;
+            if (jvm_checker.checkJetInVetoRegion(
+                    Jet_eta[j], Jet_phi[j], corrected_jet_pt, Jet_jetId[j],
+                    Jet_chEmEF[j], Jet_neEmEF[j])) {
+                // std::cout << "Jet " << j << " vetoed" << std::endl;
                 continue;
-                //add hist for jet veto
             }
+            
             h_nValidNotVetoedJets->Fill(0.5);
 
             //std::cout << "Jet pass jetVeto" << std::endl;
@@ -541,11 +640,13 @@ void HmmAnalyzer::EventLoop() {
             t_Jet_chEmEF->push_back(Jet_chEmEF[j]);
             t_Jet_chHEF->push_back(Jet_chHEF[j]);
             t_Jet_eta->push_back(Jet_eta[j]);
-            t_Jet_mass->push_back(Jet_mass[j]);
+            t_Jet_mass->push_back(corrected_jet_mass);
+            t_Jet_mass_nanoAOD->push_back(Jet_mass[j]);
             t_Jet_neEmEF->push_back(Jet_neEmEF[j]);
             t_Jet_neHEF->push_back(Jet_neHEF[j]);
             t_Jet_phi->push_back(Jet_phi[j]);
-            t_Jet_pt->push_back(Jet_pt[j]);
+            t_Jet_pt->push_back(corrected_jet_pt);
+            t_Jet_pt_nanoAOD->push_back(Jet_pt[j]);
             // t_Jet_qgl->push_back(Jet_qgl[j]);
             // t_Jet_jetId->push_back(Jet_jetId[j]);
             t_Jet_nConstituents->push_back(Jet_nConstituents[j]);
@@ -566,11 +667,11 @@ void HmmAnalyzer::EventLoop() {
             t_bJet_chEmEF->push_back(Jet_chEmEF[j]);
             t_bJet_chHEF->push_back(Jet_chHEF[j]);
             t_bJet_eta->push_back(Jet_eta[j]);
-            t_bJet_mass->push_back(Jet_mass[j]);
+            t_bJet_mass->push_back(corrected_jet_mass);
             t_bJet_neEmEF->push_back(Jet_neEmEF[j]);
             t_bJet_neHEF->push_back(Jet_neHEF[j]);
             t_bJet_phi->push_back(Jet_phi[j]);
-            t_bJet_pt->push_back(Jet_pt[j]);
+            t_bJet_pt->push_back(corrected_jet_pt);
             // t_bJet_qgl->push_back(Jet_qgl[j]);
             t_bJet_jetId->push_back(Jet_jetId[j]);
             t_bJet_nConstituents->push_back(Jet_nConstituents[j]);
@@ -587,11 +688,11 @@ void HmmAnalyzer::EventLoop() {
                 reader.eval_auto_bounds("central", BTagEntry::FLAV_B,
                                         fabs(Jet_eta[j]), // absolute value
                                                           // of eta
-                                        Jet_pt[j]);
+                                        corrected_jet_pt);
             double jet_scalefactor_up = reader.eval_auto_bounds(
-                "up", BTagEntry::FLAV_B, fabs(Jet_eta[j]), Jet_pt[j]);
+                "up", BTagEntry::FLAV_B, fabs(Jet_eta[j]), corrected_jet_pt);
             double jet_scalefactor_do = reader.eval_auto_bounds(
-                "down", BTagEntry::FLAV_B, fabs(Jet_eta[j]), Jet_pt[j]);
+                "down", BTagEntry::FLAV_B, fabs(Jet_eta[j]), corrected_jet_pt);
             // std::cout<<jet_scalefactor<<"
             // "<<jet_scalefactor_up<<"
             // "<<jet_scalefactor_do<<std::endl;

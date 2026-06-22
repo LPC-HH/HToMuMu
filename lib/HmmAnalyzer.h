@@ -49,6 +49,40 @@ std::map<TString, TString> NANOAOD_VERSION = {
     {"2022", "v12"}, {"2022EE", "v12"},  {"2023", "v12"}, {"2023BPix", "v12"}, {"2024", "v15"}, {"2025", "v15"}
 };
 
+std::string GetJercYear(const std::string &year) {
+    if (year == "2022")
+        return "2022Pre";
+    else if (year == "2022EE")
+        return "2022Post";
+    else if (year == "2023")
+        return "2023Pre";
+    else if (year == "2023BPix")
+        return "2023Post";
+    else if (year == "2024")
+        return "2024";
+    else if (year == "2025")
+        return "2024";
+    else
+        throw std::runtime_error("Unsupported JERC year: " + year);
+}
+
+std::string GetJercEra(const std::string &jec_year) {
+    if (jec_year == "2022Pre")
+        return "Era2022PreAll";
+    if (jec_year == "2022Post")
+        return "Era2022PostAll";
+    if (jec_year == "2023Pre")
+        return "Era2023PreAll";
+    if (jec_year == "2023Post")
+        return "Era2023PostAll";
+    if (jec_year == "2024")
+        return "Era2024All";
+    if (jec_year == "2025")
+        return "Era2025All";
+    throw std::runtime_error("Unsupported JEC era year: " + jec_year);
+}
+
+
 class HmmAnalyzer : public MainEvent {
   public:
     HmmAnalyzer(const TString &inputFileList = "foo.txt",
@@ -65,8 +99,8 @@ class HmmAnalyzer : public MainEvent {
     float getPileupWeight(int);
     float getPileupWeightUp(int);
     float getPileupWeightDown(int);
-    bool passesJetPtSelection(int index);
-    bool isValidJet(int index);
+    bool passesJetPtSelection(int index, float corrected_pt);
+    bool isValidJet(int index, float corrected_pt);
     void CorrectPtRoch(const RoccoR &_calib, const bool _doSys,
                        const ROOT::Math::PtEtaPhiMVector _mu_vec, const float _mu_ptErr_raw, float &_pt,
                        float &_ptErr, float &_pt_sys_up, float &_pt_sys_down,
@@ -120,17 +154,6 @@ class HmmAnalyzer : public MainEvent {
     TH1D *h_nValidJets = new TH1D("h_nValidJets", "h_nValidJets", 1, 0, 1);
     TH1D *h_nValidSeperatedJets = new TH1D("h_nValidSeperatedJets", "h_nValidSeperatedJets", 1, 0, 1);
     TH1D *h_nValidNotVetoedJets = new TH1D("h_nValidNotVetoedJets", "h_nValidNotVetoedJets", 1, 0, 1);
-
-    /*
-    LeptonEfficiencyCorrector Mu_eff_SF_TRIG;
-    LeptonEfficiencyCorrector Mu_eff_SF_ID;
-    LeptonEfficiencyCorrector Mu_eff_SF_ID_stat;
-    LeptonEfficiencyCorrector Mu_eff_SF_ID_syst;
-    LeptonEfficiencyCorrector Mu_eff_SF_ISO;
-    LeptonEfficiencyCorrector Mu_eff_SF_ISO_stat;
-    LeptonEfficiencyCorrector Mu_eff_SF_ISO_syst;
-    */
-    
 
     TFile *oFile;
     // TFile *ohistFile;
@@ -272,10 +295,12 @@ class HmmAnalyzer : public MainEvent {
     std::vector<float> *t_Jet_chHEF;
     std::vector<float> *t_Jet_eta;
     std::vector<float> *t_Jet_mass;
+    std::vector<float> *t_Jet_mass_nanoAOD;
     std::vector<float> *t_Jet_neEmEF;
     std::vector<float> *t_Jet_neHEF;
     std::vector<float> *t_Jet_phi;
     std::vector<float> *t_Jet_pt;
+    std::vector<float> *t_Jet_pt_nanoAOD;
     std::vector<float> *t_Jet_qgl;
     std::vector<int> *t_Jet_jetId;
     std::vector<int> *t_Jet_chMultiplicity;
@@ -415,135 +440,6 @@ HmmAnalyzer::HmmAnalyzer(const TString &inputFileList, const char *outFileName,
         getPileupHistograms();
     }
 
-    /*
-    // muon eff SFs
-    muon_effSF_TRIG_files.clear();
-    muon_effSF_ID_files.clear();
-    muon_effSF_ISO_files.clear();
-    histo_names_TRIG.clear();
-    histo_names_ID.clear();
-    histo_names_ISO.clear();
-    // if (year == "2016") {
-
-    
-    std::string Mu_ID_file1 =
-        //"./data/leptonSF/" + yearst + "/RunBCDEF_SF_ID.root";
-        // std::string Mu_Iso_file1 =
-        //"./data/leptonSF/" + yearst + "/RunBCDEF_SF_ISO.root";
-        // std::string Mu_ID_file2 =
-        //"./data/leptonSF/" + yearst + "/RunGH_SF_ID.root";
-        // std::string Mu_Iso_file2 =
-        //"./data/leptonSF/" + yearst + "/RunGH_SF_ISO.root";
-        // std::string Mu_Trg_file1 =
-        //"./data/leptonSF/" + yearst + "/EfficienciesAndSF_RunBtoF.root";
-        // std::string Mu_Trg_file2 =
-        //"./data/leptonSF/" + yearst + "/EfficienciesAndSF_RunGtoH.root";
-        "./data/leptonSF/2016/RunBCDEF_SF_ID.root";
-    std::string Mu_Iso_file1 = "./data/leptonSF/2016/RunBCDEF_SF_ISO.root";
-    std::string Mu_ID_file2 = "./data/leptonSF/2016/RunGH_SF_ID.root";
-    std::string Mu_Iso_file2 = "./data/leptonSF/2016/RunGH_SF_ISO.root";
-    std::string Mu_Trg_file1 =
-        "./data/leptonSF/2016/EfficienciesAndSF_RunBtoF.root";
-    std::string Mu_Trg_file2 =
-        "./data/leptonSF/2016/EfficienciesAndSF_RunGtoH.root";
-    std::cout << "Muon ID correction files: " << Mu_ID_file1 << " "
-              << Mu_ID_file2 << std::endl;
-    std::cout << "Muon Isolation correction files: " << Mu_Iso_file1 << " "
-              << Mu_Iso_file2 << std::endl;
-    std::cout << "Muon triger SF files: " << Mu_Trg_file1 << " " << Mu_Trg_file2
-              << std::endl;
-
-    muon_effSF_TRIG_files.push_back(Mu_Trg_file1);
-    muon_effSF_TRIG_files.push_back(Mu_Trg_file2);
-    muon_effSF_ID_files.push_back(Mu_ID_file1);
-    muon_effSF_ID_files.push_back(Mu_ID_file2);
-    muon_effSF_ISO_files.push_back(Mu_Iso_file1);
-    muon_effSF_ISO_files.push_back(Mu_Iso_file2);
-    std::string Mu_Trg_name = "IsoMu24_OR_IsoTkMu24_PtEtaBins/abseta_pt_ratio";
-    std::string Mu_ID_name = "NUM_MediumID_DEN_genTracks_eta_pt";
-    std::string Mu_Iso_name = "NUM_LooseRelIso_DEN_MediumID_eta_pt";
-    histo_names_TRIG.push_back(Mu_Trg_name);
-    histo_names_ID.push_back(Mu_ID_name);
-    histo_names_ISO.push_back(Mu_Iso_name);
-    histo_names_TRIG.push_back(Mu_Trg_name);
-    histo_names_ID.push_back(Mu_ID_name);
-    histo_names_ISO.push_back(Mu_Iso_name);
-                            
-    //} else if (year == "2017") {
-    // std::string Mu_Trg_file =
-    //"./data/leptonSF/" + yearst +
-    //"/EfficienciesAndSF_RunBtoF_Nov17Nov2017.root";
-    // std::string Mu_ID_file =
-    //"./data/leptonSF/" + yearst + "/RunBCDEF_SF_ID_syst.root";
-    // std::string Mu_Iso_file =
-    //"./data/leptonSF/" + yearst + "/RunBCDEF_SF_ISO_syst.root";
-    // muon_effSF_TRIG_files.push_back(Mu_Trg_file);
-    // muon_effSF_ID_files.push_back(Mu_ID_file);
-    // muon_effSF_ISO_files.push_back(Mu_Iso_file);
-    // std::string Mu_Trg_name = "IsoMu27_PtEtaBins/pt_abseta_ratio";
-    // std::string Mu_ID_name = "NUM_MediumID_DEN_genTracks_pt_abseta";
-    // std::string Mu_Iso_name = "NUM_LooseRelIso_DEN_MediumID_pt_abseta";
-    // histo_names_TRIG.push_back(Mu_Trg_name);
-    // histo_names_ID.push_back(Mu_ID_name);
-    // histo_names_ISO.push_back(Mu_Iso_name);
-    //} else {
-    // std::string Mu_Trg_file =
-    //"./data/leptonSF/" + yearst +
-    //"/EfficienciesAndSF_2018Data_AfterMuonHLTUpdate.root";
-    // std::string Mu_ID_file =
-    //"./data/leptonSF/" + yearst + "/RunABCD_SF_ID.root";
-    // std::string Mu_Iso_file =
-    //"./data/leptonSF/" + yearst + "/RunABCD_SF_ISO.root";
-    // muon_effSF_TRIG_files.push_back(Mu_Trg_file);
-    // muon_effSF_ID_files.push_back(Mu_ID_file);
-    // muon_effSF_ISO_files.push_back(Mu_Iso_file);
-    // std::string Mu_Trg_name = "IsoMu24_PtEtaBins/pt_abseta_ratio";
-    // std::string Mu_ID_name = "NUM_MediumID_DEN_TrackerMuons_pt_abseta";
-    // std::string Mu_Iso_name = "NUM_LooseRelIso_DEN_MediumID_pt_abseta";
-    // histo_names_TRIG.push_back(Mu_Trg_name);
-    // histo_names_ID.push_back(Mu_ID_name);
-    // histo_names_ISO.push_back(Mu_Iso_name);
-    //}
-
-    Mu_eff_SF_TRIG.init(muon_effSF_TRIG_files, histo_names_TRIG);
-    Mu_eff_SF_ID.init(muon_effSF_ID_files, histo_names_ID);
-    Mu_eff_SF_ISO.init(muon_effSF_ISO_files, histo_names_ISO);
-                            */
-
-
-    /*
-    std::string Mu_ID_name_stat = "NUM_MediumID_DEN_genTracks_eta_pt_stat";
-    std::string Mu_ID_name_syst = "NUM_MediumID_DEN_genTracks_eta_pt_syst";
-    std::string Mu_Iso_name_stat = "NUM_LooseRelIso_DEN_MediumID_eta_pt_stat";
-    std::string Mu_Iso_name_syst = "NUM_LooseRelIso_DEN_MediumID_eta_pt_syst";
-    // if (year == "2017") {
-    // Mu_ID_name_stat = "NUM_MediumID_DEN_genTracks_pt_abseta_stat";
-    // Mu_ID_name_syst = "NUM_MediumID_DEN_genTracks_pt_abseta_syst";
-    // Mu_Iso_name_stat = "NUM_LooseRelIso_DEN_MediumID_pt_abseta_stat";
-    // Mu_Iso_name_syst = "NUM_LooseRelIso_DEN_MediumID_pt_abseta_syst";
-    //} else if (year == "2018") {
-    // Mu_ID_name_stat = "NUM_MediumID_DEN_TrackerMuons_pt_abseta_stat";
-    // Mu_ID_name_syst = "NUM_MediumID_DEN_TrackerMuons_pt_abseta_syst";
-    // Mu_Iso_name_stat = "NUM_LooseRelIso_DEN_MediumID_pt_abseta_stat";
-    // Mu_Iso_name_syst = "NUM_LooseRelIso_DEN_MediumID_pt_abseta_syst";
-    //}
-    histo_names_ID_stat.push_back(Mu_ID_name_stat);
-    histo_names_ID_syst.push_back(Mu_ID_name_syst);
-    histo_names_ISO_stat.push_back(Mu_Iso_name_stat);
-    histo_names_ISO_syst.push_back(Mu_Iso_name_syst);
-
-    // if (year == "2016") {
-    histo_names_ID_stat.push_back(Mu_ID_name_stat);
-    histo_names_ID_syst.push_back(Mu_ID_name_syst);
-    histo_names_ISO_stat.push_back(Mu_Iso_name_stat);
-    histo_names_ISO_syst.push_back(Mu_Iso_name_syst);
-    //}
-
-    Mu_eff_SF_ID_stat.init(muon_effSF_ID_files, histo_names_ID_stat);
-    Mu_eff_SF_ID_syst.init(muon_effSF_ID_files, histo_names_ID_syst);
-    Mu_eff_SF_ISO_stat.init(muon_effSF_ISO_files, histo_names_ISO_stat);
-    Mu_eff_SF_ISO_syst.init(muon_effSF_ISO_files, histo_names_ISO_syst);
-    */
     TChain *tree = new TChain("Events");
 
     if (!FillChain(tree, inputFileList)) {
@@ -635,13 +531,13 @@ float HmmAnalyzer::getPileupWeightDown(int NPU) {
     }
 }
 
-bool HmmAnalyzer::passesJetPtSelection(int index) {
+bool HmmAnalyzer::passesJetPtSelection(int index, float corrected_pt) {
     if (yearst == "2022" || yearst == "2022EE" || yearst == "2023" || yearst == "2023BPix"){
         if (fabs(Jet_eta[index]) < 2.5){
             return true;
         }
         else if (fabs(Jet_eta[index]) < 5){
-            return (Jet_pt[index] > 50);
+            return (corrected_pt > 50);
         }
 
     } else if (yearst == "2024"){
@@ -649,7 +545,7 @@ bool HmmAnalyzer::passesJetPtSelection(int index) {
             return true;
         }
         else if (fabs(Jet_eta[index]) < 3){
-            return (Jet_pt[index] > 50);
+            return (corrected_pt > 50);
         }
         else {
             return true;
@@ -663,13 +559,17 @@ bool HmmAnalyzer::passesJetPtSelection(int index) {
     }
 }
 
-bool HmmAnalyzer::isValidJet(int index) {
+bool HmmAnalyzer::isValidJet(int index, float corrected_pt) {
     bool Jet_passJetIdTight = false;
+    bool Jet_passJetIdTightLepVeto = false;
     if(NANOAOD_VERSION[year] == "v12"){ //nanoAODv12
         //std::cout << "Running v12" << std::endl;
         if (fabs(Jet_eta[index]) <= 2.7) Jet_passJetIdTight = Jet_jetId[index] & (1 << 1);
         else if (fabs(Jet_eta[index]) > 2.7 && fabs(Jet_eta[index]) <= 3.0) Jet_passJetIdTight = (Jet_jetId[index] & (1 << 1)) && (Jet_neHEF[index] < 0.99);
         else if (fabs(Jet_eta[index]) > 3.0) Jet_passJetIdTight = (Jet_jetId[index] & (1 << 1)) && (Jet_neEmEF[index] < 0.4);
+        
+        if (abs(Jet_eta[index]) <= 2.7) Jet_passJetIdTightLepVeto = Jet_passJetIdTight && (Jet_muEF[index] < 0.8) && (Jet_chEmEF[index] < 0.8);
+        else Jet_passJetIdTightLepVeto = Jet_passJetIdTight;
     }
 
     else{ //nanoAODv15
@@ -687,10 +587,15 @@ bool HmmAnalyzer::isValidJet(int index) {
         else if (fabs(Jet_eta[index]) > 3.0){
             Jet_passJetIdTight = (Jet_neMultiplicity[index] >= 2) && (Jet_neEmEF[index] < 0.4);
         }
+        
+        if (abs(Jet_eta[index]) <= 2.7) 
+           Jet_passJetIdTightLepVeto = Jet_passJetIdTight && (Jet_muEF[index] < 0.8) && (Jet_chEmEF[index] < 0.8);
+        else 
+           Jet_passJetIdTightLepVeto = Jet_passJetIdTight;
     }
 
-    return (Jet_pt[index] > 25. && fabs(Jet_eta[index]) < 4.7 &&
-            Jet_passJetIdTight && passesJetPtSelection(index) /* && Jet_puId[index]>=1 */);
+    return (corrected_pt > 25. && fabs(Jet_eta[index]) < 4.7 &&
+            Jet_passJetIdTightLepVeto /* && Jet_puId[index]>=1 */);
 }
 
 void HmmAnalyzer::CorrectPtRoch(const RoccoR &_calib, const bool _doSys,
@@ -1016,10 +921,12 @@ void HmmAnalyzer::clearTreeVectors() {
     t_Jet_chHEF->clear();
     t_Jet_eta->clear();
     t_Jet_mass->clear();
+    t_Jet_mass_nanoAOD->clear();
     t_Jet_neEmEF->clear();
     t_Jet_neHEF->clear();
     t_Jet_phi->clear();
     t_Jet_pt->clear();
+    t_Jet_pt_nanoAOD->clear();
     t_Jet_qgl->clear();
     t_Jet_jetId->clear();
     t_Jet_chMultiplicity->clear();
@@ -1345,10 +1252,12 @@ void HmmAnalyzer::BookTreeBranches() {
     t_Jet_chHEF = new std::vector<float>();
     t_Jet_eta = new std::vector<float>();
     t_Jet_mass = new std::vector<float>();
+    t_Jet_mass_nanoAOD = new std::vector<float>();
     t_Jet_neEmEF = new std::vector<float>();
     t_Jet_neHEF = new std::vector<float>();
     t_Jet_phi = new std::vector<float>();
     t_Jet_pt = new std::vector<float>();
+    t_Jet_pt_nanoAOD = new std::vector<float>();
     t_Jet_qgl = new std::vector<float>();
     t_Jet_jetId = new std::vector<int>();
     t_Jet_chMultiplicity = new std::vector<int>();
@@ -1387,10 +1296,12 @@ void HmmAnalyzer::BookTreeBranches() {
     tree->Branch("t_Jet_chHEF", "vector<float>", &t_Jet_chHEF);
     tree->Branch("t_Jet_eta", "vector<float>", &t_Jet_eta);
     tree->Branch("t_Jet_mass", "vector<float>", &t_Jet_mass);
+    tree->Branch("t_Jet_mass_nanoAOD", "vector<float>", &t_Jet_mass_nanoAOD);
     tree->Branch("t_Jet_neEmEF", "vector<float>", &t_Jet_neEmEF);
     tree->Branch("t_Jet_neHEF", "vector<float>", &t_Jet_neHEF);
     tree->Branch("t_Jet_phi", "vector<float>", &t_Jet_phi);
     tree->Branch("t_Jet_pt", "vector<float>", &t_Jet_pt);
+    tree->Branch("t_Jet_pt_nanoAOD", "vector<float>", &t_Jet_pt_nanoAOD);
     tree->Branch("t_Jet_qgl", "vector<float>", &t_Jet_qgl);
     tree->Branch("t_Jet_jetId", "vector<int>", &t_Jet_jetId);
     tree->Branch("t_Jet_chMultiplicity", "vector<int>", &t_Jet_chMultiplicity);

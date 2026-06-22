@@ -47,7 +47,22 @@ cp DeepCSV_94XSF_V3_B_F.csv ${DATA_FOLDER}/btagSF/
 
 mkdir -p ${DATA_FOLDER}/leptonSF/${year}/
 mkdir -p ${DATA_FOLDER}/jetCorrections/${year}/
-cp jetvetomaps.json.gz ${DATA_FOLDER}/jetCorrections/${year}/
+
+#cp jetvetomaps.json.gz ${DATA_FOLDER}/jetCorrections/${year}/
+#cp jet_jerc.json.gz ${DATA_FOLDER}/jetCorrections/${year}/
+#cp JecConfigAK4.json ${DATA_FOLDER}/jetCorrections/${year}/
+#cp JecConfigAK8.json ${DATA_FOLDER}/jetCorrections/${year}/
+#cp jer_smear.json.gz ${DATA_FOLDER}/jetCorrections/${year}/
+#cp JvmConfig.json ${DATA_FOLDER}/jetCorrections/${year}/
+
+cp jetvetomaps.json.gz ${DATA_FOLDER}/jetCorrections/
+cp jet_jerc.json.gz ${DATA_FOLDER}/jetCorrections/
+cp JecConfigAK4.json ${DATA_FOLDER}/jetCorrections/
+cp JecConfigAK8.json ${DATA_FOLDER}/jetCorrections/
+cp jer_smear.json.gz ${DATA_FOLDER}/jetCorrections/
+cp JvmConfig.json ${DATA_FOLDER}/jetCorrections/
+
+
 
 mkdir -p ${cmssw_version}/src/RazorCommon/data/
 mkdir -p ${cmssw_version}/src/RazorCommon/bin/
@@ -70,7 +85,20 @@ cp RunII_*.root ${DATA_FOLDER}/pileup/
 cp data/Rocco/RoccoR${year}.txt ${DATA_FOLDER}/Rocco/
 cp data/btagSF/DeepCSV_94XSF_V3_B_F.csv ${DATA_FOLDER}/btagSF/
 #cp data/leptonSF/2016/*.root ${DATA_FOLDER}/leptonSF/2016/
-cp data/jetCorrections/${year}/jetvetomaps.json.gz ${DATA_FOLDER}/jetCorrections/${year}/
+#cp data/jetCorrections/${year}/jetvetomaps.json.gz ${DATA_FOLDER}/jetCorrections/${year}/
+#cp data/jetCorrections/${year}/jet_jerc.json.gz ${DATA_FOLDER}/jetCorrections/${year}/
+#cp data/jetCorrections/JecConfigAK4.json ${DATA_FOLDER}/jetCorrections/${year}/
+#cp data/jetCorrections/JecConfigAK8.json ${DATA_FOLDER}/jetCorrections/${year}/
+#cp data/jetCorrections/jer_smear.json.gz ${DATA_FOLDER}/jetCorrections/${year}/
+#cp data/jetCorrections/JvmConfig.json ${DATA_FOLDER}/jetCorrections/${year}/
+
+cp data/jetCorrections/${year}/jetvetomaps.json.gz ${DATA_FOLDER}/jetCorrections
+cp data/jetCorrections/${year}/jet_jerc.json.gz ${DATA_FOLDER}/jetCorrections
+cp data/jetCorrections/JecConfigAK4.json ${DATA_FOLDER}/jetCorrections
+cp data/jetCorrections/JecConfigAK8.json ${DATA_FOLDER}/jetCorrections
+cp data/jetCorrections/jer_smear.json.gz ${DATA_FOLDER}/jetCorrections
+cp data/jetCorrections/JvmConfig.json ${DATA_FOLDER}/jetCorrections
+
 if [ "$year" != "2025" ]; then 
     cp data/leptonSF/${year}/muon_Z.json.gz ${DATA_FOLDER}/leptonSF/${year}/
 fi
