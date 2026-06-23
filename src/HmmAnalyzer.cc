@@ -8,7 +8,9 @@
 #include <string>
 #include <vector>
 #include <chrono>
-
+#include <algorithm>
+#include <cctype>
+#include <stdexcept>
 #include <Math/Vector4D.h>
 
 #include "../lib/JecApplication.h"
@@ -99,10 +101,35 @@ void HmmAnalyzer::EventLoop() {
     JvmApplication::VetoChecker jvm_checker(jvm_config.ref, jvm_config.key);
 
     std::unique_ptr<JecApplication::Applier> mc_jec_applier;
+    std::map<std::string, correction::Correction::Ref> jes_uncertainties;
+
     if (!is_data) {
         mc_jec_applier = std::make_unique<JecApplication::Applier>(
             JecApplication::Applier::McAK4(jec_config, jec_year, false));
+
+        JecConfigReader::JesUncSetRefs jes_uncertainty_sets =
+            jec_config.getJesUncSetsMcAK4Ref(jec_year);
+
+        const auto &reduced_uncertainty_set = jes_uncertainty_sets.reduced;
+
+        for (const auto &uncertainty_name : jet_jes_syst_names) {
+            if (!JesSystAppliesToYear(uncertainty_name, yearst)) {
+                continue;
+            }
+
+            auto uncertainty = reduced_uncertainty_set.find(uncertainty_name);
+
+            if (uncertainty == reduced_uncertainty_set.end()) {
+                throw std::runtime_error(
+                    "ERROR: JES uncertainty not found in reduced set: " +
+                    uncertainty_name +
+                    " for year " + yearst);
+            }
+
+            jes_uncertainties.emplace(uncertainty_name, uncertainty->second);
+        }
     }
+
 
     // btag SF
     BTagCalibration calib("deepcsv", "./data/btagSF/DeepCSV_94XSF_V3_B_F.csv");
@@ -551,10 +578,93 @@ void HmmAnalyzer::EventLoop() {
                                             Jet_area[j],
                                             Rho_fixedGridRhoFastjetAll,
                                             Jet_rawFactor[j]};
-            double jec_correction = jet_applier->jesFactorNominal(jesIn);
-            double corrected_jet_pt = Jet_pt[j] * jec_correction;
-            double corrected_jet_mass = Jet_mass[j] * jec_correction;
+            float jec_correction = jet_applier->jesFactorNominal(jesIn);
+            float corrected_jet_pt_after_jes = Jet_pt[j] * jec_correction;
+            float corrected_jet_mass = Jet_mass[j] * jec_correction;
+            float corrected_jet_pt = corrected_jet_pt_after_jes;
+            //auto shifted_jet_pt = [&](const std::string &uncertainty_name,
+                                      //const std::string &direction) {
+                //float shifted_pt = corrected_jet_pt_after_jes;
 
+                //// For data, do not apply MC JES uncertainty variations.
+                //// Return nominal JEC-corrected pT.
+                //if (is_data) {
+                    //return shifted_pt;
+                //}
+
+                //auto uncertainty = jes_uncertainties.find(uncertainty_name);
+
+                //if (uncertainty == jes_uncertainties.end()) {
+                    //throw std::runtime_error(
+                        //"ERROR: JES uncertainty not found: " + uncertainty_name +
+                        //". Check that this name exists in the reduced JES uncertainty set.");
+                //}
+
+                //shifted_pt *= JecApplication::Applier::jesComponentSyst(
+                    //uncertainty->second,
+                    //direction,
+                    //Jet_eta[j],
+                    //corrected_jet_pt_after_jes,
+                    //false);
+
+                //return shifted_pt;
+            //};
+            //float corrected_jet_pt_CMS_scale_j_HF_up =
+                //shifted_jet_pt("CMS_scale_j_HF", "Up");
+            //float corrected_jet_pt_CMS_scale_j_HF_down =
+                //shifted_jet_pt("CMS_scale_j_HF", "Down");
+            //float corrected_jet_pt_CMS_scale_FlavorQCD_up =
+                //shifted_jet_pt("CMS_scale_j_FlavorQCD", "Up");
+            //float corrected_jet_pt_CMS_scale_FlavorQCD_down =
+                //shifted_jet_pt("CMS_scale_j_FlavorQCD", "Down");
+            //float corrected_jet_pt_CMS_scale_j_Absolute_up =
+                //shifted_jet_pt("CMS_scale_j_Absolute", "Up");
+            //float corrected_jet_pt_CMS_scale_j_Absolute_down =
+                //shifted_jet_pt("CMS_scale_j_Absolute", "Down");
+
+            std::map<std::string, double> shifted_jet_pts;
+
+            auto shifted_jet_pt = [&](const std::string &uncertainty_name,
+                                      const std::string &direction) {
+                double shifted_pt = corrected_jet_pt_after_jes;
+
+                if (is_data) {
+                    return shifted_pt;
+                }
+
+                
+                if (!JesSystAppliesToYear(uncertainty_name, yearst)) {
+                        return shifted_pt;
+                }
+                
+                auto uncertainty = jes_uncertainties.find(uncertainty_name);
+
+                if (uncertainty == jes_uncertainties.end()) {
+                    throw std::runtime_error(
+                        "ERROR: JES uncertainty not found: " + uncertainty_name +
+                        ". Check that this name exists in the reduced JES uncertainty set.");
+                }
+
+                shifted_pt *= JecApplication::Applier::jesComponentSyst(
+                    uncertainty->second,
+                    direction,
+                    Jet_eta[j],
+                    corrected_jet_pt_after_jes,
+                    false);
+
+                return shifted_pt;
+            };
+
+            for (const auto &syst_name : jet_jes_syst_names) {
+                for (const auto &direction : jes_directions) {
+                    const std::string branch_name =
+                        JetPtSystBranchName(syst_name, direction);
+
+                    shifted_jet_pts[branch_name] =
+                        shifted_jet_pt(syst_name, direction);
+                }
+            }
+        
             if (!is_data) {
                 JecApplication::JerInputs jer_inputs{};
                 jer_inputs.event = event;
@@ -580,18 +690,25 @@ void HmmAnalyzer::EventLoop() {
                     jer_inputs.genPhi = GenJet_phi[bestGenJet];
                 }
 
-                JecApplication::JesInputs jet_after_jes{corrected_jet_pt,
-                                                        Jet_eta[j],
-                                                        Jet_phi[j],
-                                                        Jet_area[j],
-                                                        Rho_fixedGridRhoFastjetAll,
-                                                        0.0};
                 JecApplication::SystematicOptions systJerNom{};
                 systJerNom.jerVar = "nom";
-                const double jer_correction =
-                    jet_applier->jerFactor(jet_after_jes, jer_inputs, systJerNom);
+                auto nominal_jer_factor = [&](double pt_after_jes) {
+                    JecApplication::JesInputs jet_after_jes{pt_after_jes,
+                                                            Jet_eta[j],
+                                                            Jet_phi[j],
+                                                            Jet_area[j],
+                                                            Rho_fixedGridRhoFastjetAll,
+                                                            0.0};
+                    return jet_applier->jerFactor(jet_after_jes, jer_inputs, systJerNom);
+                };
+
+                const double jer_correction = nominal_jer_factor(corrected_jet_pt);
                 corrected_jet_pt *= jer_correction;
                 corrected_jet_mass *= jer_correction;
+                for (auto &entry : shifted_jet_pts) {
+                    double &shifted_pt = entry.second;
+                    shifted_pt *= nominal_jer_factor(shifted_pt);
+                }
             }
 
 
@@ -646,6 +763,12 @@ void HmmAnalyzer::EventLoop() {
             t_Jet_neHEF->push_back(Jet_neHEF[j]);
             t_Jet_phi->push_back(Jet_phi[j]);
             t_Jet_pt->push_back(corrected_jet_pt);
+            for (const auto &entry : shifted_jet_pts) {
+                const std::string &branch_name = entry.first;
+                const double shifted_pt = entry.second;
+
+                t_Jet_pt_jes_syst.at(branch_name)->push_back(shifted_pt);
+            }
             t_Jet_pt_nanoAOD->push_back(Jet_pt[j]);
             // t_Jet_qgl->push_back(Jet_qgl[j]);
             // t_Jet_jetId->push_back(Jet_jetId[j]);

@@ -83,6 +83,71 @@ std::string GetJercEra(const std::string &jec_year) {
 }
 
 
+const std::vector<std::string> jet_jes_syst_names = {
+    "CMS_scale_j_HF",
+    "CMS_scale_j_FlavorQCD",
+    "CMS_scale_j_Absolute",
+    "CMS_scale_j_RelativeBal",
+    "CMS_scale_j_BBEC1",
+    "CMS_scale_j_EC2"
+};
+
+const std::vector<std::string> jes_directions = {
+    "Up",
+    "Down"
+};
+
+std::string ToLower(std::string s) {
+    std::transform(s.begin(), s.end(), s.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    return s;
+}
+
+std::string JetPtSystBranchName(const std::string &syst_name,
+                                const std::string &direction) {
+    return "t_Jet_pt_" + syst_name + "_" + ToLower(direction);
+}
+
+bool IsYearLabel(const std::string &label) {
+    static const std::vector<std::string> valid_year_labels = {
+        "2022",
+        "2022EE",
+        "2023",
+        "2023BPix",
+        "2024",
+        "2025"
+    };
+
+    return std::find(valid_year_labels.begin(),
+                     valid_year_labels.end(),
+                     label) != valid_year_labels.end();
+}
+
+std::string GetSuffixAfterLastUnderscore(const std::string &name) {
+    const size_t pos = name.find_last_of('_');
+
+    if (pos == std::string::npos || pos + 1 >= name.size()) {
+        return "";
+    }
+
+    return name.substr(pos + 1);
+}
+
+bool JesSystAppliesToYear(const std::string &syst_name,
+                          const std::string &yearst) {
+    const std::string suffix = GetSuffixAfterLastUnderscore(syst_name);
+
+    if (!IsYearLabel(suffix)) {
+        return true;
+    }
+
+    return suffix == yearst;
+}
+
+
+
+
+
 class HmmAnalyzer : public MainEvent {
   public:
     HmmAnalyzer(const TString &inputFileList = "foo.txt",
@@ -300,6 +365,7 @@ class HmmAnalyzer : public MainEvent {
     std::vector<float> *t_Jet_neHEF;
     std::vector<float> *t_Jet_phi;
     std::vector<float> *t_Jet_pt;
+    std::map<std::string, std::vector<float> *> t_Jet_pt_jes_syst;
     std::vector<float> *t_Jet_pt_nanoAOD;
     std::vector<float> *t_Jet_qgl;
     std::vector<int> *t_Jet_jetId;
@@ -594,7 +660,7 @@ bool HmmAnalyzer::isValidJet(int index, float corrected_pt) {
            Jet_passJetIdTightLepVeto = Jet_passJetIdTight;
     }
 
-    return (corrected_pt > 25. && fabs(Jet_eta[index]) < 4.7 &&
+    return (corrected_pt > 20. && fabs(Jet_eta[index]) < 4.7 &&
             Jet_passJetIdTightLepVeto /* && Jet_puId[index]>=1 */);
 }
 
@@ -926,6 +992,9 @@ void HmmAnalyzer::clearTreeVectors() {
     t_Jet_neHEF->clear();
     t_Jet_phi->clear();
     t_Jet_pt->clear();
+    for (auto &entry : t_Jet_pt_jes_syst) {
+        entry.second->clear();
+    }
     t_Jet_pt_nanoAOD->clear();
     t_Jet_qgl->clear();
     t_Jet_jetId->clear();
@@ -1257,6 +1326,15 @@ void HmmAnalyzer::BookTreeBranches() {
     t_Jet_neHEF = new std::vector<float>();
     t_Jet_phi = new std::vector<float>();
     t_Jet_pt = new std::vector<float>();
+
+    for (const auto &syst_name : jet_jes_syst_names) {
+        for (const auto &direction : jes_directions) {
+            const std::string branch_name =
+                JetPtSystBranchName(syst_name, direction);
+
+            t_Jet_pt_jes_syst[branch_name] = new std::vector<float>();
+        }
+    }
     t_Jet_pt_nanoAOD = new std::vector<float>();
     t_Jet_qgl = new std::vector<float>();
     t_Jet_jetId = new std::vector<int>();
@@ -1301,6 +1379,12 @@ void HmmAnalyzer::BookTreeBranches() {
     tree->Branch("t_Jet_neHEF", "vector<float>", &t_Jet_neHEF);
     tree->Branch("t_Jet_phi", "vector<float>", &t_Jet_phi);
     tree->Branch("t_Jet_pt", "vector<float>", &t_Jet_pt);
+    for (auto &entry : t_Jet_pt_jes_syst) {
+        const std::string &branch_name = entry.first;
+        std::vector<float> *&branch_vector = entry.second;
+
+        tree->Branch(branch_name.c_str(), "vector<float>", &branch_vector);
+    }
     tree->Branch("t_Jet_pt_nanoAOD", "vector<float>", &t_Jet_pt_nanoAOD);
     tree->Branch("t_Jet_qgl", "vector<float>", &t_Jet_qgl);
     tree->Branch("t_Jet_jetId", "vector<int>", &t_Jet_jetId);
