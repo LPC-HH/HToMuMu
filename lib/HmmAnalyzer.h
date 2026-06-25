@@ -17,6 +17,10 @@
 #include <iostream>
 #include <map>
 #include <math.h>
+#include <algorithm>
+#include <cctype>
+#include <stdexcept>
+#include <memory>
 // Header file for the classes stored in the TTree if any.
 #include "../src/BTagCalibrationStandalone.cpp"
 #include "BTagCalibrationStandalone.h"
@@ -45,11 +49,11 @@ constexpr float MUON_MASS = 0.1056583745;
 constexpr float FLOAT_NULL_VALUE = -999.;
 constexpr int INT_NULL_VALUE = -999;
 
-std::map<TString, TString> NANOAOD_VERSION = {
+inline const std::map<TString, TString> NANOAOD_VERSION = {
     {"2022", "v12"}, {"2022EE", "v12"},  {"2023", "v12"}, {"2023BPix", "v12"}, {"2024", "v15"}, {"2025", "v15"}
 };
 
-std::string GetJercYear(const std::string &year) {
+inline std::string GetJercYear(const std::string &year) {
     if (year == "2022")
         return "2022Pre";
     else if (year == "2022EE")
@@ -61,12 +65,12 @@ std::string GetJercYear(const std::string &year) {
     else if (year == "2024")
         return "2024";
     else if (year == "2025")
-        return "2024";
+        return "2025";
     else
         throw std::runtime_error("Unsupported JERC year: " + year);
 }
 
-std::string GetJercEra(const std::string &jec_year) {
+inline std::string GetJercEra(const std::string &jec_year) {
     if (jec_year == "2022Pre")
         return "Era2022PreAll";
     if (jec_year == "2022Post")
@@ -83,32 +87,87 @@ std::string GetJercEra(const std::string &jec_year) {
 }
 
 
-const std::vector<std::string> jet_jes_syst_names = {
-    "CMS_scale_j_HF",
+inline const std::vector<std::string> jet_jes_syst_names = {
     "CMS_scale_j_FlavorQCD",
-    "CMS_scale_j_Absolute",
     "CMS_scale_j_RelativeBal",
+    "CMS_scale_j_HF",
     "CMS_scale_j_BBEC1",
-    "CMS_scale_j_EC2"
+    "CMS_scale_j_EC2",
+    "CMS_scale_j_Absolute",
+   
+    "CMS_scale_j_BBEC1_2022",
+    "CMS_scale_j_RelativeSample_2022",
+    "CMS_scale_j_EC2_2022",
+    "CMS_scale_j_HF_2022",
+    "CMS_scale_j_Absolute_2022",
+    
+    "CMS_scale_j_BBEC1_2022EE",
+    "CMS_scale_j_RelativeSample_2022EE",
+    "CMS_scale_j_EC2_2022EE",
+    "CMS_scale_j_HF_2022EE",
+    "CMS_scale_j_Absolute_2022EE",
+
+    "CMS_scale_j_BBEC1_2023",
+    "CMS_scale_j_RelativeSample_2023",
+    "CMS_scale_j_EC2_2023",
+    "CMS_scale_j_HF_2023",
+    "CMS_scale_j_Absolute_2023",
+    
+    "CMS_scale_j_BBEC1_2023BPix",
+    "CMS_scale_j_RelativeSample_2023BPix",
+    "CMS_scale_j_EC2_2023BPix",
+    "CMS_scale_j_HF_2023BPix",
+    "CMS_scale_j_Absolute_2023BPix",
+
+    "CMS_scale_j_BBEC1_2024",
+    "CMS_scale_j_RelativeSample_2024",
+    "CMS_scale_j_EC2_2024",
+    "CMS_scale_j_HF_2024",
+    "CMS_scale_j_Absolute_2024",
+
+    "CMS_scale_j_BBEC1_2025",
+    "CMS_scale_j_RelativeSample_2025",
+    "CMS_scale_j_EC2_2025",
+    "CMS_scale_j_HF_2025",
+    "CMS_scale_j_Absolute_2025",
 };
 
-const std::vector<std::string> jes_directions = {
+inline const std::vector<std::string> jes_directions = {
     "Up",
     "Down"
 };
 
-std::string ToLower(std::string s) {
+inline const std::vector<std::string> jet_jer_syst_names = {
+    "CMS_res_j_eta0to1p93_pt0toInf_2025",
+    "CMS_res_j_eta1p93to2p5_pt0toInf_2025",
+    "CMS_res_j_eta2p5to3p0_pt0to50_2025",
+    "CMS_res_j_eta2p5to3p0_pt50toInf_2025",
+    "CMS_res_j_eta3to5_pt0to50_2025",
+    "CMS_res_j_eta3to5_pt50toInf_2025",
+};
+
+inline const std::vector<std::string> jer_directions = {
+    "Up",
+    "Down"
+};
+
+inline std::string ToLower(std::string s) {
     std::transform(s.begin(), s.end(), s.begin(),
                    [](unsigned char c) { return std::tolower(c); });
     return s;
 }
 
-std::string JetPtSystBranchName(const std::string &syst_name,
+inline std::string JetPtJesSystBranchName(const std::string &syst_name,
                                 const std::string &direction) {
     return "t_Jet_pt_" + syst_name + "_" + ToLower(direction);
 }
 
-bool IsYearLabel(const std::string &label) {
+inline std::string JetPtJerSystBranchName(const std::string &syst_name,
+                                   const std::string &direction) {
+    return "t_Jet_pt_" + syst_name + "_" + ToLower(direction);
+}
+
+inline bool IsYearLabel(const std::string &label) {
     static const std::vector<std::string> valid_year_labels = {
         "2022",
         "2022EE",
@@ -123,7 +182,7 @@ bool IsYearLabel(const std::string &label) {
                      label) != valid_year_labels.end();
 }
 
-std::string GetSuffixAfterLastUnderscore(const std::string &name) {
+inline std::string GetSuffixAfterLastUnderscore(const std::string &name) {
     const size_t pos = name.find_last_of('_');
 
     if (pos == std::string::npos || pos + 1 >= name.size()) {
@@ -133,7 +192,7 @@ std::string GetSuffixAfterLastUnderscore(const std::string &name) {
     return name.substr(pos + 1);
 }
 
-bool JesSystAppliesToYear(const std::string &syst_name,
+inline bool JecSystAppliesToYear(const std::string &syst_name,
                           const std::string &yearst) {
     const std::string suffix = GetSuffixAfterLastUnderscore(syst_name);
 
@@ -164,7 +223,7 @@ class HmmAnalyzer : public MainEvent {
     float getPileupWeight(int);
     float getPileupWeightUp(int);
     float getPileupWeightDown(int);
-    bool passesJetPtSelection(int index, float corrected_pt);
+    //bool passesJetPtSelection(int index, float corrected_pt);
     bool isValidJet(int index, float corrected_pt);
     void CorrectPtRoch(const RoccoR &_calib, const bool _doSys,
                        const ROOT::Math::PtEtaPhiMVector _mu_vec, const float _mu_ptErr_raw, float &_pt,
@@ -366,6 +425,7 @@ class HmmAnalyzer : public MainEvent {
     std::vector<float> *t_Jet_phi;
     std::vector<float> *t_Jet_pt;
     std::map<std::string, std::vector<float> *> t_Jet_pt_jes_syst;
+    std::map<std::string, std::vector<float> *> t_Jet_pt_jer_syst;
     std::vector<float> *t_Jet_pt_nanoAOD;
     std::vector<float> *t_Jet_qgl;
     std::vector<int> *t_Jet_jetId;
@@ -518,8 +578,8 @@ HmmAnalyzer::HmmAnalyzer(const TString &inputFileList, const char *outFileName,
             std::cout << "Initiating analysis on MC" << endl;
     }
 
-    std::cout << "NanoAOD Version: " << NANOAOD_VERSION[year] << std::endl;
-    MainEvent::Init(tree, NANOAOD_VERSION[year]);
+    std::cout << "NanoAOD Version: " << NANOAOD_VERSION.at(year) << std::endl;
+    MainEvent::Init(tree, NANOAOD_VERSION.at(year));
     //tree->Scan("Jet_jetId","","",5);
     if (!is_data) {
         MainEvent::InitSimulationVariables(tree);
@@ -597,38 +657,38 @@ float HmmAnalyzer::getPileupWeightDown(int NPU) {
     }
 }
 
-bool HmmAnalyzer::passesJetPtSelection(int index, float corrected_pt) {
-    if (yearst == "2022" || yearst == "2022EE" || yearst == "2023" || yearst == "2023BPix"){
-        if (fabs(Jet_eta[index]) < 2.5){
-            return true;
-        }
-        else if (fabs(Jet_eta[index]) < 5){
-            return (corrected_pt > 50);
-        }
+//bool HmmAnalyzer::passesJetPtSelection(int index, float corrected_pt) {
+    //if (yearst == "2022" || yearst == "2022EE" || yearst == "2023" || yearst == "2023BPix"){
+        //if (fabs(Jet_eta[index]) < 2.5){
+            //return true;
+        //}
+        //else if (fabs(Jet_eta[index]) < 5){
+            //return (corrected_pt > 50);
+        //}
 
-    } else if (yearst == "2024"){
-        if (fabs(Jet_eta[index]) < 2.5){ //TODO: Fix this
-            return true;
-        }
-        else if (fabs(Jet_eta[index]) < 3){
-            return (corrected_pt > 50);
-        }
-        else {
-            return true;
-        }
-    } else if (yearst == "2025"){
-        return true;
+    //} else if (yearst == "2024"){
+        //if (fabs(Jet_eta[index]) < 2.5){ //TODO: Fix this
+            //return true;
+        //}
+        //else if (fabs(Jet_eta[index]) < 3){
+            //return (corrected_pt > 50);
+        //}
+        //else {
+            //return true;
+        //}
+    //} else if (yearst == "2025"){
+        //return true;
 
-    } else {
-        std::cerr << "Jet pT era not found" << std::endl;
-        return false;
-    }
-}
+    //} else {
+        //std::cerr << "Jet pT era not found" << std::endl;
+        //return false;
+    //}
+//}
 
 bool HmmAnalyzer::isValidJet(int index, float corrected_pt) {
     bool Jet_passJetIdTight = false;
     bool Jet_passJetIdTightLepVeto = false;
-    if(NANOAOD_VERSION[year] == "v12"){ //nanoAODv12
+    if(NANOAOD_VERSION.at(year) == "v12"){ //nanoAODv12
         //std::cout << "Running v12" << std::endl;
         if (fabs(Jet_eta[index]) <= 2.7) Jet_passJetIdTight = Jet_jetId[index] & (1 << 1);
         else if (fabs(Jet_eta[index]) > 2.7 && fabs(Jet_eta[index]) <= 3.0) Jet_passJetIdTight = (Jet_jetId[index] & (1 << 1)) && (Jet_neHEF[index] < 0.99);
@@ -995,6 +1055,9 @@ void HmmAnalyzer::clearTreeVectors() {
     for (auto &entry : t_Jet_pt_jes_syst) {
         entry.second->clear();
     }
+    for (auto &entry : t_Jet_pt_jer_syst) {
+        entry.second->clear();
+    }
     t_Jet_pt_nanoAOD->clear();
     t_Jet_qgl->clear();
     t_Jet_jetId->clear();
@@ -1330,9 +1393,17 @@ void HmmAnalyzer::BookTreeBranches() {
     for (const auto &syst_name : jet_jes_syst_names) {
         for (const auto &direction : jes_directions) {
             const std::string branch_name =
-                JetPtSystBranchName(syst_name, direction);
+                JetPtJesSystBranchName(syst_name, direction);
 
             t_Jet_pt_jes_syst[branch_name] = new std::vector<float>();
+        }
+    }
+    for (const auto &syst_name : jet_jer_syst_names) {
+        for (const auto &direction : jer_directions) {
+            const std::string branch_name =
+                JetPtJerSystBranchName(syst_name, direction);
+
+            t_Jet_pt_jer_syst[branch_name] = new std::vector<float>();
         }
     }
     t_Jet_pt_nanoAOD = new std::vector<float>();
@@ -1380,6 +1451,12 @@ void HmmAnalyzer::BookTreeBranches() {
     tree->Branch("t_Jet_phi", "vector<float>", &t_Jet_phi);
     tree->Branch("t_Jet_pt", "vector<float>", &t_Jet_pt);
     for (auto &entry : t_Jet_pt_jes_syst) {
+        const std::string &branch_name = entry.first;
+        std::vector<float> *&branch_vector = entry.second;
+
+        tree->Branch(branch_name.c_str(), "vector<float>", &branch_vector);
+    }
+    for (auto &entry : t_Jet_pt_jer_syst) {
         const std::string &branch_name = entry.first;
         std::vector<float> *&branch_vector = entry.second;
 
