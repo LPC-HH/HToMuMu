@@ -446,17 +446,21 @@ void HmmAnalyzer::EventLoop() {
             if (!is_data) {
                 if(year == "2024" || year == "2025"){
                     t_Mu_EffSF_TRIG->push_back(1.0);
-                    t_Mu_EffSFErr_TRIG->push_back(0.0);
+                    t_Mu_EffSF_TRIG_up->push_back(1.0);
+                    t_Mu_EffSF_TRIG_down->push_back(1.0);
                 } else {
                     if (this_muon_trig_matched) {
                     t_Mu_EffSF_TRIG->push_back(corrector.give_eff(
                         "Muon_eff_SF_TRIG", Muon_pt[i], Muon_eta[i]));
 
-                    t_Mu_EffSFErr_TRIG->push_back(corrector.give_eff(
-                        "Muon_eff_SFerr_TRIG", Muon_pt[i], Muon_eta[i]));
+                    t_Mu_EffSF_TRIG_up->push_back(corrector.give_eff(
+                        "Muon_eff_SF_TRIG_up", Muon_pt[i], Muon_eta[i]));
+                    t_Mu_EffSF_TRIG_down->push_back(corrector.give_eff(
+                        "Muon_eff_SF_TRIG_down", Muon_pt[i], Muon_eta[i]));
                     } else {
                         t_Mu_EffSF_TRIG->push_back(1.0);
-                        t_Mu_EffSFErr_TRIG->push_back(0.0);
+                        t_Mu_EffSF_TRIG_up->push_back(1.0);
+                        t_Mu_EffSF_TRIG_down->push_back(1.0);
                     }
                 }
             }
@@ -495,12 +499,12 @@ void HmmAnalyzer::EventLoop() {
             }
 
             t_Mu_EffSF_ID->push_back(corrector.give_eff("Muon_eff_SF_ID", Muon_pt[i], Muon_eta[i]));
-            t_Mu_EffSF_ID_stat->push_back(corrector.give_eff("Muon_eff_SF_ID_stat", Muon_pt[i], Muon_eta[i]));
-            t_Mu_EffSF_ID_syst->push_back(corrector.give_eff("Muon_eff_SF_ID_syst", Muon_pt[i], Muon_eta[i]));
+            t_Mu_EffSF_ID_up->push_back(corrector.give_eff("Muon_eff_SF_ID_up", Muon_pt[i], Muon_eta[i]));
+            t_Mu_EffSF_ID_down->push_back(corrector.give_eff("Muon_eff_SF_ID_down", Muon_pt[i], Muon_eta[i]));
 
             t_Mu_EffSF_ISO->push_back(corrector.give_eff("Muon_eff_SF_ISO", Muon_pt[i], Muon_eta[i]));
-            t_Mu_EffSF_ISO_stat->push_back(corrector.give_eff("Muon_eff_SF_ISO_stat", Muon_pt[i], Muon_eta[i]));
-            t_Mu_EffSF_ISO_syst->push_back(corrector.give_eff("Muon_eff_SF_ISO_syst", Muon_pt[i], Muon_eta[i]));
+            t_Mu_EffSF_ISO_up->push_back(corrector.give_eff("Muon_eff_SF_ISO_up", Muon_pt[i], Muon_eta[i]));
+            t_Mu_EffSF_ISO_down->push_back(corrector.give_eff("Muon_eff_SF_ISO_down", Muon_pt[i], Muon_eta[i]));
         }
 
 

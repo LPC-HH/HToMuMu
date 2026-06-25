@@ -73,33 +73,22 @@ float LeptonEfficiencyCorrector::give_eff(const string& type, float muon_pt, flo
 
     // medium pt trigger eff start from 26.0 GeV 
     if (muon_pt < 26.0)      return ((type.find("SFerr") != std::string::npos)
-                                    ||(type.find("_s") != std::string::npos)) ? 0.0f : 1.0f;
+                                    ||(type.find("_stat") != std::string::npos)
+                                    ||(type.find("_syst") != std::string::npos)) ? 0.0f : 1.0f;
 
     const auto& config = type_config.at(category);
     const std::string& final_key = config.first;
     std::string scale_type = config.second; 
 
-    if (type.find("stat") != std::string::npos)       scale_type = "stat";
+    if (type.find("_up") != std::string::npos)        scale_type = "systup";
+    else if (type.find("_down") != std::string::npos) scale_type = "systdown";
+    else if (type.find("stat") != std::string::npos)  scale_type = "stat";
     else if (type.find("syst") != std::string::npos)  scale_type = "syst";
 
     std::map<std::string, correction::Variable::Type> params = {
         {"pt", muon_pt}, {"eta", muon_eta}, {"scale_factors", scale_type}
     };
 
-    //only for Muon_eff_SFerr_TRIG = sqrt(stat^2 + syst^2)
-    if (type.find("eff_SFerr_TRIG") != std::string::npos) {
-
-        float stat = 0.0;
-        float syst = 0.0;
-        
-        params = {{"pt", muon_pt}, {"eta", muon_eta}, {"scale_factors", "stat"}};
-        stat = runner(cset, final_key, params);
-        params = {{"pt", muon_pt}, {"eta", muon_eta}, {"scale_factors", "syst"}};
-        syst = runner(cset, final_key, params);
-
-        float result = std::sqrt(stat * stat + syst * syst);
-        return  result;
-    } 
     
     return runner(cset, final_key, params);
 }
