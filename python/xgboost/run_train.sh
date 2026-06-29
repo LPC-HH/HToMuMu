@@ -23,7 +23,7 @@ declare -a eras=("Combined")
 
 declare -a tuples=("Data")
 
-ifRetrain="F"
+ifRetrain="T"
 ifOptimize="F"
 
 # now loop through the above array

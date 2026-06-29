@@ -42,7 +42,7 @@ DRAW_CORRELATIONS = False
 DO_STANDARDIZATION = True
 USE_WEIGHT = False
 USE_WEIGHT_MASS_RES = True
-APPEND_VARIABLES = False
+APPEND_VARIABLES = True
 USE_BSCONSTRAIN = True 
 PLOT_LOSS = True
 SEED = 7
@@ -288,16 +288,33 @@ if(ifRetrain):
         )
 
     else:
+        if(channel_US == 'ggH'):
+            print("USING GGH OPTIMIZED BDT PARAMETERS")
+            opted_params = {'max_depth': 5, 'learning_rate': 0.17065960988185175, 'min_child_weight': 1.258974431208238,
+                            'subsample': 0.9799252299722975, 'colsample_bytree': 0.9857090292326347, 
+                            'reg_lambda': 0.17418443431820596, 'reg_alpha': 0.03970459451078197}
+        else:
+            print("USING VBF OPTIMIZED BDT PARAMETERS")
+            opted_params = {'max_depth': 5, 'learning_rate': 0.019748925259387092, 'min_child_weight': 1.936502069113041,
+                        'subsample': 0.8625503812499821, 'colsample_bytree': 0.822627756256343, 'reg_lambda': 1.45659504748671,
+                        'reg_alpha': 0.010136874339606281}
         model = xgb.XGBClassifier(
-            max_depth=4,
-            learning_rate=0.1,
-            n_estimators=1000,
+            **opted_params,
+            n_estimators=2000,
             verbosity=2,
             n_jobs=4,
-            reg_lambda=1.0,
             eval_metric=["logloss", "auc"],
             early_stopping_rounds=50
         )
+
+        #model = xgb.XGBClassifier(
+        #    max_depth=3,
+        #    learning_rate=0.1,
+        #    n_estimators=400,
+        #    verbosity=2,
+        #    n_jobs=4,
+        #    reg_lambda=1.0,
+        #)
 
     print("weights: ", sample_weights_train)
     print("abs(weights): ", np.absolute(sample_weights_train[y_train == 1]))
@@ -419,7 +436,8 @@ if(ifRetrain):
     xgb_utils.save_model(model, test_name, USE_BSCONSTRAIN)
     xgb_utils.plot_feature_importances(model, variables, test_name, plot_path)
     xgb_utils.plot_xgb_tree(model, variables, test_name, plot_path)
-    xgb_utils.plot_loss(test_loss, train_loss, test_name, plot_path, era)
+    if PLOT_LOSS:
+        xgb_utils.plot_loss(test_loss, train_loss, test_name, plot_path, era)
 
 
 
