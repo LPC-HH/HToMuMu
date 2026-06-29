@@ -12,16 +12,16 @@ LIBS  := $(shell root-config --libs) $(shell correction config --cflags --ldflag
 # Analyzer sources and header
 ANALYZER_SRC := $(SRC)/LeptonEfficiencyCorrector.cc \
 				$(SRC)/JetCorrector.cc \
+				$(SRC)/MuonScaRe.cc \
 				$(SRC)/MainEvent.cc \
-				$(SRC)/RoccoR.cc \
 				$(SRC)/WeightCalculatorFromHistogram.cc \
 				$(SRC)/HmmAnalyzer.cc
 
 ANALYZER_HEADERS := $(LIB)/BTagCalibrationStandalone.h \
 				$(LIB)/LeptonEfficiencyCorrector.h \
 				$(LIB)/JetCorrector.h \
+				$(LIB)/MuonScaRe.h \
 				$(LIB)/MainEvent.h \
-				$(LIB)/RoccoR.h \
 				$(LIB)/WeightCalculatorFromHistogram.h \
 				$(LIB)/HmmAnalyzer.h
 
@@ -45,9 +45,9 @@ JERC_OBJECTS := JecConfigReader.o \
 				JvmApplication.o
 
 ANALYZER_OBJECTS := LeptonEfficiencyCorrector.o \
+				MuonScaRe.o \
 				JetCorrector.o \
 				MainEvent.o \
-				RoccoR.o \
 				WeightCalculatorFromHistogram.o \
 				HmmAnalyzer.o
  

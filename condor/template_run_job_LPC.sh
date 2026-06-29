@@ -16,10 +16,11 @@ year=$4
 output_Directory=$5
 cmssw_version=$6
 ifZ=$7
-ifH=$8 
+ifH=$8
 
 file_type="data"
 if [ "$is_data" == "F" ]; then file_type="mc"; fi
+muon_pt_syst=${9:-nominal}
 
 ###############################
 # Define exec and setup cmssw
@@ -67,7 +68,8 @@ cp JvmConfig.json ${DATA_FOLDER}/jetCorrections/
 mkdir -p ${cmssw_version}/src/RazorCommon/data/
 mkdir -p ${cmssw_version}/src/RazorCommon/bin/
 mkdir -p ${cmssw_version}/src/RazorCommon/python/
-if [ "$year" != "2025" ]; then 
+cp muon_scalesmearing.json.gz ${DATA_FOLDER}/leptonSF/${year}/
+if [ "$year" != "2025" ]; then
     cp muon_Z.json.gz ${DATA_FOLDER}/leptonSF/${year}/
 fi
 
@@ -99,7 +101,8 @@ cp data/jetCorrections/JecConfigAK8.json ${DATA_FOLDER}/jetCorrections
 cp data/jetCorrections/jer_smear.json.gz ${DATA_FOLDER}/jetCorrections
 cp data/jetCorrections/JvmConfig.json ${DATA_FOLDER}/jetCorrections
 
-if [ "$year" != "2025" ]; then 
+cp data/leptonSF/${year}/muon_scalesmearing.json.gz ${DATA_FOLDER}/leptonSF/${year}/
+if [ "$year" != "2025" ]; then
     cp data/leptonSF/${year}/muon_Z.json.gz ${DATA_FOLDER}/leptonSF/${year}/
 fi
 cp data/pileup/*.root ${DATA_FOLDER}/pileup/
@@ -132,8 +135,8 @@ file inputs/*.root
 # Run executable
 ###########################
 echo "Executing Analysis executable:"
-echo "./${executable} tmp_input_list.txt ${output_name}_${job_number}.root ${file_type} ${is_data} ${year} ${ifZ} ${ifH}"
-./${executable} tmp_input_list.txt ${output_name}_${job_number}.root ${file_type} ${is_data} ${year} ${ifZ} ${ifH}
+echo "./${executable} tmp_input_list.txt ${output_name}_${job_number}.root ${file_type} ${is_data} ${year} ${ifZ} ${ifH} ${muon_pt_syst}"
+./${executable} tmp_input_list.txt ${output_name}_${job_number}.root ${file_type} ${is_data} ${year} ${ifZ} ${ifH} ${muon_pt_syst}
 
 
 ls -l

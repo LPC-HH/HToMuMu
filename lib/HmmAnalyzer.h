@@ -26,7 +26,6 @@
 #include "BTagCalibrationStandalone.h"
 #include "LeptonEfficiencyCorrector.h"
 #include "MainEvent.h"
-#include "RoccoR.h"
 #include "TAxis.h"
 #include "TF1.h"
 #include "TH1F.h"
@@ -157,6 +156,41 @@ inline std::string ToLower(std::string s) {
     return s;
 }
 
+
+inline std::string NormalizeMuonPtSyst(std::string syst) {
+    syst = ToLower(syst);
+
+    if (syst == "nominal" || syst == "none") {
+        return "nominal";
+    }
+    if (syst == "scale_up" || syst == "scale_down" ||
+        syst == "smearing_up" || syst == "smearing_down") {
+        return syst;
+    }
+
+    throw std::runtime_error(
+        "Unsupported muon pT systematic: " + syst +
+        ". Use nominal, scale_up, scale_down, smearing_up, or smearing_down.");
+}
+
+inline bool IsMuonScaleSyst(const std::string &syst) {
+    return syst == "scale_up" || syst == "scale_down";
+}
+
+inline bool IsMuonSmearingSyst(const std::string &syst) {
+    return syst == "smearing_up" || syst == "smearing_down";
+}
+
+inline std::string MuonSystDirection(const std::string &syst) {
+    if (syst.size() >= 3 && syst.substr(syst.size() - 3) == "_up") {
+        return "up";
+    }
+    if (syst.size() >= 5 && syst.substr(syst.size() - 5) == "_down") {
+        return "down";
+    }
+    return "nominal";
+}
+
 inline std::string JetPtJesSystBranchName(const std::string &syst_name,
                                 const std::string &direction) {
     return "t_Jet_pt_" + syst_name + "_" + ToLower(direction);
@@ -225,11 +259,6 @@ class HmmAnalyzer : public MainEvent {
     float getPileupWeightDown(int);
     //bool passesJetPtSelection(int index, float corrected_pt);
     bool isValidJet(int index, float corrected_pt);
-    void CorrectPtRoch(const RoccoR &_calib, const bool _doSys,
-                       const ROOT::Math::PtEtaPhiMVector _mu_vec, const float _mu_ptErr_raw, float &_pt,
-                       float &_ptErr, float &_pt_sys_up, float &_pt_sys_down,
-                       const int _charge, const int _trk_layers,
-                       const float _GEN_pt, const bool _isData);
     void EventLoop();
 
     //read run3 muon efficiency json file
@@ -241,6 +270,8 @@ class HmmAnalyzer : public MainEvent {
     TString year;
     bool include_Z; /**< Flag indicating if save Z region. */
     bool include_H; /**< Flag indicating if save H region. */
+    std::string muon_pt_syst;
+    bool apply_muon_pt_syst_to_signal;
     std::string yearst;
     std::map<std::string, float> muon_pt_cut;
     std::map<std::string, float> btagLoose_cut;
@@ -251,7 +282,6 @@ class HmmAnalyzer : public MainEvent {
         new TH1D("h_sumOfgenpuWeight", "h_sumOfgenpuWeight", 1, 0, 1);
     TH1D *h_pileup = new TH1D("h_pileup", "h_pileup", 99, 0, 99);
     TH1D *h_pileup_nTrue = new TH1D("h_pileup_nTrue", "h_pileup_nTrue", 99, 0, 99);
-    RoccoR _Roch_calib;
 
     TFile *pileupWeightFile;
     TH1F *pileupWeightHist, *pileupWeightSysUpHist, *pileupWeightSysDownHist;
@@ -513,6 +543,8 @@ HmmAnalyzer::HmmAnalyzer(const TString &inputFileList, const char *outFileName,
     year = year_num;
     include_Z = include_Z_;
     include_H = include_H_;
+    muon_pt_syst = "nominal";
+    apply_muon_pt_syst_to_signal = false;
     yearst = std::string(year.Data());
     
     if(include_Z){
@@ -522,9 +554,6 @@ HmmAnalyzer::HmmAnalyzer(const TString &inputFileList, const char *outFileName,
         std::cout << "H range included" << std::endl;
     }
 
-    std::string path_RochCor = "./data/Rocco/RoccoR" + yearst + ".txt";
-    std::cout << "Rochester correction files: " << path_RochCor << std::endl;
-    _Roch_calib.init(path_RochCor);
 
     h_sumOfgw->SetBinContent(1, 0.0);
     h_sumOfgpw->SetBinContent(1, 0.0);
@@ -723,79 +752,6 @@ bool HmmAnalyzer::isValidJet(int index, float corrected_pt) {
 
     return (corrected_pt > 20. && fabs(Jet_eta[index]) < 4.7 &&
             Jet_passJetIdTightLepVeto /* && Jet_puId[index]>=1 */);
-}
-
-void HmmAnalyzer::CorrectPtRoch(const RoccoR &_calib, const bool _doSys,
-                                const ROOT::Math::PtEtaPhiMVector _mu_vec,
-                                const float _mu_ptErr_raw,
-                                float &_pt, float &_ptErr, float &_pt_sys_up,
-                                float &_pt_sys_down, const int _charge,
-                                const int _trk_layers, const float _GEN_pt,
-                                const bool _isData) {
-
-    _pt = _mu_vec.Pt();
-    _pt_sys_up = FLOAT_NULL_VALUE;
-    _pt_sys_down = FLOAT_NULL_VALUE;
-    float q_term = 1.0;
-    // float q_term_sys = -99;
-
-    float fRand_1 = gRandom->Rndm();
-    // float fRand_2 = gRandom->Rndm();
-
-    if (_isData) {
-        q_term = _calib.kScaleDT(_charge, _mu_vec.Pt(), _mu_vec.Eta(),
-                                 _mu_vec.Phi(), 0, 0);
-    } else if (_GEN_pt > 0) {
-        q_term = _calib.kSpreadMC(_charge, _mu_vec.Pt(), _mu_vec.Eta(),
-                                  _mu_vec.Phi(), _GEN_pt, 0, 0);
-        // q_term = _calib.kScaleFromGenMC( _charge, _mu_vec.Pt(),
-        // _mu_vec.Eta(), _mu_vec.Phi(),_trk_layers, _GEN_pt, fRand_1, 0, 0 );
-    } else {
-        q_term = _calib.kSmearMC(_charge, _mu_vec.Pt(), _mu_vec.Eta(),
-                                 _mu_vec.Phi(), _trk_layers, fRand_1, 0, 0);
-        // q_term = _calib.kScaleAndSmearMC( _charge, _mu_vec.Pt(),
-        // _mu_vec.Eta(), _mu_vec.Phi(), _trk_layers, fRand_1, fRand_2, 0, 0 );
-    }
-    if (fabs(q_term - 1.0) > 0.4) {
-        std::cout << "\n*** BIZZARELY HIGH QTERM ***" << std::endl;
-        std::cout << "GEN pT = " << _GEN_pt << ", RECO pT = " << _mu_vec.Pt()
-                  << ", Q term = " << q_term << ", fRand_1 = " << fRand_1
-                  << std::endl;
-        std::cout << "Layers = " << _trk_layers << ", charge = " << _charge
-                  << ", eta = " << _mu_vec.Eta() << ", phi = " << _mu_vec.Phi()
-                  << std::endl;
-    }
-
-    int nUp = 0;
-    int nDown = 0;
-    double sum_sq_up = 0;
-    double sum_sq_down = 0;
-
-    /*
-    for (int i = 0; i < 100; i++) {
-      if (!_doSys) break;
-
-      if (_isData)          q_term_sys = _calib.kScaleDT( _charge, _mu_vec.Pt(),
-    _mu_vec.Eta(), _mu_vec.Phi(), 1, i ); else if (_GEN_pt > 0) q_term_sys =
-    _calib.kScaleFromGenMC( _charge, _mu_vec.Pt(), _mu_vec.Eta(), _mu_vec.Phi(),
-                                                                 _trk_layers,
-    _GEN_pt, fRand_1, 1, i ); else                  q_term_sys =
-    _calib.kScaleAndSmearMC( _charge, _mu_vec.Pt(), _mu_vec.Eta(),
-    _mu_vec.Phi(), _trk_layers, fRand_1, fRand_2, 1, i ); if ( q_term_sys >=
-    q_term ) { nUp   += 1; sum_sq_up
-    += pow( q_term_sys - q_term, 2 ); } else { nDown += 1; sum_sq_down += pow(
-    q_term_sys - q_term, 2 );
-      }
-    }
-    */
-
-    _pt = _mu_vec.Pt() * q_term;
-    _ptErr = _mu_ptErr_raw * q_term; // Account for shift in pT scale
-    // std::cout << "ptErr: " << _ptErr << " q_term: " << q_term << std::endl;
-    if (!_isData)
-        _ptErr *= std::fmax(q_term, 1. / q_term); // Account for smearing in MC
-    _pt_sys_up = (_doSys ? _pt * sqrt(sum_sq_up / nUp) : -999);
-    _pt_sys_down = (_doSys ? _pt * sqrt(sum_sq_down / nDown) : -999);
 }
 
 bool HmmAnalyzer::FillChain(TChain *chain, const TString &inputFileList) {

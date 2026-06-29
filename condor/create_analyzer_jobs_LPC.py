@@ -82,6 +82,18 @@ list_datasets = [
 
 include_Z = "F"
 include_H = "T"
+muon_pt_syst = os.getenv("MUON_PT_SYST", "nominal")
+valid_muon_pt_systs = [
+    "nominal",
+    "scale_up",
+    "scale_down",
+    "smearing_up",
+    "smearing_down",
+]
+if muon_pt_syst not in valid_muon_pt_systs:
+    print("Unsupported MUON_PT_SYST '{}'. Use one of: {}".format(
+        muon_pt_syst, ", ".join(valid_muon_pt_systs)))
+    sys.exit(1)
 
 # cmsswReleaseVersion = "CMSSW_10_6_5"
 CMSSW_BASE_DIR = os.getenv('CMSSW_BASE')
@@ -95,6 +107,7 @@ Inputfiles_DIR = Analyzer_DIR + "list/"
 cmsswReleaseVersion = CMSSW_BASE_DIR.split("/")[-1]
 print("Using CMSSW version " + cmsswReleaseVersion)
 print("Running analysis version " + v.ANALYZER_VERSION_NUMBER)
+print("Muon pT systematic " + muon_pt_syst)
 print("Analyzer: " + "%s/bin/%s"%(Analyzer_DIR, analyzer))
 
 # Create script to send all of the jobs directly
@@ -119,6 +132,8 @@ for dataset_name in list_datasets:
     isData, max_runs_per_job, year, type_info, _ = datasets_info[dataset_name]
 
     Output_DIR = "analyzer_%s/"%(outputfile) + "%s/"%(dataset_name)
+    if muon_pt_syst != "nominal":
+        Output_DIR = Output_DIR + "_" + muon_pt_syst
     Job_DIR = Condor_BASE_DIR + Output_DIR
     if os.path.exists(Job_DIR + "input_list.tgz"):
         print(" (!) Condor directory already exists. Skipping!")
@@ -196,9 +211,10 @@ for dataset_name in list_datasets:
         os.system("cp " + "%s/bin/%s/FWLiteGoodLumi"%(CMSSW_BASE_DIR,SCRAM_ARCH) + " " "%s/RazorCommon/bin/"%(Job_DIR))
         os.system("cp " + "%s/RazorCommon/python/loadJson.py"%(Analyzer_DIR) + " " "%s/RazorCommon/python/"%(Job_DIR))
     
+    os.system("mkdir -p " + Job_Data_DIR + "leptonSF/%s/"%(year))
+    os.system("cp " + "%s/leptonSF/%s/muon_scalesmearing.json.gz"%(Analyzer_Data_DIR, year) + " " + "%s/leptonSF/%s/"%(Job_Data_DIR, year))
     if(year != "2025"):
-        os.system("mkdir -p " + Job_Data_DIR + "leptonSF/%s/"%(year))
-        os.system("cp " + "%s/leptonSF/%s/*.gz"%(Analyzer_Data_DIR, year) + " " + "%s/leptonSF/%s/"%(Job_Data_DIR, year))
+        os.system("cp " + "%s/leptonSF/%s/muon_Z.json.gz"%(Analyzer_Data_DIR, year) + " " + "%s/leptonSF/%s/"%(Job_Data_DIR, year))
     os.system("mkdir -p " + Job_Data_DIR + "pileup")
     pileup_file = "PileupReweight_Summer%s"%(year[2:])
     if not os.path.exists(Analyzer_Data_DIR + "/pileup/%s.root"%(pileup_file)):
@@ -215,7 +231,7 @@ for dataset_name in list_datasets:
 
     EOS_SUBPATH = os.getenv('LOGNAME') + "/analyzer_%s/"%(outputfile) + type_info + "/%s/"%(dataset_name)
     os.system("xrdfs root://cmseos.fnal.gov mkdir -p /store/group/lpchmumu/"+ EOS_SUBPATH)
-    args = outputfile + " $(I) " + isData + " " + year + " " + EOS_SUBPATH + " " + cmsswReleaseVersion + " "  + include_Z + " " + include_H
+    args = outputfile + " $(I) " + isData + " " + year + " " + EOS_SUBPATH + " " + cmsswReleaseVersion + " "  + include_Z + " " + include_H + " " + muon_pt_syst
     jobfile_JDL.write("Arguments = " + args + "\n")
 
     jobfile_JDL.write("Log = log/jobR$(I).$(Cluster).$(Process).log" + "\n")
@@ -235,6 +251,7 @@ for dataset_name in list_datasets:
     transfer_files += Job_Data_DIR + "/jetCorrections/jer_smear.json.gz, "
     transfer_files += Job_Data_DIR + "/jetCorrections/JvmConfig.json, "
 
+    transfer_files += Job_Data_DIR + "/leptonSF/" + year + "/muon_scalesmearing.json.gz, "
     if(year != "2025"):
         transfer_files += Job_Data_DIR + "/leptonSF/" + year + "/muon_Z.json.gz, "
     if(isData=="T"):
