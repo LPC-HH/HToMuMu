@@ -162,7 +162,7 @@ double pt_resol_var(double pt_woresol, double pt_wresol, double eta,
     } else if (updn == "down") {
         pt_var = pt_woresol * (1 + (k - k_unc) * std_x_rndm);
     } else {
-        std::cout << "ERROR: updn must be up or dn" << std::endl;
+        std::cout << "ERROR: updn must be 'up' or 'down'" << std::endl; 
     }
 
     if (pt_var / pt_woresol > 2 || pt_var / pt_woresol < 0.1 || pt_var < 0) {
@@ -173,7 +173,7 @@ double pt_resol_var(double pt_woresol, double pt_wresol, double eta,
 }
 
 double pt_scale(bool is_data, double pt, double eta, double phi, int charge,
-                double low_pt_threshold = 26) {
+                double low_pt_threshold) {
     const auto &cset = MuonScaleCorrectionSet();
     std::string dtmc = is_data ? "data" : "mc";
 
