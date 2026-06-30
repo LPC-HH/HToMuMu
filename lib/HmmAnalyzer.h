@@ -438,6 +438,11 @@ class HmmAnalyzer : public MainEvent {
     std::vector<float> *t_SubJet_tau2;
     std::vector<float> *t_SubJet_tau3;
     std::vector<float> *t_SubJet_tau4;
+    
+
+    int t_leadJet_idx;
+    int t_subleadJet_idx;
+
     int t_nJet;
     std::vector<float> *t_Jet_area;
     // std::vector<float>         *t_Jet_btagCMVA;
@@ -994,6 +999,9 @@ void HmmAnalyzer::clearTreeVectors() {
     t_SubJet_tau3->clear();
     t_SubJet_tau4->clear();
 
+
+    t_leadJet_idx = INT_NULL_VALUE;
+    t_subleadJet_idx = INT_NULL_VALUE;
     t_Jet_area->clear();
     // t_Jet_btagCMVA->clear();
     // t_Jet_btagCSVV2->clear();
@@ -1401,6 +1409,11 @@ void HmmAnalyzer::BookTreeBranches() {
     // tree->Branch("t_Jet_btagDeepC"    , "vector<float>" ,&t_Jet_btagDeepC);
     // tree->Branch("t_Jet_btagDeepFlavB"    , "vector<float>"
     // ,&t_Jet_btagDeepFlavB);
+
+
+
+    tree->Branch("leadJet_idx", &t_leadJet_idx);
+    tree->Branch("subleadJet_idx", &t_subleadJet_idx);
     tree->Branch("t_Jet_chEmEF", "vector<float>", &t_Jet_chEmEF);
     tree->Branch("t_Jet_chHEF", "vector<float>", &t_Jet_chHEF);
     tree->Branch("t_Jet_eta", "vector<float>", &t_Jet_eta);

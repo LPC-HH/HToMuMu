@@ -618,6 +618,14 @@ void HmmAnalyzer::EventLoop() {
         }
         
         //std::cout << "There are " << nJet << " jets in event " << jentry << std::endl;
+        
+
+
+        int leadJet_idx = INT_NULL_VALUE;
+        int subleadJet_idx = INT_NULL_VALUE;
+
+        float leadJet_pt = FLOAT_NULL_VALUE; 
+        float subleadJet_pt = FLOAT_NULL_VALUE;
         for (int j = 0; j < nJet; j++) {
             h_nJets->Fill(0.5);
             //std::cout << "looking at jet " << j << std::endl;
@@ -827,6 +835,19 @@ void HmmAnalyzer::EventLoop() {
             h_nValidNotVetoedJets->Fill(0.5);
 
             //std::cout << "Jet pass jetVeto" << std::endl;
+            int stored_jet_idx = t_nJet;
+
+            if (corrected_jet_pt > leadJet_pt) {
+                subleadJet_pt = leadJet_pt;
+                subleadJet_idx = leadJet_idx;
+
+                leadJet_pt = corrected_jet_pt;
+                leadJet_idx = stored_jet_idx;
+            }
+            else if (corrected_jet_pt > subleadJet_pt) {
+                subleadJet_pt = corrected_jet_pt;
+                subleadJet_idx = stored_jet_idx;
+            }
 
             t_nJet++;
             t_Jet_area->push_back(Jet_area[j]);
@@ -909,6 +930,9 @@ void HmmAnalyzer::EventLoop() {
             t_bJet_SFup->push_back(jet_scalefactor_up);
             t_bJet_SFdown->push_back(jet_scalefactor_do);
         }
+       
+        t_leadJet_idx = leadJet_idx;
+        t_subleadJet_idx = subleadJet_idx;
 
         if(t_nbJet_Loose > 1 || t_nbJet > 0){
             //std::cout << "Too many bJets" << std::endl;
@@ -920,36 +944,41 @@ void HmmAnalyzer::EventLoop() {
 
 
         // if (t_Jet_pt->size() >= 2) {
-        if (t_nJet >= 2) {
-            // TLorentzVector j1, j2, jj;
+        if (t_nJet >= 2 &&
+            leadJet_idx != INT_NULL_VALUE &&
+            subleadJet_idx != INT_NULL_VALUE) {
+
             ROOT::Math::PtEtaPhiMVector j1, j2, jj;
-            // j1.SetPtEtaPhiM((*t_Jet_pt)[0], (*t_Jet_eta)[0],
-            //(*t_Jet_phi)[0], (*t_Jet_mass)[0]);
-            // j2.SetPtEtaPhiM((*t_Jet_pt)[1], (*t_Jet_eta)[1],
-            //(*t_Jet_phi)[1], (*t_Jet_mass)[1]);
-            j1.SetCoordinates((*t_Jet_pt)[0], (*t_Jet_eta)[0], (*t_Jet_phi)[0],
-                              (*t_Jet_mass)[0]);
-            j2.SetCoordinates((*t_Jet_pt)[1], (*t_Jet_eta)[1], (*t_Jet_phi)[1],
-                              (*t_Jet_mass)[1]);
+
+            j1.SetCoordinates((*t_Jet_pt)[leadJet_idx],
+                              (*t_Jet_eta)[leadJet_idx],
+                              (*t_Jet_phi)[leadJet_idx],
+                              (*t_Jet_mass)[leadJet_idx]);
+
+            j2.SetCoordinates((*t_Jet_pt)[subleadJet_idx],
+                              (*t_Jet_eta)[subleadJet_idx],
+                              (*t_Jet_phi)[subleadJet_idx],
+                              (*t_Jet_mass)[subleadJet_idx]);
+
             jj = j1 + j2;
+
             t_diJet_pt = jj.Pt();
             t_diJet_eta = jj.Eta();
             t_diJet_phi = jj.Phi();
             t_diJet_mass = jj.M();
             t_diJet_mass_mo = jj.M();
+
             for (int k = 0; k < t_nJet; k++) {
                 for (int m = k + 1; m < t_nJet; m++) {
-                    // j1.SetPtEtaPhiM((*t_Jet_pt)[k], (*t_Jet_eta)[k],
-                    //(*t_Jet_phi)[k], (*t_Jet_mass)[k]);
-                    // j2.SetPtEtaPhiM((*t_Jet_pt)[m], (*t_Jet_eta)[m],
-                    //(*t_Jet_phi)[m], (*t_Jet_mass)[m]);
                     j1.SetCoordinates((*t_Jet_pt)[k], (*t_Jet_eta)[k],
                                       (*t_Jet_phi)[k], (*t_Jet_mass)[k]);
                     j2.SetCoordinates((*t_Jet_pt)[m], (*t_Jet_eta)[m],
                                       (*t_Jet_phi)[m], (*t_Jet_mass)[m]);
                     jj = j1 + j2;
-                    if (t_diJet_mass_mo < jj.M())
+
+                    if (t_diJet_mass_mo < jj.M()) {
                         t_diJet_mass_mo = jj.M();
+                    }
                 }
             }
         }
