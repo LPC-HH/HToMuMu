@@ -123,12 +123,6 @@ inline const std::vector<std::string> jet_jes_syst_names = {
     "CMS_scale_j_EC2_2024",
     "CMS_scale_j_HF_2024",
     "CMS_scale_j_Absolute_2024",
-
-    "CMS_scale_j_BBEC1_2025",
-    "CMS_scale_j_RelativeSample_2025",
-    "CMS_scale_j_EC2_2025",
-    "CMS_scale_j_HF_2025",
-    "CMS_scale_j_Absolute_2025",
 };
 
 inline const std::vector<std::string> jes_directions = {
@@ -137,12 +131,41 @@ inline const std::vector<std::string> jes_directions = {
 };
 
 inline const std::vector<std::string> jet_jer_syst_names = {
-    "CMS_res_j_eta0to1p93_pt0toInf_2025",
-    "CMS_res_j_eta1p93to2p5_pt0toInf_2025",
-    "CMS_res_j_eta2p5to3p0_pt0to50_2025",
-    "CMS_res_j_eta2p5to3p0_pt50toInf_2025",
-    "CMS_res_j_eta3to5_pt0to50_2025",
-    "CMS_res_j_eta3to5_pt50toInf_2025",
+    "CMS_res_j_eta0to1p93_pt0toInf_2022",
+    "CMS_res_j_eta1p93to2p5_pt0toInf_2022",
+    "CMS_res_j_eta2p5to3p0_pt0to50_2022",
+    "CMS_res_j_eta2p5to3p0_pt50toInf_2022",
+    "CMS_res_j_eta3to5_pt0to50_2022",
+    "CMS_res_j_eta3to5_pt50toInf_2022",
+
+    "CMS_res_j_eta0to1p93_pt0toInf_2022EE",
+    "CMS_res_j_eta1p93to2p5_pt0toInf_2022EE",
+    "CMS_res_j_eta2p5to3p0_pt0to50_2022EE",
+    "CMS_res_j_eta2p5to3p0_pt50toInf_2022EE",
+    "CMS_res_j_eta3to5_pt0to50_2022EE",
+    "CMS_res_j_eta3to5_pt50toInf_2022EE",
+
+    "CMS_res_j_eta0to1p93_pt0toInf_2023",
+    "CMS_res_j_eta1p93to2p5_pt0toInf_2023",
+    "CMS_res_j_eta2p5to3p0_pt0to50_2023",
+    "CMS_res_j_eta2p5to3p0_pt50toInf_2023",
+    "CMS_res_j_eta3to5_pt0to50_2023",
+    "CMS_res_j_eta3to5_pt50toInf_2023",
+
+    "CMS_res_j_eta0to1p93_pt0toInf_2023BPix",
+    "CMS_res_j_eta1p93to2p5_pt0toInf_2023BPix",
+    "CMS_res_j_eta2p5to3p0_pt0to50_2023BPix",
+    "CMS_res_j_eta2p5to3p0_pt50toInf_2023BPix",
+    "CMS_res_j_eta3to5_pt0to50_2023BPix",
+    "CMS_res_j_eta3to5_pt50toInf_2023BPix",
+
+    "CMS_res_j_eta0to1p93_pt0toInf_2024",
+    "CMS_res_j_eta1p93to2p5_pt0toInf_2024",
+    "CMS_res_j_eta2p5to3p0_pt0to50_2024",
+    "CMS_res_j_eta2p5to3p0_pt50toInf_2024",
+    "CMS_res_j_eta3to5_pt0to50_2024",
+    "CMS_res_j_eta3to5_pt50toInf_2024",
+
 };
 
 inline const std::vector<std::string> jer_directions = {
@@ -371,6 +394,8 @@ class HmmAnalyzer : public MainEvent {
     std::vector<float> *t_Mu_ptErr;
     std::vector<float> *t_Mu_bsConstrainedPt;
     std::vector<float> *t_Mu_bsConstrainedPtErr;
+    std::vector<float> *t_Mu_bsConstrainedPt_nanoAOD;
+    std::vector<float> *t_Mu_bsConstrainedPtErr_nanoAOD;
     std::vector<float> *t_Mu_phi;
     std::vector<float> *t_Mu_eta;
     std::vector<float> *t_Mu_mass;
@@ -931,6 +956,8 @@ void HmmAnalyzer::clearTreeVectors() {
     t_Mu_ptErr->clear();
     t_Mu_bsConstrainedPt->clear();
     t_Mu_bsConstrainedPtErr->clear();
+    t_Mu_bsConstrainedPt_nanoAOD->clear();
+    t_Mu_bsConstrainedPtErr_nanoAOD->clear();
     t_Mu_phi->clear();
     t_Mu_eta->clear();
     t_Mu_mass->clear();
@@ -1198,6 +1225,8 @@ void HmmAnalyzer::BookTreeBranches() {
     t_Mu_ptErr = new std::vector<float>();
     t_Mu_bsConstrainedPt = new std::vector<float>();
     t_Mu_bsConstrainedPtErr = new std::vector<float>();
+    t_Mu_bsConstrainedPt_nanoAOD = new std::vector<float>();
+    t_Mu_bsConstrainedPtErr_nanoAOD = new std::vector<float>();
     t_Mu_phi = new std::vector<float>();
     t_Mu_eta = new std::vector<float>();
     t_Mu_mass = new std::vector<float>();

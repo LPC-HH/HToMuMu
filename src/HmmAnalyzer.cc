@@ -286,6 +286,7 @@ void HmmAnalyzer::EventLoop() {
                     pt_corr = pt_resol_var(pt_scaled, pt_corr, Muon_eta[i],
                                            MuonSystDirection(muon_pt_syst));
                 }
+
             }
 
             float ptErr_corr = Muon_bsConstrainedPtErr[i];
@@ -494,6 +495,8 @@ void HmmAnalyzer::EventLoop() {
             t_Mu_ptErr->push_back(Muon_ptErr[i]);
             t_Mu_bsConstrainedPt->push_back(mu_pt_corr[i]);
             t_Mu_bsConstrainedPtErr->push_back(mu_ptErr_corr[i]);
+            t_Mu_bsConstrainedPt_nanoAOD->push_back(Muon_bsConstrainedPt[i]);
+            t_Mu_bsConstrainedPtErr_nanoAOD->push_back(Muon_bsConstrainedPtErr[i]);
             t_Mu_phi->push_back(Muon_phi[i]);
             t_Mu_eta->push_back(Muon_eta[i]);
             t_Mu_mass->push_back(MUON_MASS); // Muon_mass[i]);

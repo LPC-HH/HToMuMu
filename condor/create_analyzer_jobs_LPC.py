@@ -50,12 +50,12 @@ skip_pattern = [
 
 list_datasets = datasets_info.keys()
 # # Use in case you want to run over a specific list of datasets!
-list_datasets = [
-    "DY120to200_Summer23",
+#list_datasets = [
+    #"DY120to200_Summer24",
     #"EWK_2L2J_Summer24",
     #"Muon_2022E",
     #"Muon0_2024C",
-    "Muon0_2023C_v1",
+    #"Muon0_2023C_v1",
     #"Muon0_2024I_v2",
     #"Muon0_2025B",
     #"Muon0_2025G",
@@ -69,16 +69,16 @@ list_datasets = [
     #"VBF_Summer24",
     #"ggH_Summer22",
     #"ggH_Summer22EE",
-    "ggH_Summer23",
+    #"ggH_Summer23",
     #"ggH_Summer23BPix",
-    #"ggH_Summer24",
+#    "ggH_Summer24",
 #    "DY50to120_Summer22",
 #    "DY120to200_Summer24",
     #"WWtoLNu2Q_Summer22",
     #"Muon_2022C",
 #    "Muon_2022D",
 #    "SingleMuon_2022C",
-]
+#]
 
 include_Z = "F"
 include_H = "T"
@@ -131,9 +131,11 @@ for dataset_name in list_datasets:
 
     isData, max_runs_per_job, year, type_info, _ = datasets_info[dataset_name]
 
-    Output_DIR = "analyzer_%s/"%(outputfile) + "%s/"%(dataset_name)
-    if muon_pt_syst != "nominal":
-        Output_DIR = Output_DIR + "_" + muon_pt_syst
+    if muon_pt_syst == "nominal":
+        Output_DIR = "analyzer_%s/"%(outputfile) + "%s/"%(dataset_name)
+    else:
+        Output_DIR = "analyzer_%s/"%(outputfile) + "%s_"%(dataset_name)+ "%s/"%(muon_pt_syst)
+
     Job_DIR = Condor_BASE_DIR + Output_DIR
     if os.path.exists(Job_DIR + "input_list.tgz"):
         print(" (!) Condor directory already exists. Skipping!")
@@ -228,8 +230,12 @@ for dataset_name in list_datasets:
     jobfile_JDL = open(Job_DIR + "/task.jdl", "w+")
     jobfile_JDL.write("Universe  = vanilla" + "\n")
     jobfile_JDL.write("Executable = ./run_job_LPC.sh" + "\n")
+    
+    if muon_pt_syst == "nominal":
+        EOS_SUBPATH = os.getenv('LOGNAME') + "/analyzer_%s/"%(outputfile) + type_info + "/%s/"%(dataset_name)
+    else:
+        EOS_SUBPATH = os.getenv('LOGNAME') + "/analyzer_%s/"%(outputfile) + type_info + "/%s"%(dataset_name) + "_%s/"%(muon_pt_syst) 
 
-    EOS_SUBPATH = os.getenv('LOGNAME') + "/analyzer_%s/"%(outputfile) + type_info + "/%s/"%(dataset_name)
     os.system("xrdfs root://cmseos.fnal.gov mkdir -p /store/group/lpchmumu/"+ EOS_SUBPATH)
     args = outputfile + " $(I) " + isData + " " + year + " " + EOS_SUBPATH + " " + cmsswReleaseVersion + " "  + include_Z + " " + include_H + " " + muon_pt_syst
     jobfile_JDL.write("Arguments = " + args + "\n")
