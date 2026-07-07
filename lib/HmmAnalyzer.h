@@ -780,7 +780,7 @@ bool HmmAnalyzer::isValidJet(int index, float corrected_pt) {
            Jet_passJetIdTightLepVeto = Jet_passJetIdTight;
     }
 
-    return (corrected_pt > 20. && fabs(Jet_eta[index]) < 4.7 &&
+    return (corrected_pt > 15. && fabs(Jet_eta[index]) < 4.7 &&
             Jet_passJetIdTightLepVeto /* && Jet_puId[index]>=1 */);
 }
 

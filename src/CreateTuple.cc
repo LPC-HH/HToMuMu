@@ -2,9 +2,10 @@
 #include <TStopwatch.h>
 
 int main(int argc, char *argv[]) {
-    if (argc != 10) {
-        std::cerr << "Please give 9 arguments: input file, weight file, output file, era, "
-                     "channel, is_data(T/F), is_signal(T/F), include_Z(T/F), include_H(T/F)"
+    if (argc != 11) {
+        std::cerr << "Please give 10 arguments: input file, weight file, output file, era, "
+                     "channel, is_data(T/F), is_signal(T/F), include_Z(T/F), include_H(T/F), "
+                     "jet_syst"
                   << std::endl;
         return -1;
     }
@@ -18,6 +19,7 @@ int main(int argc, char *argv[]) {
     const bool is_signal = *argv[7] == 'T';
     const bool include_Z = *argv[8] == 'T';
     const bool include_H = *argv[9] == 'T';
+    TString jet_syst(argv[10]);
 
     std::cout << "Input: " << input << std::endl;
     std::cout << "Weight: " << weightFile << std::endl;
@@ -29,6 +31,7 @@ int main(int argc, char *argv[]) {
     std::cout << "Is signal? " << is_signal << std::endl;
     std::cout << "Include Z? " << include_Z << std::endl;
     std::cout << "Include H? " << include_H << std::endl;
+    std::cout << "Jet systematic: " << jet_syst << std::endl;
 
     // TStopwatch timer = TStopwatch();
     // timer.Start();
@@ -36,7 +39,8 @@ int main(int argc, char *argv[]) {
     timer.Start();
 
     CreateTuple create_tuple =
-        CreateTuple(input, weightFile, output, era, channel, is_data, is_signal, include_Z, include_H);
+        CreateTuple(input, weightFile, output, era, channel, is_data,
+                    is_signal, include_Z, include_H, jet_syst);
 
     create_tuple.setBranchesAddressesInput();
     create_tuple.setBranchesAddressesOutput();

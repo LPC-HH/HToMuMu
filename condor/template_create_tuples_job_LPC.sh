@@ -17,8 +17,9 @@ channel=$5
 file_type=$6
 ifZ=$7
 ifH=$8 
-cmssw_version=$9
-job_number=${10}
+jet_syst=$9
+cmssw_version=${10}
+job_number=${11}
 
 is_data="F"
 if [[ $file_type == *"Data"* ]]; then is_data="T"; fi
@@ -53,8 +54,8 @@ eval `scram runtime -sh`
 # Run executable
 ###########################
 echo "Executing Create Tuple executable:"
-echo "./${executable} input_file.root weight_file.root ./ ${era} ${channel} ${is_data} ${is_signal} ${ifZ} ${ifH}"
-./${executable} input_file.root weight_file.root ./ ${era} ${channel} ${is_data} ${is_signal} ${ifZ} ${ifH}
+echo "./${executable} input_file.root weight_file.root ./ ${era} ${channel} ${is_data} ${is_signal} ${ifZ} ${ifH} ${jet_syst}"
+./${executable} input_file.root weight_file.root ./ ${era} ${channel} ${is_data} ${is_signal} ${ifZ} ${ifH} ${jet_syst}
 
 # Copy output to output_folder
 ls -l

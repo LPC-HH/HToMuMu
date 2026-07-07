@@ -14,7 +14,7 @@ CORR_LIBS   := $(shell correction config --ldflags)
 BOOST_INC := -I/cvmfs/cms.cern.ch/el9_amd64_gcc12/external/boost/1.80.0-4e27c6908892e3529bfbcf4445a96fe6/include
 BOOST_LIB := -L/cvmfs/cms.cern.ch/el9_amd64_gcc12/external/boost/1.80.0-4e27c6908892e3529bfbcf4445a96fe6/lib
 
-FLAGS := -g -Wall -std=c++20 $(ROOT_CFLAGS) $(CORR_CFLAGS) -I$(LIB) $(BOOST_INC)
+FLAGS := -O2 -g -Wall -std=c++20 $(ROOT_CFLAGS) $(CORR_CFLAGS) -I$(LIB) $(BOOST_INC)
 LIBS  := $(ROOT_LIBS) $(CORR_LIBS) $(BOOST_LIB)
 
 # Analyzer sources and header

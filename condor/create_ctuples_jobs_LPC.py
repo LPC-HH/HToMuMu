@@ -37,10 +37,13 @@ skip_pattern = [
     "DYto2Mu-2Jets",
 ]
 
+
+
+
 list_datasets = datasets_info.keys()
 # # Use in case you want to run over a specific list of datasets!
 #list_datasets = [
-    #"VBF_Summer22",
+ #   "VBF_Summer22",
     #"VBF_Summer22EE",
     #"VBF_Summer23",
     #"VBF_Summer23BPix",
@@ -59,6 +62,24 @@ list_datasets = datasets_info.keys()
 
 include_Z = "F"
 include_H = "T"
+jet_syst = "nominal"
+
+muon_pt_syst = os.getenv("MUON_PT_SYST", "nominal")
+valid_muon_pt_systs = [
+    "nominal",
+    "scale_up",
+    "scale_down",
+    "smearing_up",
+    "smearing_down",
+]
+if muon_pt_syst not in valid_muon_pt_systs:
+    print("Unsupported MUON_PT_SYST '{}'. Use one of: {}".format(
+        muon_pt_syst, ", ".join(valid_muon_pt_systs)))
+    sys.exit(1)
+
+if muon_pt_syst != "nominal" and jet_syst == "nominal":
+    print("Either muon pt syst or jet syst must be nominal")
+    exit()
 
 # Arguments
 if (len(sys.argv) == 1):
@@ -106,16 +127,30 @@ for dataset_name in list_datasets:
 
     list_all_runs = open(ANALYZER_DIR + "list/" + list_file, "r")
 
-    WEIGHT_FILE = EOS_BASE_DIR + type_info + "/%s/"%(dataset_name) + f"SumGenWeight.root"
+
+    if muon_pt_syst == "nominal":
+        WEIGHT_FILE = EOS_BASE_DIR + type_info + "/%s/"%(dataset_name) + f"SumGenWeight.root"
+    else:
+        WEIGHT_FILE = EOS_BASE_DIR + type_info + "/%s"%(dataset_name) + "_%s/"%(muon_pt_syst) + f"SumGenWeight.root"
+
     if not os.path.exists("/eos/uscms/" + WEIGHT_FILE):
         print("Merged file does not exist. Skipping!")
         continue
 
     #if(isData=='T'):
     #    INPUT_FILE = EOS_BASE_DIR + type_info + "/%s/"%(dataset_name) + f"HiggsMuMu_" + v.ANALYZER_VERSION_NUMBER + "_$(I)_goodLumi.root"
-    INPUT_FILE = EOS_BASE_DIR + type_info + "/%s/"%(dataset_name) + f"HiggsMuMu_" + v.ANALYZER_VERSION_NUMBER + "_$(I).root"
+    if muon_pt_syst == "nominal":
+        INPUT_FILE = EOS_BASE_DIR + type_info + "/%s/"%(dataset_name) + f"HiggsMuMu_" + v.ANALYZER_VERSION_NUMBER + "_$(I).root"
+    else:
+        INPUT_FILE = EOS_BASE_DIR + type_info + "/%s"%(dataset_name) + "_%s/"%(muon_pt_syst) + f"HiggsMuMu_" + v.ANALYZER_VERSION_NUMBER + "_$(I).root"
 
-    OUTPUT_DIR = EOS_BASE_DIR + "tuples_" + v.TUPLES_VERSION_NUMBER  + "/%s/"%(dataset_name)
+    if muon_pt_syst != "nominal":
+        OUTPUT_DIR = EOS_BASE_DIR + "tuples_" + v.TUPLES_VERSION_NUMBER  + "/%s"%(dataset_name) + "_%s/"%(muon_pt_syst)
+    if jet_syst == "nominal":
+        OUTPUT_DIR = EOS_BASE_DIR + "tuples_" + v.TUPLES_VERSION_NUMBER  + "/%s/"%(dataset_name)
+    else:
+        OUTPUT_DIR = EOS_BASE_DIR + "tuples_" + v.TUPLES_VERSION_NUMBER  + "/%s_"%(dataset_name)+ "%s/"%(jet_syst)
+
     os.system("xrdfs root://cmseos.fnal.gov mkdir -p "+ OUTPUT_DIR)
 
     file_name = channel + "_" + era + "_$(I)" + "_tuples.root"
@@ -140,15 +175,25 @@ for dataset_name in list_datasets:
             print("Skipping.")
             continue
 
-    JOB_DIR = CONDOR_BASE_DIR + "ctuples_" + v.TUPLES_VERSION_NUMBER + "/" + f"{dataset_name}/"# + "%s/"%(dataset_name) + blockString
+    # JOB_DIR = CONDOR_BASE_DIR + "ctuples_" + v.TUPLES_VERSION_NUMBER + "/" + f"{dataset_name}/"# + "%s/"%(dataset_name) + blockString
+
+    if muon_pt_syst != "nominal":
+        JOB_DIR = CONDOR_BASE_DIR + "ctuples_" + v.TUPLES_VERSION_NUMBER + "/%s"%(dataset_name) + "_%s/"%(muon_pt_syst)# + "%s/"%(dataset_name) + blockString
+    if jet_syst == "nominal":
+        JOB_DIR = CONDOR_BASE_DIR + "ctuples_" + v.TUPLES_VERSION_NUMBER + "/" + f"{dataset_name}/"# + "%s/"%(dataset_name) + blockString
+    else:
+        JOB_DIR = CONDOR_BASE_DIR + "ctuples_" + v.TUPLES_VERSION_NUMBER + "/%s_"%(dataset_name)+ "%s/"%(jet_syst)# + "%s/"%(dataset_name) + blockString
+
 
     if os.path.exists(JOB_DIR):
         if len(os.listdir(JOB_DIR+"/log/")) != len(os.listdir(JOB_DIR+"/out/")):
             print("Previous job didn't finish well. Try running manually.")
             comm = "./CreateTuple /eos/uscms/" + INPUT_FILE + " "
+            comm += "/eos/uscms/" + WEIGHT_FILE + " "
             comm += "/eos/uscms/" + OUTPUT_DIR + " " + era + " " + channel
             comm += " T" if "Data" in type_info else " F"
             comm += " T" if "signal" in type_info else " F"
+            comm += " " + include_Z + " " + include_H + " " + jet_syst
             print(" > cd " + JOB_DIR + "; " + comm)
             send_all_jobs.write("cd " + JOB_DIR + "\n")
             send_all_jobs.write(comm + "\n")
@@ -196,7 +241,7 @@ for dataset_name in list_datasets:
     jobfile_JDL.write("Universe  = vanilla" + "\n")
     jobfile_JDL.write("Executable = ./run_job_LPC.sh" + "\n")
 
-    args = INPUT_FILE + " " + WEIGHT_FILE + " " + OUTPUT_DIR + " " + era + " " + channel + " " + type_info + " "  + include_Z + " " + include_H + " " + cmsswReleaseVersion + " " + "$(I)"
+    args = INPUT_FILE + " " + WEIGHT_FILE + " " + OUTPUT_DIR + " " + era + " " + channel + " " + type_info + " "  + include_Z + " " + include_H + " " + jet_syst + " " + cmsswReleaseVersion + " " + "$(I)"
     jobfile_JDL.write("Arguments = " + args + "\n")
 
     jobfile_JDL.write("Log = log/jobR$(I).$(Cluster).$(Process).log" + "\n")
@@ -210,7 +255,7 @@ for dataset_name in list_datasets:
 
     jobfile_JDL.write("should_transfer_files = YES" + "\n")
     jobfile_JDL.write("when_to_transfer_output = ON_EXIT" + "\n\n# Resources request\n")
-    jobfile_JDL.write("RequestMemory = 4500 \n\n# Jobs selection\n")
+    jobfile_JDL.write("RequestMemory = 2000 \n\n# Jobs selection\n")
 
     jobfile_JDL.write("Queue I from (")
     for i in range(1, n_jobs+1):

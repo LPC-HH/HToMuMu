@@ -119,16 +119,108 @@ echo "input file: " $inputfilelist
 ###################################
 # Copy input files ahead of time
 ###################################
-mkdir inputs/
+rm -rf inputs
+mkdir -p inputs
 
-for i in `cat $inputfilelist`; do
-    echo "Copying Input File: " $i
-    xrdcp $i ./inputs/
-done
-ls inputs/* > tmp_input_list.txt 
+rm -f tmp_input_list.txt
+touch tmp_input_list.txt
+
+max_retries=6
+copy_failed=0
+n_copied=0
+
+while IFS= read -r input_file || [ -n "$input_file" ]; do
+
+    [ -z "$input_file" ] && continue
+
+    base_file=$(basename "$input_file")
+    output_file="inputs/${base_file}"
+
+    echo "----------------------------------------"
+    echo "Copying Input File:"
+    echo "  source:      ${input_file}"
+    echo "  destination: ${output_file}"
+
+    success=0
+    xrdcp_log="xrdcp_${base_file}.log"
+
+    rm -f "${xrdcp_log}"
+
+    for attempt in $(seq 1 ${max_retries}); do
+        echo "xrdcp attempt ${attempt}/${max_retries}"
+
+        rm -f "${output_file}"
+
+        # Save stdout/stderr to a log file, do NOT send it directly to .err
+        xrdcp -f --nopbar "${input_file}" "${output_file}" > "${xrdcp_log}" 2>&1
+        xrdcp_status=$?
+
+        if [ ${xrdcp_status} -eq 0 ] && [ -s "${output_file}" ]; then
+            echo "Copy succeeded: ${output_file}"
+            success=1
+            rm -f "${xrdcp_log}"
+            break
+        else
+            echo "[WARNING] Copy failed on attempt ${attempt}/${max_retries}"
+            echo "[WARNING] xrdcp status: ${xrdcp_status}"
+
+            if [ -e "${output_file}" ]; then
+                echo "[WARNING] Output file exists but may be empty/corrupt:"
+                ls -lh "${output_file}"
+            fi
+
+            if [ ${attempt} -lt ${max_retries} ]; then
+                echo "[WARNING] Will retry in 10 seconds..."
+                sleep 10
+            fi
+        fi
+    done
+
+    if [ ${success} -eq 1 ]; then
+        echo "${output_file}" >> tmp_input_list.txt
+        n_copied=$((n_copied + 1))
+    else
+        echo "[ERROR] Failed to copy file after ${max_retries} attempts:" >&2
+        echo "[ERROR] ${input_file}" >&2
+        echo "[ERROR] Final xrdcp output:" >&2
+        cat "${xrdcp_log}" >&2
+
+        copy_failed=1
+    fi
+
+done < "${inputfilelist}"
+
+echo "----------------------------------------"
+echo "Finished copying input files"
+echo "Number of copied files: ${n_copied}"
+echo "Contents of inputs/:"
+ls -lh inputs/
+
+echo "Contents of tmp_input_list.txt:"
+cat tmp_input_list.txt
+
+if [ ${copy_failed} -ne 0 ]; then
+    echo "[ERROR] At least one input file failed to copy. Exiting job." >&2
+    exit 20
+fi
+
+if [ ${n_copied} -eq 0 ]; then
+    echo "[ERROR] No input ROOT files were copied. Exiting job." >&2
+    exit 21
+fi
+
+if ! ls inputs/*.root >/dev/null 2>&1; then
+    echo "[ERROR] No .root files found in inputs/. Exiting job." >&2
+    exit 22
+fi
+
+if [ ! -s tmp_input_list.txt ]; then
+    echo "[ERROR] tmp_input_list.txt is empty. Exiting job." >&2
+    exit 23
+fi
+
 ls -lh inputs/*.root
 file inputs/*.root
-#echo
 
 
 ###########################
