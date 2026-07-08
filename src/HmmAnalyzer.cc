@@ -647,6 +647,8 @@ void HmmAnalyzer::EventLoop() {
 
             std::map<std::string, double> shifted_jes_pts;
             std::map<std::string, double> shifted_jer_pts;
+            std::map<std::string, double> shifted_jes_masses;
+            std::map<std::string, double> shifted_jer_masses;
 
             for (const auto &syst_name : jet_jer_syst_names) {
                 for (const auto &direction : jer_directions) {
@@ -654,22 +656,24 @@ void HmmAnalyzer::EventLoop() {
                         JetPtJerSystBranchName(syst_name, direction);
 
                     shifted_jer_pts[branch_name] = corrected_jet_pt_after_jes;
+
+                    const std::string mass_branch_name =
+                        JetMassJerSystBranchName(syst_name, direction);
+
+                    shifted_jer_masses[mass_branch_name] = corrected_jet_mass;
                 }
             }
 
-            auto shifted_jet_pt = [&](const std::string &uncertainty_name,
-                                      const std::string &direction) {
-                double shifted_pt = corrected_jet_pt_after_jes;
-
+            auto shifted_jet_scale = [&](const std::string &uncertainty_name,
+                                       const std::string &direction) {
                 if (is_data) {
-                    return shifted_pt;
+                    return 1.0;
                 }
 
-                
                 if (!JecSystAppliesToYear(uncertainty_name, yearst)) {
-                        return shifted_pt;
+                    return 1.0;
                 }
-                
+
                 auto uncertainty = jes_uncertainties.find(uncertainty_name);
 
                 if (uncertainty == jes_uncertainties.end()) {
@@ -678,14 +682,12 @@ void HmmAnalyzer::EventLoop() {
                         ". Check that this name exists in the reduced JES uncertainty set.");
                 }
 
-                shifted_pt *= JecApplication::Applier::jesComponentSyst(
+                return JecApplication::Applier::jesComponentSyst(
                     uncertainty->second,
                     direction,
                     Jet_eta[j],
                     corrected_jet_pt_after_jes,
                     false);
-
-                return shifted_pt;
             };
 
             for (const auto &syst_name : jet_jes_syst_names) {
@@ -693,8 +695,14 @@ void HmmAnalyzer::EventLoop() {
                     const std::string branch_name =
                         JetPtJesSystBranchName(syst_name, direction);
 
+                    const double jes_shift = shifted_jet_scale(syst_name, direction);
                     shifted_jes_pts[branch_name] =
-                        shifted_jet_pt(syst_name, direction);
+                        corrected_jet_pt_after_jes * jes_shift;
+
+                    const std::string mass_branch_name =
+                        JetMassJesSystBranchName(syst_name, direction);
+                    shifted_jes_masses[mass_branch_name] =
+                        corrected_jet_mass * jes_shift;
                 }
             }
         
@@ -757,6 +765,11 @@ void HmmAnalyzer::EventLoop() {
 
                         shifted_jer_pts[branch_name] = nominal_pt_after_jer;
 
+                        const std::string mass_branch_name =
+                            JetMassJerSystBranchName(syst_name, direction);
+                        shifted_jer_masses[mass_branch_name] =
+                            corrected_jet_mass * jer_correction;
+
                         if (!JecSystAppliesToYear(syst_name, yearst)) {
                             continue;
                         }
@@ -785,11 +798,15 @@ void HmmAnalyzer::EventLoop() {
                             0.0
                         };
 
-                        shifted_jer_pts[branch_name] =
-                            corrected_jet_pt_after_jes *
+                        const double shifted_jer_factor =
                             jet_applier->jerFactor(jet_after_jes,
                                                     jer_inputs,
                                                     systJer);
+
+                        shifted_jer_pts[branch_name] =
+                            corrected_jet_pt_after_jes * shifted_jer_factor;
+                        shifted_jer_masses[mass_branch_name] =
+                            corrected_jet_mass * shifted_jer_factor;
                     }
                 }
 
@@ -798,7 +815,12 @@ void HmmAnalyzer::EventLoop() {
 
                 for (auto &entry : shifted_jes_pts) {
                     double &shifted_pt = entry.second;
-                    shifted_pt *= nominal_jer_factor(shifted_pt);
+                    const double shifted_jer_factor = nominal_jer_factor(shifted_pt);
+                    shifted_pt *= shifted_jer_factor;
+
+                    const std::string mass_branch_name =
+                        "t_Jet_mass_" + entry.first.substr(std::string("t_Jet_pt_").size());
+                    shifted_jes_masses.at(mass_branch_name) *= shifted_jer_factor;
                 }
             }
 
@@ -878,6 +900,18 @@ void HmmAnalyzer::EventLoop() {
                 const double shifted_pt = entry.second;
 
                 t_Jet_pt_jer_syst.at(branch_name)->push_back(shifted_pt);
+            }
+            for (const auto &entry : shifted_jes_masses) {
+                const std::string &branch_name = entry.first;
+                const double shifted_mass = entry.second;
+
+                t_Jet_mass_jes_syst.at(branch_name)->push_back(shifted_mass);
+            }
+            for (const auto &entry : shifted_jer_masses) {
+                const std::string &branch_name = entry.first;
+                const double shifted_mass = entry.second;
+
+                t_Jet_mass_jer_syst.at(branch_name)->push_back(shifted_mass);
             }
             t_Jet_pt_nanoAOD->push_back(Jet_pt[j]);
             // t_Jet_qgl->push_back(Jet_qgl[j]);

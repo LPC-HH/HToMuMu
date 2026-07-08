@@ -224,6 +224,16 @@ inline std::string JetPtJerSystBranchName(const std::string &syst_name,
     return "t_Jet_pt_" + syst_name + "_" + ToLower(direction);
 }
 
+inline std::string JetMassJesSystBranchName(const std::string &syst_name,
+                                            const std::string &direction) {
+    return "t_Jet_mass_" + syst_name + "_" + ToLower(direction);
+}
+
+inline std::string JetMassJerSystBranchName(const std::string &syst_name,
+                                            const std::string &direction) {
+    return "t_Jet_mass_" + syst_name + "_" + ToLower(direction);
+}
+
 inline bool IsYearLabel(const std::string &label) {
     static const std::vector<std::string> valid_year_labels = {
         "2022",
@@ -487,6 +497,8 @@ class HmmAnalyzer : public MainEvent {
     std::vector<float> *t_Jet_pt;
     std::map<std::string, std::vector<float> *> t_Jet_pt_jes_syst;
     std::map<std::string, std::vector<float> *> t_Jet_pt_jer_syst;
+    std::map<std::string, std::vector<float> *> t_Jet_mass_jes_syst;
+    std::map<std::string, std::vector<float> *> t_Jet_mass_jer_syst;
     std::vector<float> *t_Jet_pt_nanoAOD;
     std::vector<float> *t_Jet_qgl;
     std::vector<int> *t_Jet_jetId;
@@ -1051,6 +1063,12 @@ void HmmAnalyzer::clearTreeVectors() {
     for (auto &entry : t_Jet_pt_jer_syst) {
         entry.second->clear();
     }
+    for (auto &entry : t_Jet_mass_jes_syst) {
+        entry.second->clear();
+    }
+    for (auto &entry : t_Jet_mass_jer_syst) {
+        entry.second->clear();
+    }
     t_Jet_pt_nanoAOD->clear();
     t_Jet_qgl->clear();
     t_Jet_jetId->clear();
@@ -1393,6 +1411,11 @@ void HmmAnalyzer::BookTreeBranches() {
                 JetPtJesSystBranchName(syst_name, direction);
 
             t_Jet_pt_jes_syst[branch_name] = new std::vector<float>();
+
+            const std::string mass_branch_name =
+                JetMassJesSystBranchName(syst_name, direction);
+
+            t_Jet_mass_jes_syst[mass_branch_name] = new std::vector<float>();
         }
     }
     for (const auto &syst_name : jet_jer_syst_names) {
@@ -1401,6 +1424,11 @@ void HmmAnalyzer::BookTreeBranches() {
                 JetPtJerSystBranchName(syst_name, direction);
 
             t_Jet_pt_jer_syst[branch_name] = new std::vector<float>();
+
+            const std::string mass_branch_name =
+                JetMassJerSystBranchName(syst_name, direction);
+
+            t_Jet_mass_jer_syst[mass_branch_name] = new std::vector<float>();
         }
     }
     t_Jet_pt_nanoAOD = new std::vector<float>();
@@ -1459,6 +1487,18 @@ void HmmAnalyzer::BookTreeBranches() {
         tree->Branch(branch_name.c_str(), "vector<float>", &branch_vector);
     }
     for (auto &entry : t_Jet_pt_jer_syst) {
+        const std::string &branch_name = entry.first;
+        std::vector<float> *&branch_vector = entry.second;
+
+        tree->Branch(branch_name.c_str(), "vector<float>", &branch_vector);
+    }
+    for (auto &entry : t_Jet_mass_jes_syst) {
+        const std::string &branch_name = entry.first;
+        std::vector<float> *&branch_vector = entry.second;
+
+        tree->Branch(branch_name.c_str(), "vector<float>", &branch_vector);
+    }
+    for (auto &entry : t_Jet_mass_jer_syst) {
         const std::string &branch_name = entry.first;
         std::vector<float> *&branch_vector = entry.second;
 
