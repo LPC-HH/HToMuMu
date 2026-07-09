@@ -146,11 +146,8 @@ The tuples with the BDT score added are saved in root_io/tuples/BDT_score/(ggH/V
 Again, we need to hadd these tuples. To do this, do 
 
 ```
-bash scripts/hadd_bdt.sh
+bash scripts/hadd_bdt.sh (ggH/VBF)
 ```
-
-
-<span style="color:Orange"> Here is a hardcoded path to VBF, the variable is called `path`. Change where it says VBF to ggH if you want that channel. It would be good to add an argument instead of changing the variable name.
 
 This will copy the hadd_template.sh file in the directories where the tuples are, so the next time you can just do.
 
