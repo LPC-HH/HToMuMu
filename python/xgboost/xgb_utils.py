@@ -207,7 +207,7 @@ def get_variables(channel_US, use_bsConstrain):
         ]
     if channel_US == "VBF":
         channel_vars += [
-            # VBF sspecific vchannel_vars
+            # VBF specific vchannel_vars
             ["pt_balance", "pt_balance", r"$R(p_T)$"],
             ["pt_centrality", "pt_centrality", r"$p_{T}-centrality$"],
             ["n_SoftJet_pt2", "n_SoftJet_pt2", r"$N_{2}^{soft}$"],
@@ -359,16 +359,27 @@ def draw_correlation_matrix(
             tree_bkg.Draw(
                 f"{correlation_vars[idx1][0]}:{correlation_vars[idx2][0]}>>temp_bkg"
             )
-            sig_hist = root.gDirectory.Get("temp_sig")
+            
+            sig_hist = root.gROOT.FindObject("temp_sig")
+            bkg_hist = root.gROOT.FindObject("temp_bkg")
+                
+            if not sig_hist:
+                print("Could not find temp_sig")
+                continue
+            
+            if not bkg_hist:
+                print("Could not find temp_bkg")
+                continue
+                
             h2_corr_sig.SetBinContent(
                 idx1 + 1, idx2 + 1, sig_hist.GetCorrelationFactor()
             )
-            bkg_hist = root.gDirectory.Get("temp_bkg")
+            
             h2_corr_bkg.SetBinContent(
                 idx1 + 1, idx2 + 1, bkg_hist.GetCorrelationFactor()
             )
-            root.gDirectory.Delete("temp_sig")
-            root.gDirectory.Delete("temp_bkg")
+            sig_hist.Delete()
+            bkg_hist.Delete()
             h2_corr_sig.GetZaxis().SetRangeUser(-1.0, 1.0)
             h2_corr_bkg.GetZaxis().SetRangeUser(-1.0, 1.0)
             for idx in range(n_corr):
