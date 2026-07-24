@@ -55,6 +55,13 @@ list_datasets = [
     if info[0] == "F" and info[3] == "MC_signal"
 ]
 
+
+list_datasets = [
+    dataset_name
+    for dataset_name in datasets_info.keys()
+    if dataset_name.startswith(("ggH_", "VBF_"))
+]
+
 # # Use in case you want to run over a specific list of datasets!
 # list_datasets = [
 # "VBF_Summer22",

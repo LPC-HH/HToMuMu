@@ -971,10 +971,10 @@ void HmmAnalyzer::EventLoop() {
         t_leadJet_idx = leadJet_idx;
         t_subleadJet_idx = subleadJet_idx;
 
-        if(t_nbJet_Loose > 1 || t_nbJet > 0){
-            //std::cout << "Too many bJets" << std::endl;
-            continue;
-        }
+        //if(t_nbJet_Loose > 1 || t_nbJet > 0){
+            ////std::cout << "Too many bJets" << std::endl;
+            //continue;
+        //}
 
         h_nBjetRejection->Fill(0.5);
 

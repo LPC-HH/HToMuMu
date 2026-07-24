@@ -1285,6 +1285,8 @@ void HmmAnalyzer::BookTreeBranches() {
     tree->Branch("t_Mu_ptErr", "vector<float>", &t_Mu_ptErr);
     tree->Branch("t_Mu_bsConstrainedPt", "vector<float>", &t_Mu_bsConstrainedPt);
     tree->Branch("t_Mu_bsConstrainedPtErr", "vector<float>", &t_Mu_bsConstrainedPtErr);
+    tree->Branch("t_Mu_bsConstrainedPt_nanoAOD", "vector<float>", &t_Mu_bsConstrainedPt_nanoAOD);
+    tree->Branch("t_Mu_bsConstrainedPtErr_nanoAOD", "vector<float>", &t_Mu_bsConstrainedPtErr_nanoAOD);
     tree->Branch("t_Mu_phi", "vector<float>", &t_Mu_phi);
     tree->Branch("t_Mu_eta", "vector<float>", &t_Mu_eta);
     tree->Branch("t_Mu_mass", "vector<float>", &t_Mu_mass);

@@ -135,7 +135,7 @@ class CreateTuple {
     int n_SoftJet_pt2, n_SoftJet_pt5, n_SoftJet_pt10;
     float HT, HT_pt2, HT_pt5, HT_pt10;
     /** Read DiMuon variables */
-    float diMuon_mass, diMuon_bsConstrainedMass, diMuon_pt,
+    float diMuon_mass, diMuon_bsConstrainedMass_nanoAOD, diMuon_bsConstrainedMass, diMuon_pt,
         diMuon_bsConstrainedPt, diMuon_phi, diMuon_eta;
 
     /** Read MET variables **/
@@ -144,7 +144,8 @@ class CreateTuple {
     /** Read Muon variables */
     int mu1_index, mu2_index;
     std::vector<int> *mu_charge;
-    std::vector<float> *mu_pt, *mu_bsConstrainedPt, *mu_phi, *mu_eta, *mu_dz, *mu_dzErr;
+    std::vector<float> *mu_pt, *mu_bsConstrainedPt, *mu_bsConstrainedPt_nanoAOD,
+        *mu_phi, *mu_eta, *mu_dz, *mu_dzErr;
     std::vector<float> *mu_ptErr, *mu_bsConstrainedPtErr;
 
     /** Read electron variables */
@@ -153,6 +154,7 @@ class CreateTuple {
     /** Read Jet variables */
     int n_jet, n_bjet, n_bjet_Loose;
     std::vector<float> *jet_mass, *jet_pt, *jet_phi, *jet_eta, *jet_btagPNetB;
+    std::vector<float> *jet_pt_nanoAOD;
 
     /** Read Jet variables */
     float diJet_pt, diJet_eta, diJet_phi, diJet_mass, diJet_mass_mo;
@@ -176,15 +178,17 @@ class CreateTuple {
     /** New Muon variables*/
     float mu1_pt_mass_ratio, mu2_pt_mass_ratio, mu1_bsConstrainedPt_mass_ratio,
         mu2_bsConstrainedPt_mass_ratio, mu1_eta, mu2_eta, phi_CS, cos_theta_CS;
-    float mu1_pt, mu2_pt, mu1_bsConstrainedPt, mu2_bsConstrainedPt, mu1_ptErr,
-        mu2_ptErr, mu1_bsConstrainedPtErr, mu2_bsConstrainedPtErr, mu1_dz,
-        mu2_dz, mu1_dzErr, mu2_dzErr;
+    float mu1_pt, mu2_pt, mu1_bsConstrainedPt_nanoAOD,
+        mu2_bsConstrainedPt_nanoAOD, mu1_bsConstrainedPt,
+        mu2_bsConstrainedPt, mu1_ptErr, mu2_ptErr, mu1_bsConstrainedPtErr,
+        mu2_bsConstrainedPtErr, mu1_dz, mu2_dz, mu1_dzErr, mu2_dzErr;
     /** New Error variables*/
     float relative_diMuon_mass_error, relative_diMuon_bsConstrainedMass_error;
 
     /** New jets variables*/
     float leading_jet_pt, leading_jet_eta, leading_jet_btagPNetB,
-        subleading_jet_pt, subleading_jet_eta, subleading_jet_btagPNetB;
+        subleading_jet_pt, subleading_jet_eta, subleading_jet_btagPNetB,
+        leading_jet_pt_nanoAOD, subleading_jet_pt_nanoAOD;
 
     /** New DiJets variables*/
     float delta_eta_diJet, delta_phi_diJet, z_zeppenfeld, pt_balance,
@@ -281,6 +285,7 @@ CreateTuple::CreateTuple(TString input, TString weightFile, TString output, TStr
     mu_charge = nullptr;
     mu_pt = nullptr;
     mu_bsConstrainedPt = nullptr;
+    mu_bsConstrainedPt_nanoAOD = nullptr;
     mu_ptErr = nullptr;
     mu_bsConstrainedPtErr = nullptr;
     mu_phi = nullptr;
@@ -290,6 +295,7 @@ CreateTuple::CreateTuple(TString input, TString weightFile, TString output, TStr
     elec_pt = nullptr;
     jet_eta = nullptr;
     jet_pt = nullptr;
+    jet_pt_nanoAOD = nullptr;
     jet_phi = nullptr;
     jet_mass = nullptr;
     jet_btagPNetB = nullptr;
@@ -320,6 +326,7 @@ CreateTuple::CreateTuple(TString input, TString weightFile, TString output, TStr
     h_nTriggerMatch->SetDirectory(0);
     h_nBjetRejection = (TH1D*)f_input->Get("h_nBjetRejection");
     h_nBjetRejection->SetDirectory(0);
+    h_nBjetRejection->Reset();
     h_nJets = (TH1D*)f_input->Get("h_nJets");
     h_nJets->SetDirectory(0);
     h_nValidJets = (TH1D*)f_input->Get("h_nValidJets");
@@ -397,6 +404,8 @@ void CreateTuple::setBranchesAddressesOutput() {
 
     // DiMuon variables
     tree_output->Branch("diMuon_mass", &diMuon_mass, "diMuon_mass/f");
+    tree_output->Branch("diMuon_bsConstrainedMass_nanoAOD", &diMuon_bsConstrainedMass_nanoAOD,
+                        "diMuon_bsConstrainedMass_nanoAOD/f");
     tree_output->Branch("diMuon_bsConstrainedMass", &diMuon_bsConstrainedMass,
                         "diMuon_bsConstrainedMass/f");
     tree_output->Branch("diMuon_pt", &diMuon_pt, "diMuon_pt/f");
@@ -427,6 +436,12 @@ void CreateTuple::setBranchesAddressesOutput() {
     tree_output->Branch("mu2_eta", &mu2_eta, "mu2_eta/f");
     tree_output->Branch("mu1_pt", &mu1_pt, "mu1_pt/f");
     tree_output->Branch("mu2_pt", &mu2_pt, "mu2_pt/f");
+    tree_output->Branch("mu1_bsConstrainedPt_nanoAOD",
+                        &mu1_bsConstrainedPt_nanoAOD,
+                        "mu1_bsConstrainedPt_nanoAOD/f");
+    tree_output->Branch("mu2_bsConstrainedPt_nanoAOD",
+                        &mu2_bsConstrainedPt_nanoAOD,
+                        "mu2_bsConstrainedPt_nanoAOD/f");
     tree_output->Branch("mu1_bsConstrainedPt", &mu1_bsConstrainedPt,
                         "mu1_bsConstrainedPt/f");
     tree_output->Branch("mu2_bsConstrainedPt", &mu2_bsConstrainedPt,
@@ -457,12 +472,20 @@ void CreateTuple::setBranchesAddressesOutput() {
     tree_output->Branch("n_bjet", &n_bjet, "n_bjet/i");
     tree_output->Branch("n_bjet_Loose", &n_bjet_Loose, "n_bjet_Loose/i");
     tree_output->Branch("leading_jet_pt", &leading_jet_pt, "leading_jet_pt/f");
+    if (jet_syst_name.empty()) {
+        tree_output->Branch("leading_jet_pt_nanoAOD", &leading_jet_pt_nanoAOD,
+                            "leading_jet_pt_nanoAOD/f");
+    }
     tree_output->Branch("leading_jet_eta", &leading_jet_eta,
                         "leading_jet_eta/f");
     tree_output->Branch("leading_jet_btagPNetB", &leading_jet_btagPNetB,
                         "leading_jet_btagPNetB/f");
     tree_output->Branch("subleading_jet_pt", &subleading_jet_pt,
                         "subleading_jet_pt/f");
+    if (jet_syst_name.empty()) {
+        tree_output->Branch("subleading_jet_pt_nanoAOD", &subleading_jet_pt_nanoAOD,
+                            "subleading_jet_pt_nanoAOD/f");
+    }
     tree_output->Branch("subleading_jet_eta", &subleading_jet_eta,
                         "subleading_jet_eta/f");
     tree_output->Branch("subleading_jet_btagPNetB", &subleading_jet_btagPNetB,
@@ -573,6 +596,9 @@ void CreateTuple::setBranchesAddressesInput() {
     tree_input->SetBranchAddress("t_Mu_pt", &mu_pt);
     tree_input->SetBranchStatus("t_Mu_bsConstrainedPt", 1);
     tree_input->SetBranchAddress("t_Mu_bsConstrainedPt", &mu_bsConstrainedPt);
+    tree_input->SetBranchStatus("t_Mu_bsConstrainedPt_nanoAOD", 1);
+    tree_input->SetBranchAddress("t_Mu_bsConstrainedPt_nanoAOD",
+                                 &mu_bsConstrainedPt_nanoAOD);
     tree_input->SetBranchStatus("t_Mu_ptErr", 1);
     tree_input->SetBranchAddress("t_Mu_ptErr", &mu_ptErr);
     tree_input->SetBranchStatus("t_Mu_bsConstrainedPtErr", 1);
@@ -615,6 +641,13 @@ void CreateTuple::setBranchesAddressesInput() {
     tree_input->SetBranchAddress("t_Jet_eta", &jet_eta);
     tree_input->SetBranchStatus("t_Jet_btagPNetB", 1);
     tree_input->SetBranchAddress("t_Jet_btagPNetB", &jet_btagPNetB);
+    if (jet_syst_name.empty()) {
+        if (!tree_input->GetBranch("t_Jet_pt_nanoAOD")) {
+            throw std::runtime_error("Jet nanoAOD pT branch not found: t_Jet_pt_nanoAOD");
+        }
+        tree_input->SetBranchStatus("t_Jet_pt_nanoAOD", 1);
+        tree_input->SetBranchAddress("t_Jet_pt_nanoAOD", &jet_pt_nanoAOD);
+    }
 
     // DiJet variables
     tree_input->SetBranchStatus("t_diJet_mass", 1);
@@ -640,6 +673,8 @@ void CreateTuple::fillOutputTree() {
     TLorentzVector mu2_vector;
     TLorentzVector mu1BSC_vector;
     TLorentzVector mu2BSC_vector;
+    TLorentzVector mu1BSC_nanoAOD_vector;
+    TLorentzVector mu2BSC_nanoAOD_vector;
     std::pair<float, float> angles_CS;
     std::cout << include_Z << std::endl;
     std::cout << include_H << std::endl;
@@ -731,6 +766,15 @@ void CreateTuple::fillOutputTree() {
 
         mu1_pt = (*mu_pt)[mu1_index];
         mu2_pt = (*mu_pt)[mu2_index];
+        mu1_bsConstrainedPt_nanoAOD = (*mu_bsConstrainedPt_nanoAOD)[mu1_index];
+        mu2_bsConstrainedPt_nanoAOD = (*mu_bsConstrainedPt_nanoAOD)[mu2_index];
+        mu1BSC_nanoAOD_vector.SetPtEtaPhiM(mu1_bsConstrainedPt_nanoAOD,
+                                           (*mu_eta)[mu1_index], (*mu_phi)[mu1_index],
+                                           MUON_MASS);
+        mu2BSC_nanoAOD_vector.SetPtEtaPhiM(mu2_bsConstrainedPt_nanoAOD,
+                                           (*mu_eta)[mu2_index], (*mu_phi)[mu2_index],
+                                           MUON_MASS);
+        diMuon_bsConstrainedMass_nanoAOD = (mu1BSC_nanoAOD_vector + mu2BSC_nanoAOD_vector).M();
         mu1_bsConstrainedPt = (*mu_bsConstrainedPt)[mu1_index];
         mu2_bsConstrainedPt = (*mu_bsConstrainedPt)[mu2_index];
         mu1_ptErr = (*mu_ptErr)[mu1_index];
@@ -763,6 +807,39 @@ void CreateTuple::fillOutputTree() {
         int leading_jet_index = -1;
         int subleading_jet_index = -1;
         n_jet = 0;
+        n_bjet = 0;
+        n_bjet_Loose = 0;
+
+        float btag_loose_cut = 0.;
+        float btag_medium_cut = 0.;
+        switch (mc_campaign) {
+        case 1:
+            btag_loose_cut = 0.047;
+            btag_medium_cut = 0.245;
+            break;
+        case 2:
+            btag_loose_cut = 0.0499;
+            btag_medium_cut = 0.2605;
+            break;
+        case 3:
+            btag_loose_cut = 0.0358;
+            btag_medium_cut = 0.1917;
+            break;
+        case 4:
+            btag_loose_cut = 0.0359;
+            btag_medium_cut = 0.1919;
+            break;
+        case 5:
+            btag_loose_cut = 0.0365;
+            btag_medium_cut = 0.1990;
+            break;
+        case 6:
+            btag_loose_cut = 0.0365;
+            btag_medium_cut = 0.1990;
+            break;
+        default:
+            throw std::runtime_error("Unsupported MC campaign for b-tag cuts");
+        }
 
         const size_t jet_count = jet_pt->size();
 
@@ -774,6 +851,13 @@ void CreateTuple::fillOutputTree() {
 
             ++n_jet;
 
+            if (jet_btagPNetB->at(jet_index) > btag_loose_cut) {
+                ++n_bjet_Loose;
+            }
+            if (jet_btagPNetB->at(jet_index) > btag_medium_cut) {
+                ++n_bjet;
+            }
+
             if (leading_jet_index < 0 ||
                 jet_pt->at(jet_index) > jet_pt->at(leading_jet_index)) {
                 subleading_jet_index = leading_jet_index;
@@ -784,10 +868,18 @@ void CreateTuple::fillOutputTree() {
             }
         }
 
+        if (n_bjet_Loose > 1 || n_bjet > 0) {
+            continue;
+        }
+
+        h_nBjetRejection->Fill(0.5);
+
         leading_jet_pt = 0;
+        leading_jet_pt_nanoAOD = 0;
         leading_jet_eta = 0;
         leading_jet_btagPNetB = 0;
         subleading_jet_pt = 0;
+        subleading_jet_pt_nanoAOD = 0;
         subleading_jet_eta = 0;
         subleading_jet_btagPNetB = 0;
         diJet_pt = 0;
@@ -804,6 +896,9 @@ void CreateTuple::fillOutputTree() {
 
         if (leading_jet_index >= 0) {
             leading_jet_pt = jet_pt->at(leading_jet_index);
+            if (jet_syst_name.empty()) {
+                leading_jet_pt_nanoAOD = jet_pt_nanoAOD->at(leading_jet_index);
+            }
             leading_jet_eta = jet_eta->at(leading_jet_index);
             leading_jet_btagPNetB = jet_btagPNetB->at(leading_jet_index);
             min_delta_eta_diMuon_jet = DeltaEta(diMuon_eta, jet_eta->at(leading_jet_index));
@@ -812,6 +907,9 @@ void CreateTuple::fillOutputTree() {
 
         if (leading_jet_index >= 0 && subleading_jet_index >= 0) {
             subleading_jet_pt = jet_pt->at(subleading_jet_index);
+            if (jet_syst_name.empty()) {
+                subleading_jet_pt_nanoAOD = jet_pt_nanoAOD->at(subleading_jet_index);
+            }
             subleading_jet_eta = jet_eta->at(subleading_jet_index);
             subleading_jet_btagPNetB = jet_btagPNetB->at(subleading_jet_index);
 
@@ -976,7 +1074,6 @@ bool CreateTuple::passesJetPtSelection(size_t index) const {
     if (pt <= 25.) {
         return false;
     }
-
     // 2022, 2022EE, 2023, 2023BPix
     if (mc_campaign == 1 || mc_campaign == 2 ||
         mc_campaign == 3 || mc_campaign == 4) {

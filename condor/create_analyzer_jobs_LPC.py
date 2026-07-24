@@ -57,28 +57,31 @@ list_datasets = datasets_info.keys()
     #"Muon0_2024C",
     #"Muon0_2023C_v1",
     #"Muon0_2024I_v2",
-    #"Muon0_2025B",
+#    "Muon0_2025B",
     #"Muon0_2025G",
     #"TTto2L2Nu_Summer23",
+#    "TTtoLNu2Q_Summer22_ext1",
+#    "TTtoLNu2Q_Summer22",
+#    "TTtoLNu2Q_Summer24",
+#    "TTto2L2Nu_Summer24",
     #"VBF_Summer22",
     #"WZZ_Summer23BPix",
     #"VBF_Summer22",
     #"VBF_Summer22EE",
     #"VBF_Summer23",
     #"VBF_Summer23BPix",
-    #"VBF_Summer24",
+#    "VBF_Summer24",
     #"ggH_Summer22",
     #"ggH_Summer22EE",
     #"ggH_Summer23",
     #"ggH_Summer23BPix",
-#    "ggH_Summer24",
-#    "DY50to120_Summer22",
-#    "DY120to200_Summer24",
     #"WWtoLNu2Q_Summer22",
     #"Muon_2022C",
 #    "Muon_2022D",
 #    "SingleMuon_2022C",
 #]
+
+
 
 include_Z = "F"
 include_H = "T"
@@ -137,6 +140,7 @@ for dataset_name in list_datasets:
         Output_DIR = "analyzer_%s/"%(outputfile) + "%s_"%(dataset_name)+ "%s/"%(muon_pt_syst)
 
     Job_DIR = Condor_BASE_DIR + Output_DIR
+    print("jobdir", Job_DIR)
     if os.path.exists(Job_DIR + "input_list.tgz"):
         print(" (!) Condor directory already exists. Skipping!")
         continue
@@ -270,7 +274,7 @@ for dataset_name in list_datasets:
 
     jobfile_JDL.write("should_transfer_files = YES" + "\n")
     jobfile_JDL.write("when_to_transfer_output = ON_EXIT" + "\n\n# Resources request\n")
-    jobfile_JDL.write("RequestMemory = 3000 \n\n# Jobs selection\n")
+    jobfile_JDL.write("RequestMemory = 1500 \n\n# Jobs selection\n")
 
     jobfile_JDL.write("Queue I from (")
     for i in range(1, n_jobs+1):
