@@ -8,7 +8,7 @@ import pandas as pd
 import math
 import pickle as pickle
 import ROOT as root
-import uproot as uproot
+import uproot
 import xgboost as xgb
 
 root.gROOT.Reset()
@@ -538,7 +538,7 @@ def plot_loss(test_loss, train_loss, test_name, plot_path, era):
     plt.savefig(f"{plot_path}training/loss_{test_name}.pdf")
     plt.savefig(f"{plot_path}training/loss_{test_name}.png")
 
-'''
+
 if __name__ == "__main__":
     import sys
     HIGGS_CHANNEL = sys.argv[1]
@@ -565,4 +565,4 @@ if __name__ == "__main__":
         std_map,
         DO_STANDARDIZATION,
         USE_BSCONSTRAIN,
-    )'''
+    )
