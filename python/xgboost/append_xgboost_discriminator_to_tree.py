@@ -43,6 +43,8 @@ elif len(sys.argv) == 7:
 else:
     print("Include subset of background AND signal only.")
     exit()
+
+use_bsConstrain = True
 print("Channel under study: ", channel_US)
 print("Era: ", era)
 print("Background subset: ", background_subset)
@@ -82,6 +84,9 @@ Tree = File.Get("tree_output")
 #model_name = channel_US + "_" + era + "_" + subset_title
 model_name = channel_US + "_" + model_era + "_" + subset_title
 model_file = "./models/model_" + model_name + ".pkl"
+
+if use_bsConstrain:
+    model_file = "./models/model_" + model_name + "_bsC.pkl"
 
 variables = [
     ["diMuon_rapidity", "diMuon_rapidity", r"$y_{\mu\mu}$"],
