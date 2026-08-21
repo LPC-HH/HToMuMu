@@ -1,6 +1,13 @@
-ANALYZER_VERSION="v1.5"
-TUPLES_VERSION="v1.5.0"
+ANALYZER_VERSION="v2.0"
+TUPLES_VERSION="v2.0.0"
 inEOS_PATH="/store/group/lpchmumu/$USER/analyzer_HiggsMuMu_$ANALYZER_VERSION/tuples_$TUPLES_VERSION/"
+
+COPY_TO_EOS=false
+while getopts "c" opt; do
+    case $opt in
+        c) COPY_TO_EOS=true ;;
+    esac
+done
 
 ############  2022Combined  ###########
 hadd Data_2022Combined_tuples.root Data_2022_tuples.root Data_2022EE_tuples.root
@@ -39,7 +46,9 @@ hadd ggH_Combined_tuples.root ggH_2022_tuples.root ggH_2022EE_tuples.root ggH_20
 hadd VBF_Combined_tuples.root VBF_2022_tuples.root VBF_2022EE_tuples.root VBF_2023_tuples.root VBF_2023BPix_tuples.root VBF_2024_tuples.root
 hadd ttH_Combined_tuples.root ttH_2022_tuples.root ttH_2022EE_tuples.root ttH_2023_tuples.root ttH_2023BPix_tuples.root ttH_2024_tuples.root
 
-echo eosmkdir ${inEOS_PATH}haddTuples/Combined/
-eosmkdir ${inEOS_PATH}haddTuples/Combined/
-echo eos cp *_Combined_*.root root://cmseos.fnal.gov//${inEOS_PATH}haddTuples/Combined/
-eos cp *_Combined_*.root root://cmseos.fnal.gov//${inEOS_PATH}haddTuples/Combined/
+if $COPY_TO_EOS; then
+    echo eosmkdir ${inEOS_PATH}haddTuples/Combined/
+    eosmkdir ${inEOS_PATH}haddTuples/Combined/
+    echo eos cp *_Combined_*.root root://cmseos.fnal.gov//${inEOS_PATH}haddTuples/Combined/
+    eos cp *_Combined_*.root root://cmseos.fnal.gov//${inEOS_PATH}haddTuples/Combined/
+fi
