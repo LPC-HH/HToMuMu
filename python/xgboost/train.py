@@ -50,232 +50,236 @@ TEST_SIZE = 0.4
 SAMPLE_SIZE = 1.0
 SIGNAL_REGION = (121, 129)
 
+if not ifRetrain:
+    DO_STANDARDIZATION = False
+    mean_map = {}
+    std_map = {}
+
 variables = xgb_utils.get_variables(channel_US, USE_BSCONSTRAIN)
 print("number of variables", len(variables) - 3)
 
-test_name = f"{channel_US}_{era}_B{background_subset}_S{signal_subset}"
-plot_path = f"../../plots/xgboost/{channel_US}/B{background_subset}_S{signal_subset}/"
-data_directory = f"../../root_io/skim/{channel_US}/"
-signal_file_name = f"{data_directory}signal_{era}_skim_{signal_subset}.root"
-bkg_file_name = f"{data_directory}background_{era}_skim_{background_subset}.root"
-
-os.makedirs(plot_path, exist_ok=True)
-for subdir in ["training", "results", "scores", "variables"]:
-    os.makedirs(os.path.join(plot_path, subdir), exist_ok=True)
-    shutil.copy("../index.php", os.path.join(plot_path, subdir))
-os.makedirs("models", exist_ok=True)
-os.makedirs("roc", exist_ok=True)
-
-##Getting ROOT files into pandas
-print("[INFO]: Creating data frames")
-with uproot.open(signal_file_name) as file:
-    df_signal = pd.DataFrame(
-        file["tree_output"].arrays([var[0] for var in variables], library="np"),
-    )
-with uproot.open(bkg_file_name) as file:
-    df_bkg = pd.DataFrame(
-        file["tree_output"].arrays([var[0] for var in variables], library="np"),
-    )
-print("[INFO]: Data frames created successfully")
-
-if USE_BSCONSTRAIN:
-    mass_var_name = "diMuon_bsConstrainedMass"
-else:
-    mass_var_name = "diMuon_mass"
-
-bkg_events = df_bkg["weight"][
-    (df_bkg[mass_var_name] > SIGNAL_REGION[0])
-    & (df_bkg[mass_var_name] < SIGNAL_REGION[1])
-].sum()
-signal_events = df_signal["weight"][
-    (df_signal[mass_var_name] > SIGNAL_REGION[0])
-    & (df_signal[mass_var_name] < SIGNAL_REGION[1])
-].sum()
-
-####  weight Normalization
-signal_weight_sum = df_signal["weight"].sum()
-bkg_weight_sum = df_bkg["weight"].sum()
-df_signal["weight"] = df_signal["weight"] * (bkg_weight_sum / signal_weight_sum)
-
-s_over_sqrt_b = signal_events / math.sqrt(bkg_events)
-print(
-    f"[INFO]: S = {signal_events:.3f}; B = {bkg_events:.3f}; S/sqrt(B) = {s_over_sqrt_b:.3f}"
-)
-print(f"[INFO]: Signal sample size: {len(df_signal.values)}")
-print(f"[INFO]: Bkg sample size: {len(df_bkg.values)}")
-
-x = np.concatenate([df_bkg.values, df_signal.values])
-y = np.concatenate([np.zeros(len(df_bkg)), np.ones(len(df_signal))])
-
-### Apply dimuon mass cut
-print("len y pred cut:", len(y))
-y = y[(x[:, -3] > 115) & (x[:, -3] < 135)]
-x = x[(x[:, -3] > 115) & (x[:, -3] < 135)]
-print("len y post cut:", len(y))
-
-if DRAW_CORRELATIONS:
-    xgb_utils.draw_correlation_matrix(
-        signal_file_name, bkg_file_name, variables[:-2], plot_path, test_name
-    )
-
-# split data into train and test sets
-SEED = 7
-TEST_SIZE = 0.4
-SAMPLE_SIZE = 1.0
-x_train_p, x_test_p, y_train, y_test = train_test_split(
-    x,
-    y,
-    train_size=SAMPLE_SIZE * (1 - TEST_SIZE),
-    test_size=SAMPLE_SIZE * TEST_SIZE,
-    random_state=SEED,
-)
-
-x_train = x_train_p[:, :-3]
-x_test = x_test_p[:, :-3]
-sample_weights_train = x_train_p[:, -1]
-sample_weights_test = x_test_p[:, -1]
-
-print("-inf position (by index):", np.isneginf(x_train)[np.isneginf(x_train)])
-print("inf position (by index):", np.isinf(x_train)[np.isinf(x_train)])
-print("nan position (by index):", np.isnan(x_train)[np.isnan(x_train)])
-x_train[np.isneginf(x_train)] = np.nan
-x_train[np.isinf(x_train)] = np.nan
-x_train[np.isnan(x_train)] = 0.0
-
-print("x_train:", x_train)
-mean_map = {}
-std_map = {}
-if DO_STANDARDIZATION:
-    for i, var in enumerate(variables[:-3]):
-        print("standarizing : ", var[0])
-        print("Iterator : ", i)
-        null_value = 0
-        if var[0] in ["delta_phi_diJet", "pt_balance"]:
-            null_value = -1
-
-        mask_train = x_train[:, i] != null_value
-        mask_test = x_test[:, i] != null_value
-        mean_map[var[0]] = x_train[mask_train, i].mean()
-        std_map[var[0]] = x_train[mask_train, i].std()
-        print("[Info]: Train Sample Mean: ", mean_map[var[0]])
-        print("[Info]: Train Sample std: ", std_map[var[0]])
-        x_train[mask_train, i] = (x_train[mask_train, i] - mean_map[var[0]]) / std_map[
-            var[0]
-        ]
-        x_test[mask_test, i] = (x_test[mask_test, i] - mean_map[var[0]]) / std_map[
-            var[0]
-        ]
-
-print("x_train standaried:", x_train)
-
-w_train = np.absolute(sample_weights_train) / np.array(x_train_p[:, -2])
-w_test = np.absolute(sample_weights_test) / np.array(x_test_p[:, -2])
-
-def objective(trial):
-
-    params = {
-        "max_depth": trial.suggest_int("max_depth", 2, 5),
-        "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.2, log=True),
-        "n_estimators": 2000,
-        "device": "cuda",
-
-        "min_child_weight": trial.suggest_float("min_child_weight", 1.0, 20.0, log=True),
-        "subsample": trial.suggest_float("subsample", 0.6, 1.0),
-        "colsample_bytree": trial.suggest_float("colsample_bytree", 0.6, 1.0),
-
-        "reg_lambda": trial.suggest_float("reg_lambda", 0.1, 10.0, log=True),
-        "reg_alpha": trial.suggest_float("reg_alpha", 1e-4, 1.0, log=True),
-
-        "objective": "binary:logistic",
-        "eval_metric": "logloss",
-        "n_jobs": 4,
-        "verbosity": 0,
-        "early_stopping_rounds": 50,
-    }
-
-    model = xgb.XGBClassifier(**params)
-
-    model.fit(
-        x_train,
-        y_train,
-        sample_weight=w_train,
-        eval_set=[(x_train, y_train), (x_test, y_test)],
-        sample_weight_eval_set=[w_train, w_test],
-        verbose=False,
-    )
-
-    y_pred = model.predict_proba(x_test)[:, 1]
+if ifRetrain:
+    test_name = f"{channel_US}_{era}_B{background_subset}_S{signal_subset}"
+    plot_path = f"../../plots/xgboost/{channel_US}/B{background_subset}_S{signal_subset}/"
+    data_directory = f"../../root_io/skim/{channel_US}/"
+    signal_file_name = f"{data_directory}signal_{era}_skim_{signal_subset}.root"
+    bkg_file_name = f"{data_directory}background_{era}_skim_{background_subset}.root"
     
-    #Z = compute_significance(y_test, y_pred, w_test)
-
-    auc = roc_auc_score(
-        y_test,
-        y_pred,
-        sample_weight=w_test,
-    )
-
-    return auc
-
-nTrials = 1000
-if(ifOptimize):
-    optimization_plot_path = "optunaPlots/" + channel_US + "/"
-    os.makedirs(optimization_plot_path, exist_ok=True)
-    study = optuna.create_study(direction="maximize")
-    study.optimize(objective, n_trials=nTrials)
-
-    print("Best AUC:", study.best_value)
-    print("Best parameters:")
-    print(study.best_params)
-
-    fig = vis.plot_optimization_history(study)
-    fig.write_html(optimization_plot_path + "optimization_history.html")
-    #fig.show()
-
-    fig = vis.plot_param_importances(study)
-    fig.write_html(optimization_plot_path + "param_importance.html")
-    #fig.show()
-
-    fig = vis.plot_slice(
-    study,
-    params=[
-        "max_depth",
-        "learning_rate",
-        "min_child_weight",
-        "subsample",
-        "colsample_bytree",
-        "reg_lambda",
-        "reg_alpha",
-    ],
-    )
-
-    fig.write_html(optimization_plot_path + "optuna_slice.html")
-    best_params = study.best_params   
-    model = xgb.XGBClassifier(
-        **best_params,
-        n_estimators=2000,
-        verbosity=2,
-        n_jobs=4,
-        eval_metric=["logloss", "auc"],
-        early_stopping_rounds=50
-    )
-
-    model.fit(
-        x_train,
-        y_train,
-        sample_weight=w_train,
-        eval_set=[(x_train, y_train), (x_test, y_test)],
-        sample_weight_eval_set=[w_train, w_test],
-    )
-
-    results = model.evals_result()
-
-    train_loss = results["validation_0"]["logloss"]
-    test_loss  = results["validation_1"]["logloss"]
-
-    xgb_utils.plot_loss(test_loss, train_loss, test_name, optimization_plot_path, era)
+    os.makedirs(plot_path, exist_ok=True)
+    for subdir in ["training", "results", "scores", "variables"]:
+        os.makedirs(os.path.join(plot_path, subdir), exist_ok=True)
+        shutil.copy("../index.php", os.path.join(plot_path, subdir))
+    os.makedirs("models", exist_ok=True)
+    os.makedirs("roc", exist_ok=True)
     
-
-if(ifRetrain):
+    ##Getting ROOT files into pandas
+    print("[INFO]: Creating data frames")
+    with uproot.open(signal_file_name) as file:
+        df_signal = pd.DataFrame(
+            file["tree_output"].arrays([var[0] for var in variables], library="np"),
+        )
+    with uproot.open(bkg_file_name) as file:
+        df_bkg = pd.DataFrame(
+            file["tree_output"].arrays([var[0] for var in variables], library="np"),
+        )
+    print("[INFO]: Data frames created successfully")
+    
+    if USE_BSCONSTRAIN:
+        mass_var_name = "diMuon_bsConstrainedMass"
+    else:
+        mass_var_name = "diMuon_mass"
+    
+    bkg_events = df_bkg["weight"][
+        (df_bkg[mass_var_name] > SIGNAL_REGION[0])
+        & (df_bkg[mass_var_name] < SIGNAL_REGION[1])
+    ].sum()
+    signal_events = df_signal["weight"][
+        (df_signal[mass_var_name] > SIGNAL_REGION[0])
+        & (df_signal[mass_var_name] < SIGNAL_REGION[1])
+    ].sum()
+    
+    ####  weight Normalization
+    signal_weight_sum = df_signal["weight"].sum()
+    bkg_weight_sum = df_bkg["weight"].sum()
+    df_signal["weight"] = df_signal["weight"] * (bkg_weight_sum / signal_weight_sum)
+    
+    s_over_sqrt_b = signal_events / math.sqrt(bkg_events)
+    print(
+        f"[INFO]: S = {signal_events:.3f}; B = {bkg_events:.3f}; S/sqrt(B) = {s_over_sqrt_b:.3f}"
+    )
+    print(f"[INFO]: Signal sample size: {len(df_signal.values)}")
+    print(f"[INFO]: Bkg sample size: {len(df_bkg.values)}")
+    
+    x = np.concatenate([df_bkg.values, df_signal.values])
+    y = np.concatenate([np.zeros(len(df_bkg)), np.ones(len(df_signal))])
+    
+    ### Apply dimuon mass cut
+    print("len y pred cut:", len(y))
+    y = y[(x[:, -3] > 115) & (x[:, -3] < 135)]
+    x = x[(x[:, -3] > 115) & (x[:, -3] < 135)]
+    print("len y post cut:", len(y))
+    
+    if DRAW_CORRELATIONS:
+        xgb_utils.draw_correlation_matrix(
+            signal_file_name, bkg_file_name, variables[:-2], plot_path, test_name
+        )
+    
+    # split data into train and test sets
+    SEED = 7
+    TEST_SIZE = 0.4
+    SAMPLE_SIZE = 1.0
+    x_train_p, x_test_p, y_train, y_test = train_test_split(
+        x,
+        y,
+        train_size=SAMPLE_SIZE * (1 - TEST_SIZE),
+        test_size=SAMPLE_SIZE * TEST_SIZE,
+        random_state=SEED,
+    )
+    
+    x_train = x_train_p[:, :-3]
+    x_test = x_test_p[:, :-3]
+    sample_weights_train = x_train_p[:, -1]
+    sample_weights_test = x_test_p[:, -1]
+    
+    print("-inf position (by index):", np.isneginf(x_train)[np.isneginf(x_train)])
+    print("inf position (by index):", np.isinf(x_train)[np.isinf(x_train)])
+    print("nan position (by index):", np.isnan(x_train)[np.isnan(x_train)])
+    x_train[np.isneginf(x_train)] = np.nan
+    x_train[np.isinf(x_train)] = np.nan
+    x_train[np.isnan(x_train)] = 0.0
+    
+    print("x_train:", x_train)
+    mean_map = {}
+    std_map = {}
+    if DO_STANDARDIZATION:
+        for i, var in enumerate(variables[:-3]):
+            print("standarizing : ", var[0])
+            print("Iterator : ", i)
+            null_value = 0
+            if var[0] in ["delta_phi_diJet", "pt_balance"]:
+                null_value = -1
+    
+            mask_train = x_train[:, i] != null_value
+            mask_test = x_test[:, i] != null_value
+            mean_map[var[0]] = x_train[mask_train, i].mean()
+            std_map[var[0]] = x_train[mask_train, i].std()
+            print("[Info]: Train Sample Mean: ", mean_map[var[0]])
+            print("[Info]: Train Sample std: ", std_map[var[0]])
+            x_train[mask_train, i] = (x_train[mask_train, i] - mean_map[var[0]]) / std_map[
+                var[0]
+            ]
+            x_test[mask_test, i] = (x_test[mask_test, i] - mean_map[var[0]]) / std_map[
+                var[0]
+            ]
+    
+    print("x_train standaried:", x_train)
+    
+    w_train = np.absolute(sample_weights_train) / np.array(x_train_p[:, -2])
+    w_test = np.absolute(sample_weights_test) / np.array(x_test_p[:, -2])
+    
+    def objective(trial):
+    
+        params = {
+            "max_depth": trial.suggest_int("max_depth", 2, 5),
+            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.2, log=True),
+            "n_estimators": 2000,
+            "device": "cuda",
+    
+            "min_child_weight": trial.suggest_float("min_child_weight", 1.0, 20.0, log=True),
+            "subsample": trial.suggest_float("subsample", 0.6, 1.0),
+            "colsample_bytree": trial.suggest_float("colsample_bytree", 0.6, 1.0),
+    
+            "reg_lambda": trial.suggest_float("reg_lambda", 0.1, 10.0, log=True),
+            "reg_alpha": trial.suggest_float("reg_alpha", 1e-4, 1.0, log=True),
+    
+            "objective": "binary:logistic",
+            "eval_metric": "logloss",
+            "n_jobs": 4,
+            "verbosity": 0,
+            "early_stopping_rounds": 50,
+        }
+    
+        model = xgb.XGBClassifier(**params)
+    
+        model.fit(
+            x_train,
+            y_train,
+            sample_weight=w_train,
+            eval_set=[(x_train, y_train), (x_test, y_test)],
+            sample_weight_eval_set=[w_train, w_test],
+            verbose=False,
+        )
+    
+        y_pred = model.predict_proba(x_test)[:, 1]
+        
+        #Z = compute_significance(y_test, y_pred, w_test)
+    
+        auc = roc_auc_score(
+            y_test,
+            y_pred,
+            sample_weight=w_test,
+        )
+    
+        return auc
+    
+    nTrials = 1000
+    if(ifOptimize):
+        optimization_plot_path = "optunaPlots/" + channel_US + "/"
+        os.makedirs(optimization_plot_path, exist_ok=True)
+        study = optuna.create_study(direction="maximize")
+        study.optimize(objective, n_trials=nTrials)
+    
+        print("Best AUC:", study.best_value)
+        print("Best parameters:")
+        print(study.best_params)
+    
+        fig = vis.plot_optimization_history(study)
+        fig.write_html(optimization_plot_path + "optimization_history.html")
+        #fig.show()
+    
+        fig = vis.plot_param_importances(study)
+        fig.write_html(optimization_plot_path + "param_importance.html")
+        #fig.show()
+    
+        fig = vis.plot_slice(
+        study,
+        params=[
+            "max_depth",
+            "learning_rate",
+            "min_child_weight",
+            "subsample",
+            "colsample_bytree",
+            "reg_lambda",
+            "reg_alpha",
+        ],
+        )
+    
+        fig.write_html(optimization_plot_path + "optuna_slice.html")
+        best_params = study.best_params   
+        model = xgb.XGBClassifier(
+            **best_params,
+            n_estimators=2000,
+            verbosity=2,
+            n_jobs=4,
+            eval_metric=["logloss", "auc"],
+            early_stopping_rounds=50
+        )
+    
+        model.fit(
+            x_train,
+            y_train,
+            sample_weight=w_train,
+            eval_set=[(x_train, y_train), (x_test, y_test)],
+            sample_weight_eval_set=[w_train, w_test],
+        )
+    
+        results = model.evals_result()
+    
+        train_loss = results["validation_0"]["logloss"]
+        test_loss  = results["validation_1"]["logloss"]
+    
+        xgb_utils.plot_loss(test_loss, train_loss, test_name, optimization_plot_path, era)
+        
     # fit model no training data
     if(ifOptimize):
         model = xgb.XGBClassifier(
@@ -288,7 +292,7 @@ if(ifRetrain):
         )
 
     else:
-        if(channel_US == 'ggH'):
+        '''if(channel_US == 'ggH'):
             print("USING GGH OPTIMIZED BDT PARAMETERS")
             opted_params = {'max_depth': 5, 'learning_rate': 0.17065960988185175, 'min_child_weight': 1.258974431208238,
                             'subsample': 0.9799252299722975, 'colsample_bytree': 0.9857090292326347, 
@@ -305,16 +309,16 @@ if(ifRetrain):
             n_jobs=4,
             eval_metric=["logloss", "auc"],
             early_stopping_rounds=50
-        )
+        )'''
 
-        #model = xgb.XGBClassifier(
-        #    max_depth=3,
-        #    learning_rate=0.1,
-        #    n_estimators=400,
-        #    verbosity=2,
-        #    n_jobs=4,
-        #    reg_lambda=1.0,
-        #)
+        model = xgb.XGBClassifier(
+            max_depth=3,
+            learning_rate=0.1,
+            n_estimators=400,
+            verbosity=2,
+            n_jobs=4,
+            reg_lambda=1.0,
+        )
 
     print("weights: ", sample_weights_train)
     print("abs(weights): ", np.absolute(sample_weights_train[y_train == 1]))
@@ -445,7 +449,8 @@ if not APPEND_VARIABLES:
     print("[INFO]: BDT score was not added to the trees")
     exit()
 
-tuples = ["Data", "DY", "EWK", "TT", "DiBoson", "ggH", "VBF", "ttH"]
+tuples = ["Data", "DY", "EWK", "TT", "DiBoson", "ggH", "VBF"]#, "ttH"]
+#tuples = ["ggH", "VBF"]
 if(era == "2025"):
    tuples = ["Data"]
 for file_type in tuples:

@@ -4,9 +4,13 @@ import numpy as np
 import math
 import matplotlib.pyplot as plt
 import sys
+from pathlib import Path
 
 from utils.labels import luminosity, x_range, n_bins, x_labels
 from utils.helper import get_canvas, save_figure, get_histograms_ratio
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "python"))
+from bdt_categories_io import save_bdt_category
 
 if len(sys.argv) < 3:
     print(
@@ -57,8 +61,8 @@ BDT_score_path = "../root_io/tuples/BDT_score/" + channel_US + "/" + subset_titl
 #N_max_iterations = 2 if channel_US == "ggH" else 2
 use_bsConstrain = True
 #signal_region = (122.5 , 127.5)
-signal_region = (121 , 129)
-draw_data = False
+signal_region = (122.5 , 127.5)
+draw_data = True
 
 if use_bsConstrain:
     diMuon_mass_name = "diMuon_bsConstrainedMass"
@@ -574,6 +578,7 @@ def draw_bdt_categories(era):
     bdt_categories.append(1.0)
     bdt_categories.append(0.0)
     bdt_categories.sort()
+    save_bdt_category(channel_US, era, subset_title, diMuon_mass_name, bdt_categories)
     log_y = False
 
     print("Era: ", era)
