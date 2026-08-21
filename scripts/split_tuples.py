@@ -1,7 +1,11 @@
 import os
-from sys import argv
+from sys import argv, path as sys_path
 import uproot
 import numpy as np
+from pathlib import Path
+
+sys_path.insert(0, str(Path(__file__).resolve().parent.parent / "python"))
+from bdt_categories_io import load_bdt_categories, get_bdt_cuts
 
 def get_output_file_name(data_type, path):
     return os.path.join(
@@ -138,23 +142,13 @@ if __name__ == "__main__":
     out_path = f"./root_io/tuples/split_tuples/{channel}"
     input_path = f"./root_io/tuples/BDT_score/{channel}/BFull_SNottH/"
     os.makedirs(out_path, exist_ok=True)
-    if use_bsConstrain:
-        #bdt_cuts = {
-        #    "ggH": [0.0, 0.20969230769230757, 0.44615384615384546, 1.0],
-        #    "VBF": [0.0, 0.44603999999999994, 0.7559999999999996, 0.9450000000000007, 1.0], 
-        #}
-        bdt_cuts = {"ggH" : [0.0, 0.4400000000000002, 0.6100000000000003, 0.8100000000000005, 0.9200000000000006, 1.0], 
-                    "VBF": [0.0, 0.646666666666667, 0.8800000000000018, 0.9466666666666689, 0.9733333333333357, 1.0]
-                    }
-    else:
-        #bdt_cuts = {
-            #"ggH": [0.0, 0.18615384615384592, 0.42307692307692246, 1.0],
-#            "ggH": [0.0, 0.19184615384615372, 0.44615384615384546, 1.0],
-       #     "VBF": [0.0, 0.3448846153846141, 0.7038461538461517, 0.938461538461536, 1.0],
-            #"VBF" :[0.0, 0.3614625000000003, 0.7087499999999998, 0.9450000000000007, 1.0],
 
-       # }
-        bdt_cuts = {"ggH" : [0.0, 0.19730769230769193, 0.4384615384615378, 1.0], "VBF": [0.0, 0.19152000000000016, 0.5472000000000005, 0.8550000000000006, 1.0]}
+    mass_variable = "diMuon_bsConstrainedMass" if use_bsConstrain else "diMuon_mass"
+    bdt_categories_info = load_bdt_categories()
+    bdt_cuts = {
+        ch: get_bdt_cuts(bdt_categories_info, ch, "Combined", "BFull_SNottH", mass_variable)
+        for ch in ["ggH", "VBF"]
+    }
 
     input_file_name = get_input_file_name(data_type, input_path)
     output_file_name = get_output_file_name(data_type, out_path)
