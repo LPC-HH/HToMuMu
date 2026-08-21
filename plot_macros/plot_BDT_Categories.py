@@ -61,7 +61,7 @@ BDT_score_path = "../root_io/tuples/BDT_score/" + channel_US + "/" + subset_titl
 #N_max_iterations = 2 if channel_US == "ggH" else 2
 use_bsConstrain = True
 #signal_region = (122.5 , 127.5)
-signal_region = (121 , 129)
+signal_region = (122.5 , 127.5)
 draw_data = True
 
 if use_bsConstrain:
