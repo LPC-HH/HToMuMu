@@ -11,8 +11,9 @@ Once you have access to the cluster and the grid, go to https://analytics-hub.fn
 When you are in, do
 ```
 "${SHELL}" <(curl -L micro.mamba.pm/install.sh)
-micromamba create -n xgboost_env xgboost python=3.10 krb5  curl cfitsio root tensorflow keras -c conda-forge
-micromamba activate xgboost_env
+micromamba create -n xgboost_env xgboost python=3.10 krb5 curl cfitsio root tensorflow keras cupy -c conda-forge
+cd /<your_path>/python/xgboost
+source setup.sh #activates the xgboost_env
 pip3 install pandas 
 pip3 install uproot
 pip3 install matplotlib
@@ -20,7 +21,15 @@ pip3 install graphviz
 pip3 install mplhep
 pip3 install optuna
 pip3 install plotly
+pip3 install seaborn
 
+
+```
+
+If you are having issues with xgboost not using cuda, you may need to 
+```
+micromamba remove xgboost py-xgboost libxgboost
+micromamba install -c conda-forge "py-xgboost=*=cuda*"
 ```
 
 ## How to run
