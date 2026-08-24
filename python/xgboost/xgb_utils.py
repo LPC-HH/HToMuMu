@@ -538,6 +538,56 @@ def plot_loss(test_loss, train_loss, test_name, plot_path, era):
     plt.savefig(f"{plot_path}training/loss_{test_name}.pdf")
     plt.savefig(f"{plot_path}training/loss_{test_name}.png")
 
+def plot_BDT_sculpting(
+    y_pred, 
+    y_pred_train,
+    y_test,
+    y_train,
+    x_test_p,
+    x_train_p,
+    channel_US,
+    era,
+    plot_path,
+    bdt_divisions=10):
+    
+    mass_low = 115
+    mass_high = 135
+    hep.style.use("CMS")
+    fig, ax = plt.subplots()
+    
+    hep.cms.label(
+        data="False",
+        label="",
+        year=era,
+        com="13.6",
+        lumi=str(luminosity[era]),
+    )
+    ax.set_xlabel('$M_{\mu\mu}$')
+    ax.set_ylabel('Normalized Events')
+    ax.set_title("BDT Sculpting " + channel_US, y=-0.15)
+
+    diMuon_mass_BSC = np.concatenate((x_test_p[:, -3][y_test == 0],x_train_p[:, -3][y_train == 0]))
+    total_weights = np.concatenate((x_test_p[:, -1][y_test == 0],x_train_p[:, -1][y_train == 0]))
+    bdt_score = np.concatenate((y_pred[y_test == 0],y_pred_train[y_train == 0]))
+
+    for bdt_cut in np.linspace(0,1-1/bdt_divisions,bdt_divisions):
+        bdt_spacing = 1/bdt_divisions
+        bdt_low = bdt_cut
+        bdt_high = bdt_low + bdt_spacing
+        
+        mask = (bdt_score > bdt_low) & (diMuon_mass_BSC > mass_low) & (diMuon_mass_BSC < mass_high)
+        hep.style.use("CMS")
+    
+        counts, bins = np.histogram(diMuon_mass_BSC[mask], bins=20, weights=total_weights[mask])
+        counts = counts / counts.sum()
+    
+        hep.histplot(counts, bins=bins, ax=ax, label=f"BDT > {bdt_low:.2f}")
+        
+    ax.legend(bbox_to_anchor=(1.02, 1), loc='upper left')
+    os.makedirs(f"{plot_path}training/", exist_ok=True)
+    plt.savefig(f"{plot_path}training/BDTsculpting_{channel_US}_{era}.pdf", bbox_inches="tight")
+    plt.savefig(f"{plot_path}training/BDTsculpting_{channel_US}_{era}.png", bbox_inches="tight")
+    
 
 if __name__ == "__main__":
     import sys

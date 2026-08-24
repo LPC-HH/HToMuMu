@@ -318,6 +318,7 @@ if ifRetrain:
             verbosity=2,
             n_jobs=4,
             reg_lambda=1.0,
+            device='cuda',
         )
 
     print("weights: ", sample_weights_train)
@@ -428,6 +429,19 @@ if ifRetrain:
         era,
         plot_path,
         scale="linear",
+    )
+
+    xgb_utils.plot_BDT_sculpting(
+        y_pred, 
+        y_pred_train,
+        y_test,
+        y_train,
+        x_test_p,
+        x_train_p,
+        channel_US,
+        era,
+        plot_path,
+        bdt_divisions=6
     )
 
     results = model.evals_result()
