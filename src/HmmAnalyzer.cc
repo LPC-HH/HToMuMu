@@ -175,7 +175,7 @@ void HmmAnalyzer::EventLoop() {
     std::cout << "Btag calibration loaded" << std::endl;           
     long nentries = fChain->GetEntriesFast();
     //h_nEntries->SetBinContent(1, nentries);
-    // nentries = 50;
+    //nentries = 5000;
     long nbytes = 0;
     long nb = 0;
     
@@ -262,7 +262,7 @@ void HmmAnalyzer::EventLoop() {
         int n_valid_muons = 0;
         bool two_valid_muons = false;
         bool trig_match = false;
-        
+
         for (int i = 0; i < nMuon; i++) {
             const float pt_raw = Muon_bsConstrainedPt[i];
 
@@ -310,14 +310,6 @@ void HmmAnalyzer::EventLoop() {
                 Muon_looseId[i]) {
                 n_valid_muons++;
             }
-
-            t_Mu_EffSF_ID->push_back(corrector.give_eff("Muon_eff_SF_ID", Muon_pt[i], Muon_eta[i]));
-            t_Mu_EffSF_ID_stat->push_back(corrector.give_eff("Muon_eff_SF_ID_stat", Muon_pt[i], Muon_eta[i]));
-            t_Mu_EffSF_ID_syst->push_back(corrector.give_eff("Muon_eff_SF_ID_syst", Muon_pt[i], Muon_eta[i]));
-
-            t_Mu_EffSF_ISO->push_back(corrector.give_eff("Muon_eff_SF_ISO", Muon_pt[i], Muon_eta[i]));
-            t_Mu_EffSF_ISO_stat->push_back(corrector.give_eff("Muon_eff_SF_ISO_stat", Muon_pt[i], Muon_eta[i]));
-            t_Mu_EffSF_ISO_syst->push_back(corrector.give_eff("Muon_eff_SF_ISO_syst", Muon_pt[i], Muon_eta[i]));
         }
 
         if(n_valid_muons < 2){
@@ -368,7 +360,7 @@ void HmmAnalyzer::EventLoop() {
         }
         //std::cout << "Checking 2 valid muons" << std::endl; 
         if(!two_valid_muons){
-            //std::cout << "No valid muons" << std::endl;
+            //std::cout << "No valid muons" << std::endl; 
             continue;
         }
 
@@ -570,8 +562,8 @@ void HmmAnalyzer::EventLoop() {
         }
 
 
-        t_mu1 = index_mu1;
-        t_mu2 = index_mu2;
+        t_mu1 = t_index_mu1;
+        t_mu2 = t_index_mu2;
         if (t_index_trigm_mu == 1)
             t_index_trigm_mu = t_mu1;
         else if (t_index_trigm_mu == 2)
@@ -873,9 +865,9 @@ void HmmAnalyzer::EventLoop() {
             // Jet_jetId[j] >= 2 [> && Jet_puId[j]>=1 <])) {
             // continue;
             //}
-            double dR1 = DeltaR((*t_Mu_eta)[index_mu1], (*t_Mu_phi)[index_mu1],
+            double dR1 = DeltaR(Muon_eta[index_mu1], Muon_phi[index_mu1],
                                 Jet_eta[j], Jet_phi[j]);
-            double dR2 = DeltaR((*t_Mu_eta)[index_mu2], (*t_Mu_phi)[index_mu2],
+            double dR2 = DeltaR(Muon_eta[index_mu2], Muon_phi[index_mu2],
                                 Jet_eta[j], Jet_phi[j]);
             if (dR1 < 0.4 || dR2 < 0.4) {
                 //std::cout << "Jet " << j << " not well seperated" << std::endl;
