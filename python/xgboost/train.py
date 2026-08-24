@@ -12,28 +12,33 @@ import os
 import shutil
 import uproot
 import sys
-import optuna
-import optuna.visualization as vis
+# import optuna
+# import optuna.visualization as vis
 import matplotlib.pyplot as plt
 import mplhep as hep
-import plotly.io as pio
-from plotly.io import show
+# import plotly.io as pio
+# from plotly.io import show
 
-if len(sys.argv) != 4 and len(sys.argv) != 7:
+if len(sys.argv) not in [6, 8]:
     print(
-        "[ERROR] python3 train.py <Channel_under_study> <era> <ifRetrain T/F> <ifOptimize T/F> [bkg_subset sig_subset]"
+        "[ERROR] python3 train.py <Channel_under_study> <era> "
+        "<ifRetrain T/F> <ifOptimize T/F> <doSystematics T/F> "
+        "[bkg_subset sig_subset]"
     )
     exit()
+
 channel_US, era = sys.argv[1], sys.argv[2]
 ifRetrain = True if sys.argv[3] == "T" else False
 ifOptimize = True if sys.argv[4] == "T" else False
-background_subset = sys.argv[5] if len(sys.argv) == 6 else "Full"
-signal_subset = sys.argv[6] if len(sys.argv) == 6 else "NottH"
+doSystematics = True if sys.argv[5] == "T" else False
+background_subset = sys.argv[6] if len(sys.argv) == 8 else "Full"
+signal_subset = sys.argv[7] if len(sys.argv) == 8 else "NottH"
 
 
 print("Channel under study: ", channel_US)
 print("Era: ", era)
 print("Retrain: ", ifRetrain)
+print("Do systematics: ", doSystematics)
 print("Background subset: ", background_subset)
 print("Signal subset: ", signal_subset)
 
@@ -44,7 +49,7 @@ USE_WEIGHT = False
 USE_WEIGHT_MASS_RES = True
 APPEND_VARIABLES = True
 USE_BSCONSTRAIN = True 
-PLOT_LOSS = True
+PLOT_LOSS = False
 SEED = 7
 TEST_SIZE = 0.4
 SAMPLE_SIZE = 1.0
@@ -459,96 +464,126 @@ if ifRetrain:
 
 
 
+
+
+
 if not APPEND_VARIABLES:
     print("[INFO]: BDT score was not added to the trees")
-    exit()
+else: 
+    print("[INFO]: Adding BDT score to the nominal tuples")
+    tuples = ["Data", "DY", "EWK", "TT", "DiBoson", "ggH", "VBF"]
+    # tuples = ["Data","ggH", "VBF"]
+    for file_type in tuples:
+        xgb_utils.append_BDT_score(
+            file_type,
+            channel_US,
+            era,
+            "Combined",
+            signal_subset,
+            background_subset,
+            variables[:-3],
+            mean_map,
+            std_map,
+            DO_STANDARDIZATION,
+            USE_BSCONSTRAIN,
+        )
+        xgb_utils.append_BDT_score(
+            file_type,
+            channel_US,
+            "2024",
+            "Combined",
+            signal_subset,
+            background_subset,
+            variables[:-3],
+            mean_map,
+            std_map,
+            DO_STANDARDIZATION,
+            USE_BSCONSTRAIN,
+            )
+        '''
+        xgb_utils.append_BDT_score(
+            file_type,
+            channel_US,
+            "2022",
+            "Combined",
+            signal_subset,
+            background_subset,
+            variables[:-3],
+            mean_map,
+            std_map,
+            DO_STANDARDIZATION,
+            USE_BSCONSTRAIN,
+        )
 
-tuples = ["Data", "DY", "EWK", "TT", "DiBoson", "ggH", "VBF"]#, "ttH"]
-#tuples = ["ggH", "VBF"]
-if(era == "2025"):
-   tuples = ["Data"]
-for file_type in tuples:
-    xgb_utils.append_BDT_score(
-        file_type,
-        channel_US,
-        era,
-        "Combined",
-        signal_subset,
-        background_subset,
-        variables[:-3],
-        mean_map,
-        std_map,
-        DO_STANDARDIZATION,
-        USE_BSCONSTRAIN,
-    )
-    '''
-    xgb_utils.append_BDT_score(
-        file_type,
-        channel_US,
-        "2022",
-        "Combined",
-        signal_subset,
-        background_subset,
-        variables[:-3],
-        mean_map,
-        std_map,
-        DO_STANDARDIZATION,
-        USE_BSCONSTRAIN,
-    )
+        xgb_utils.append_BDT_score(
+            file_type,
+            channel_US,
+            "2022EE",
+            "Combined",
+            signal_subset,
+            background_subset,
+            variables[:-3],
+            mean_map,
+            std_map,
+            DO_STANDARDIZATION,
+            USE_BSCONSTRAIN,
+        )
 
-    xgb_utils.append_BDT_score(
-        file_type,
-        channel_US,
-        "2022EE",
-        "Combined",
-        signal_subset,
-        background_subset,
-        variables[:-3],
-        mean_map,
-        std_map,
-        DO_STANDARDIZATION,
-        USE_BSCONSTRAIN,
-    )
+        xgb_utils.append_BDT_score(
+            file_type,
+            channel_US,
+            "2023",
+            "Combined",
+            signal_subset,
+            background_subset,
+            variables[:-3],
+            mean_map,
+            std_map,
+            DO_STANDARDIZATION,
+            USE_BSCONSTRAIN,
+        )
 
-    xgb_utils.append_BDT_score(
-        file_type,
-        channel_US,
-        "2023",
-        "Combined",
-        signal_subset,
-        background_subset,
-        variables[:-3],
-        mean_map,
-        std_map,
-        DO_STANDARDIZATION,
-        USE_BSCONSTRAIN,
-    )
+        xgb_utils.append_BDT_score(
+            file_type,
+            channel_US,
+            "2023BPix",
+            "Combined",
+            signal_subset,
+            background_subset,
+            variables[:-3],
+            mean_map,
+            std_map,
+            DO_STANDARDIZATION,
+            USE_BSCONSTRAIN,
+        )
+        
+        xgb_utils.append_BDT_score(
+            file_type,
+            channel_US,
+            "2024",
+            "Combined",
+            signal_subset,
+            background_subset,
+            variables[:-3],
+            mean_map,
+            std_map,
+            DO_STANDARDIZATION,
+            USE_BSCONSTRAIN,
+        )'''
 
-    xgb_utils.append_BDT_score(
-        file_type,
-        channel_US,
-        "2023BPix",
-        "Combined",
-        signal_subset,
-        background_subset,
-        variables[:-3],
-        mean_map,
-        std_map,
-        DO_STANDARDIZATION,
-        USE_BSCONSTRAIN,
-    )
-    
-    xgb_utils.append_BDT_score(
-        file_type,
-        channel_US,
-        "2024",
-        "Combined",
-        signal_subset,
-        background_subset,
-        variables[:-3],
-        mean_map,
-        std_map,
-        DO_STANDARDIZATION,
-        USE_BSCONSTRAIN,
-    )'''
-
+if doSystematics:
+    print("[INFO]: Addeding BDT score to the systematic tuples")
+    for tuple_type in ["ggH", "VBF"]:
+        xgb_utils.append_BDT_score_to_sys(
+            tuple_type,
+            channel_US,
+            era,
+            "Combined",
+            signal_subset,
+            background_subset,
+            variables[:-3],
+            mean_map,
+            std_map,
+            DO_STANDARDIZATION,
+            USE_BSCONSTRAIN,
+        )

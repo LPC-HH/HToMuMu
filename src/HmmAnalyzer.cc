@@ -8,10 +8,19 @@
 #include <string>
 #include <vector>
 #include <chrono>
+#include <algorithm>
+#include <cctype>
+#include <stdexcept>
+#include <Math/Vector4D.h>
 
-#include "correction.h"
-#include "../lib/LeptonEfficiencyCorrector.h"
+#include "../lib/JecApplication.h"
+#include "../lib/JecConfigReader.h"
 #include "../lib/JetCorrector.h"
+#include "../lib/JvmApplication.h"
+#include "../lib/JvmConfigReader.h"
+#include "../lib/LeptonEfficiencyCorrector.h"
+#include "../lib/MuonScaRe.h"
+#include "correction.h"
 
 #ifdef MAKECINT
 #pragma link C++ class vector < float> + ;
@@ -25,10 +34,10 @@
 
 int main(int argc, char *argv[]) {
 
-    if (argc != 8) {
-        std::cerr << "Please give 7 arguments " << "runList " << " "
-                  << "outputFileName" << " " << "dataset"
-                  << "data type year include_Z(T/F) and include_H(T/F)" << std::endl;
+    if (argc != 9) {
+        std::cerr << "Please give 8 arguments: runList outputFileName dataset "
+          << "dataType(T/F) year include_Z(T/F) include_H(T/F) "
+          << "muon_pt_syst" << std::endl;
         return -1;
     }
     const char *inputFileList = argv[1];
@@ -39,16 +48,15 @@ int main(int argc, char *argv[]) {
     TString year_num = argv[5];
     const bool include_Z = *argv[6] == 'T';
     const bool include_H = *argv[7] == 'T';
-
-    //read run3 muon efficiency json files
-    if (!is_data_input){
-        LeptonEfficiencyCorrector corrector;
-        corrector.initializeCorrections(year_num.Data());
-    }
+    const std::string muon_pt_syst = NormalizeMuonPtSyst(argv[8]);
 
     //std::cout << year_num.Data() << std::endl;
 
-    HmmAnalyzer Hmm(inputFileList, outFileName, data, is_data_input, year_num, include_Z, include_H);
+    HmmAnalyzer Hmm(inputFileList, outFileName, data, is_data_input, year_num,
+                    include_Z, include_H);
+    Hmm.muon_pt_syst = muon_pt_syst;
+    Hmm.apply_muon_pt_syst_to_signal =
+        !is_data_input && muon_pt_syst != "nominal";
     std::cout << "Running on: " << std::endl;
     std::cout << "  Dataset: " << data << " year " << year_num << std::endl;
     std::cout << "  Era:  " << year_num << std::endl;
@@ -57,6 +65,9 @@ int main(int argc, char *argv[]) {
     std::cout << "  Year num: " << year_num << std::endl;
     std::cout << "  Include Z? " << include_Z << std::endl;
     std::cout << "  Include H? " << include_H << std::endl;
+    std::cout << "  Muon pT systematic: " << muon_pt_syst << std::endl;
+    std::cout << "  Apply muon pT systematic? "
+              << Hmm.apply_muon_pt_syst_to_signal << std::endl;
     Hmm.EventLoop();
 
     return 0;
@@ -68,10 +79,88 @@ void HmmAnalyzer::EventLoop() {
         return;
 
     //read run3 muon efficiency json files
+    initializeMuonScaReCorrections(yearst);
+
     LeptonEfficiencyCorrector corrector;
+    if (!is_data){
+        corrector.initializeCorrections(yearst);
+    }
     //JetCorrector jetCorrector;
-    JetCorrector jetCorrector;
-    jetCorrector.initializeCorrections(yearst);
+    //JetCorrector jetCorrector;
+    //jetCorrector.initializeCorrections(yearst);
+
+    JecConfigReader::ConfigPaths jecConfigPaths;
+    jecConfigPaths.ak4 = "./data/jetCorrections/JecConfigAK4.json";
+    jecConfigPaths.ak8 = "./data/jetCorrections/JecConfigAK8.json";
+    JecConfigReader::JecConfig::setDefaultPaths(jecConfigPaths);
+
+    JecConfigReader::JecConfig::setDefaultJerSmearPath(
+        "./data/jetCorrections/jer_smear.json.gz");
+    JvmConfigReader::JvmConfig::setDefaultConfigPath(
+        "./data/jetCorrections/JvmConfig.json");
+
+    JecConfigReader::JecConfig &jec_config =
+        JecConfigReader::JecConfig::defaultInstance();
+    const std::string jec_year = GetJercYear(yearst);
+    const std::string jec_data_era = GetJercEra(jec_year);
+
+    JvmConfigReader::Jvm jvm_config =
+        JvmConfigReader::JvmConfig::defaultInstance().getJvmForYear(jec_year);
+    JvmApplication::VetoChecker jvm_checker(jvm_config.ref, jvm_config.key);
+
+    std::unique_ptr<JecApplication::Applier> mc_jec_applier;
+    std::map<std::string, correction::Correction::Ref> jes_uncertainties;
+    std::map<std::string, JecConfigReader::JerBin> jer_uncertainty;
+   
+   if (!is_data) {
+        mc_jec_applier = std::make_unique<JecApplication::Applier>(
+            JecApplication::Applier::McAK4(jec_config, jec_year, false));
+
+        JecConfigReader::JesUncSetRefs jes_uncertainty_sets =
+            jec_config.getJesUncSetsMcAK4Ref(jec_year);
+
+        const auto &reduced_uncertainty_set = jes_uncertainty_sets.reduced;
+
+        for (const auto &uncertainty_name : jet_jes_syst_names) {
+            if (!JecSystAppliesToYear(uncertainty_name, yearst)) {
+                continue;
+            }
+
+            auto uncertainty = reduced_uncertainty_set.find(uncertainty_name);
+
+            if (uncertainty == reduced_uncertainty_set.end()) {
+                throw std::runtime_error(
+                    "ERROR: JES uncertainty not found in reduced set: " +
+                    uncertainty_name +
+                    " for year " + yearst);
+            }
+
+            jes_uncertainties.emplace(uncertainty_name, uncertainty->second);
+        }
+
+        JecConfigReader::JerUncSets jer_uncertainty_sets =
+            jec_config.getJerUncSetsMcAK4(jec_year);
+
+        const auto &jer_full_uncertainty_set = jer_uncertainty_sets.full;
+
+        for (const auto &uncertainty_name : jet_jer_syst_names) {
+            if (!JecSystAppliesToYear(uncertainty_name, yearst)) {
+                continue;
+            }
+
+            auto uncertainty = jer_full_uncertainty_set.find(uncertainty_name);
+
+            if (uncertainty == jer_full_uncertainty_set.end()) {
+                throw std::runtime_error(
+                    "ERROR: JER uncertainty not found in full set: " +
+                    uncertainty_name +
+                    " for year " + yearst);
+            }
+
+            jer_uncertainty.emplace(uncertainty_name, uncertainty->second);
+        }
+    }
+
 
     // btag SF
     BTagCalibration calib("deepcsv", "./data/btagSF/DeepCSV_94XSF_V3_B_F.csv");
@@ -86,7 +175,7 @@ void HmmAnalyzer::EventLoop() {
     std::cout << "Btag calibration loaded" << std::endl;           
     long nentries = fChain->GetEntriesFast();
     //h_nEntries->SetBinContent(1, nentries);
-    // nentries = 50;
+    //nentries = 5000;
     long nbytes = 0;
     long nb = 0;
     
@@ -99,6 +188,14 @@ void HmmAnalyzer::EventLoop() {
 
         nb = fChain->GetEntry(jentry);
         nbytes += nb;
+
+
+        if (!is_data && yearst == "2024" && event % 2 == 0) {
+            continue;
+        }
+        if (!is_data && yearst == "2025" && event % 2 != 0) {
+            continue;
+        }
 
         h_nEntries->Fill(0.5);
        
@@ -160,123 +257,117 @@ void HmmAnalyzer::EventLoop() {
 
         int index_mu1 = INT_NULL_VALUE;
         int index_mu2 = INT_NULL_VALUE;
-        float pt_Roch, ptErr_Roch, pt_Roch_sys_up, pt_Roch_sys_down;
+        std::vector<float> mu_pt_corr(nMuon, FLOAT_NULL_VALUE);
+        std::vector<float> mu_ptErr_corr(nMuon, FLOAT_NULL_VALUE);
+        int n_valid_muons = 0;
         bool two_valid_muons = false;
         bool trig_match = false;
-        
+
         for (int i = 0; i < nMuon; i++) {
-            ROOT::Math::PtEtaPhiMVector mu_raw(Muon_pt[i], Muon_eta[i],
-                                               Muon_phi[i], MUON_MASS);
-            pt_Roch = 0, ptErr_Roch = 0, pt_Roch_sys_up = 0,
-            pt_Roch_sys_down = 0;
-            float ptErr_raw = Muon_ptErr[i];
+            const float pt_raw = Muon_bsConstrainedPt[i];
 
-            float gen_pt = FLOAT_NULL_VALUE;
+            // Nominal scale correction
+            float pt_scaled = pt_scale(is_data, pt_raw, Muon_eta[i],
+                                       Muon_phi[i], Muon_charge[i]);
+
+            float pt_corr = pt_scaled;
+
             if (!is_data) {
-                for (int j = 0; j < nGenPart; j++) {
-                    if (((Muon_charge[i] == -1 && GenPart_pdgId[j] == 13) ||
-                         ((Muon_charge[i] == 1 && GenPart_pdgId[j] == -13))) &&
-                        DeltaR(Muon_eta[i], Muon_phi[i], GenPart_eta[j],
-                               GenPart_phi[j]) < 0.1) {
-                        gen_pt = GenPart_pt[j];
-                        break;
-                    }
+                // Nominal MC smearing
+                pt_corr = pt_resol(pt_scaled, Muon_eta[i], Muon_phi[i],
+                                   Muon_nTrackerLayers[i],
+                                   static_cast<int>(event),
+                                   static_cast<int>(luminosityBlock));
+
+                // Scale systematic
+                if (apply_muon_pt_syst_to_signal &&
+                    IsMuonScaleSyst(muon_pt_syst)) {
+                    pt_corr = pt_scale_var(pt_corr, Muon_eta[i], Muon_phi[i],
+                                           Muon_charge[i],
+                                           MuonSystDirection(muon_pt_syst));
                 }
-            }
-            CorrectPtRoch(_Roch_calib, false, mu_raw, ptErr_raw, pt_Roch, ptErr_Roch,
-                          pt_Roch_sys_up, pt_Roch_sys_down, Muon_charge[i],
-                          Muon_nTrackerLayers[i], gen_pt, is_data);
+                // Resolution smearring systematic
+                if (apply_muon_pt_syst_to_signal &&
+                    IsMuonSmearingSyst(muon_pt_syst)) {
+                    pt_corr = pt_resol_var(pt_scaled, pt_corr, Muon_eta[i],
+                                           MuonSystDirection(muon_pt_syst));
+                }
 
-            if (!(Muon_isGlobal[i] && Muon_mediumId[i] &&
-                  fabs(Muon_eta[i]) < 2.4 && Muon_pfRelIso04_all[i] < 0.25 &&
-                  pt_Roch > 20.)) {
-                continue;
             }
 
-            t_Mu_charge->push_back(Muon_charge[i]);
-            t_Mu_pt->push_back(pt_Roch);
-            t_Mu_ptErr->push_back(ptErr_Roch);
-            t_Mu_bsConstrainedPt->push_back(Muon_bsConstrainedPt[i]);
-            t_Mu_bsConstrainedPtErr->push_back(Muon_bsConstrainedPtErr[i]);
-            t_Mu_phi->push_back(Muon_phi[i]);
-            t_Mu_eta->push_back(Muon_eta[i]);
-            t_Mu_mass->push_back(MUON_MASS); // Muon_mass[i]);
-            t_Mu_dxy->push_back(Muon_dxy[i]);
-            t_Mu_dxyErr->push_back(Muon_dxyErr[i]);
-            t_Mu_dz->push_back(Muon_dz[i]);
-            t_Mu_dzErr->push_back(Muon_dzErr[i]);
-            t_Mu_sip3d->push_back(Muon_sip3d[i]);
-            t_Mu_pfRelIso03_all->push_back(Muon_pfRelIso03_all[i]);
-            t_Mu_pfRelIso03_chg->push_back(Muon_pfRelIso03_chg[i]);
-            t_Mu_pfRelIso04_all->push_back(Muon_pfRelIso04_all[i]);
-            t_Mu_miniPFRelIso_all->push_back(Muon_miniPFRelIso_all[i]);
-            t_Mu_miniPFRelIso_chg->push_back(Muon_miniPFRelIso_chg[i]);
-            t_Mu_tightCharge->push_back(Muon_tightCharge[i]);
-            t_Mu_isPFcand->push_back(Muon_isPFcand[i]);
-            // t_Mu_isglobal->push_back(Muon_isglobal[i]);
-            // t_Mu_istracker->push_back(Muon_istracker[i]);
-            t_Mu_looseId->push_back(Muon_looseId[i]);
-            t_Mu_mediumId->push_back(Muon_mediumId[i]);
-            t_Mu_softId->push_back(Muon_softId[i]);
-            t_Mu_tightId->push_back(Muon_tightId[i]);
-            t_Mu_nStations->push_back(Muon_nStations[i]);
-            t_Mu_nTrackerLayers->push_back(Muon_nTrackerLayers[i]);
-
-            if (is_data) {
-                continue;
+            float ptErr_corr = Muon_bsConstrainedPtErr[i];
+            if (pt_raw > 0.0) {
+                ptErr_corr *= pt_corr / pt_raw;
             }
 
-            if(year == "2025" || year == "2024"){
-                t_Mu_EffSF_TRIG->push_back(1);
-                t_Mu_EffSFErr_TRIG->push_back(0);
+            mu_pt_corr[i] = pt_corr;
+            mu_ptErr_corr[i] = ptErr_corr;
+
+            if (pt_corr > 10 &&
+                fabs(Muon_eta[i]) < 2.4 &&
+                Muon_isGlobal[i] &&
+                Muon_pfRelIso04_all[i] < 0.25 &&
+                Muon_looseId[i]) {
+                n_valid_muons++;
             }
-
-            else{
-                t_Mu_EffSF_TRIG->push_back(corrector.give_eff("Muon_eff_SF_TRIG", Muon_pt[i], Muon_eta[i]));
-                t_Mu_EffSFErr_TRIG->push_back(corrector.give_eff("Muon_eff_SFerr_TRIG", Muon_pt[i], Muon_eta[i]));
-            }
-
-            t_Mu_EffSF_ID->push_back(corrector.give_eff("Muon_eff_SF_ID", Muon_pt[i], Muon_eta[i]));
-            t_Mu_EffSF_ID_stat->push_back(corrector.give_eff("Muon_eff_SF_ID_stat", Muon_pt[i], Muon_eta[i]));
-            t_Mu_EffSF_ID_syst->push_back(corrector.give_eff("Muon_eff_SF_ID_syst", Muon_pt[i], Muon_eta[i]));
-
-            t_Mu_EffSF_ISO->push_back(corrector.give_eff("Muon_eff_SF_ISO", Muon_pt[i], Muon_eta[i]));
-            t_Mu_EffSF_ISO_stat->push_back(corrector.give_eff("Muon_eff_SF_ISO_stat", Muon_pt[i], Muon_eta[i]));
-            t_Mu_EffSF_ISO_syst->push_back(corrector.give_eff("Muon_eff_SF_ISO_syst", Muon_pt[i], Muon_eta[i]));
         }
 
-        if (t_Mu_pt->size() < 2) {
+        if(n_valid_muons < 2){
             continue;
         }
 
-        for (int k1 = 0; k1 < (int)t_Mu_pt->size(); k1++) {
-            if (!((*t_Mu_pt)[k1] > muon_pt_cut.at(yearst))) {
+        float best_pair_pt_sum = -1.0;
+
+        for (int muon_index_1 = 0; muon_index_1 < nMuon; muon_index_1++) {
+
+            if (!(Muon_isGlobal[muon_index_1] &&
+                  mu_pt_corr[muon_index_1] > muon_pt_cut.at(yearst) &&
+                  Muon_mediumId[muon_index_1] &&
+                  fabs(Muon_eta[muon_index_1]) < 2.4 &&
+                  Muon_pfRelIso04_all[muon_index_1] < 0.25))
                 continue;
-            }
-            for (int k2 = k1 + 1; k2 < (int)t_Mu_pt->size(); k2++) {
-                if ((*t_Mu_charge)[k1] * (*t_Mu_charge)[k2] == -1 &&
-                    (*t_Mu_pt)[k2] > 20.) {
+
+            for (int muon_index_2 = muon_index_1 + 1;
+                 muon_index_2 < nMuon;
+                 muon_index_2++) {
+
+                if (!(Muon_isGlobal[muon_index_2] &&
+                      Muon_charge[muon_index_1] * Muon_charge[muon_index_2] == -1 &&
+                      mu_pt_corr[muon_index_2] > 20. &&
+                      Muon_mediumId[muon_index_2] &&
+                      fabs(Muon_eta[muon_index_2]) < 2.4 &&
+                      Muon_pfRelIso04_all[muon_index_2] < 0.25))
+                    continue;
+
+                float pair_pt_sum =
+                    mu_pt_corr[muon_index_1] + mu_pt_corr[muon_index_2];
+
+                if (pair_pt_sum > best_pair_pt_sum) {
+                    best_pair_pt_sum = pair_pt_sum;
+
+                    // Store the higher-pT muon as mu1
+                    if (mu_pt_corr[muon_index_1] >= mu_pt_corr[muon_index_2]) {
+                        index_mu1 = muon_index_1;
+                        index_mu2 = muon_index_2;
+                    } else {
+                        index_mu1 = muon_index_2;
+                        index_mu2 = muon_index_1;
+                    }
+
                     two_valid_muons = true;
-                    index_mu1 = k1;
-                    index_mu2 = k2;
-                    break;
                 }
             }
-            if (two_valid_muons)
-                break;
         }
-
-        //std::cout << "Checking 2 valid muons" << std::endl;
+        //std::cout << "Checking 2 valid muons" << std::endl; 
         if(!two_valid_muons){
-            //std::cout << "No valid muons" << std::endl;
+            //std::cout << "No valid muons" << std::endl; 
             continue;
         }
 
         h_nTwoMuons->Fill(0.5);
 
-        // Ensure no 3rd good-quality muon (matches CreateTuple.h's
-        // mu_pt->size()<3 category veto)
-        if(t_Mu_pt->size() > 2){
+        //Ensure only 3 Muons
+        if(n_valid_muons > 2){
             continue;
         }
 
@@ -325,38 +416,45 @@ void HmmAnalyzer::EventLoop() {
         }
 
         h_nNoExtraElectron->Fill(0.5);
-
-
+    
+        bool trig_match_mu1 = false;
+        bool trig_match_mu2 = false;
         for (int trigger_index = 0; trigger_index < nTrigObj; trigger_index++) {
             //  float dR_TrigObj = 999.;
             if (TrigObj_id[trigger_index] != 13)
                 continue;
             float dR_TrigObj;
-            dR_TrigObj =
-                DeltaR((*t_Mu_eta)[index_mu1], (*t_Mu_phi)[index_mu1],
-                       TrigObj_eta[trigger_index], TrigObj_phi[trigger_index]);
-            if (dR_TrigObj < 0.1 && (*t_Mu_tightId)[index_mu1] &&
-                (*t_Mu_pfRelIso04_all)[index_mu1] < 0.15 &&
-                (*t_Mu_pt)[index_mu1] > muon_pt_cut.at(yearst)) {
-                trig_match = true;
-                t_index_trigm_mu = 1;
-                break;
+            if (!trig_match_mu1){
+                dR_TrigObj =
+                    DeltaR(Muon_eta[index_mu1], Muon_phi[index_mu1],
+                           TrigObj_eta[trigger_index], TrigObj_phi[trigger_index]);
+                if (dR_TrigObj < 0.1 && Muon_tightId[index_mu1] &&
+                    Muon_pfRelIso04_all[index_mu1] < 0.15 &&
+                    mu_pt_corr[index_mu1] > muon_pt_cut.at(yearst)) {
+                    //trig_match = true;
+                    t_index_trigm_mu = 1;
+                    trig_match_mu1 = true;
+                    //break;
+                }
             }
-            dR_TrigObj =
-                DeltaR((*t_Mu_eta)[index_mu2], (*t_Mu_phi)[index_mu2],
-                       TrigObj_eta[trigger_index], TrigObj_phi[trigger_index]);
-            if ((*t_Mu_pt)[index_mu2] > muon_pt_cut.at(yearst) &&
-                (*t_Mu_tightId)[index_mu2] &&
-                (*t_Mu_pfRelIso04_all)[index_mu2] < 0.15 && dR_TrigObj < 0.1) {
-                trig_match = true;
-                t_index_trigm_mu = 2;
-                break;
+            if (!trig_match_mu2){
+                dR_TrigObj =
+                    DeltaR(Muon_eta[index_mu2], Muon_phi[index_mu2],
+                           TrigObj_eta[trigger_index], TrigObj_phi[trigger_index]);
+                if (mu_pt_corr[index_mu2] > muon_pt_cut.at(yearst) &&
+                    Muon_tightId[index_mu2] &&
+                    Muon_pfRelIso04_all[index_mu2] < 0.15 && dR_TrigObj < 0.1) {
+                    //trig_match = true;
+                    t_index_trigm_mu = 2;
+                    trig_match_mu2 = true;
+                    //break;
+                }
             }
         } // end of triger match, end of loop over trigger objects
+        trig_match= trig_match_mu1 || trig_match_mu2;
 
         //std::cout << "Checking trig match" << std::endl; 
         if (!trig_match) {
-            //std::cout << "No trig match" << std::endl; 
             continue;
         }
 
@@ -368,9 +466,104 @@ void HmmAnalyzer::EventLoop() {
         t_luminosityBlock = luminosityBlock;
         t_event = event;
         // std::cout<<jentry<<" : "<<t_event<<"-------------------\n";
+        int t_index_mu1 = INT_NULL_VALUE;
+        int t_index_mu2 = INT_NULL_VALUE;
+        int t_index = 0;
+        for (int i = 0; i < nMuon; i++) {
+            // if(fabs(Muon_eta[i])<2.4 && Muon_mediumId[i] &&
+            // Muon_pfRelIso04_all[i] < 0.25){
+            if (!(fabs(Muon_eta[i]) < 2.4 && Muon_mediumId[i])) {
+                continue;
+            }
+            
+            bool this_muon_trig_matched = false;
 
-        t_mu1 = index_mu1;
-        t_mu2 = index_mu2;
+            if (i == index_mu1) {
+                t_index_mu1 = t_index;
+                this_muon_trig_matched = trig_match_mu1;
+            }
+            else if (i == index_mu2) {
+                t_index_mu2 = t_index;
+                this_muon_trig_matched = trig_match_mu2;
+            }
+
+            t_Mu_charge->push_back(Muon_charge[i]);
+            t_Mu_pt->push_back(Muon_pt[i]);
+            t_Mu_ptErr->push_back(Muon_ptErr[i]);
+            t_Mu_bsConstrainedPt->push_back(mu_pt_corr[i]);
+            t_Mu_bsConstrainedPtErr->push_back(mu_ptErr_corr[i]);
+            t_Mu_bsConstrainedPt_nanoAOD->push_back(Muon_bsConstrainedPt[i]);
+            t_Mu_bsConstrainedPtErr_nanoAOD->push_back(Muon_bsConstrainedPtErr[i]);
+            t_Mu_phi->push_back(Muon_phi[i]);
+            t_Mu_eta->push_back(Muon_eta[i]);
+            t_Mu_mass->push_back(MUON_MASS); // Muon_mass[i]);
+            t_Mu_dxy->push_back(Muon_dxy[i]);
+            t_Mu_dxyErr->push_back(Muon_dxyErr[i]);
+            t_Mu_dz->push_back(Muon_dz[i]);
+            t_Mu_dzErr->push_back(Muon_dzErr[i]);
+            t_Mu_sip3d->push_back(Muon_sip3d[i]);
+            t_Mu_pfRelIso03_all->push_back(Muon_pfRelIso03_all[i]);
+            t_Mu_pfRelIso03_chg->push_back(Muon_pfRelIso03_chg[i]);
+            t_Mu_pfRelIso04_all->push_back(Muon_pfRelIso04_all[i]);
+            t_Mu_miniPFRelIso_all->push_back(Muon_miniPFRelIso_all[i]);
+            t_Mu_miniPFRelIso_chg->push_back(Muon_miniPFRelIso_chg[i]);
+            t_Mu_tightCharge->push_back(Muon_tightCharge[i]);
+            t_Mu_isPFcand->push_back(Muon_isPFcand[i]);
+            // t_Mu_isglobal->push_back(Muon_isglobal[i]);
+            // t_Mu_istracker->push_back(Muon_istracker[i]);
+            t_Mu_looseId->push_back(Muon_looseId[i]);
+            t_Mu_mediumId->push_back(Muon_mediumId[i]);
+            t_Mu_softId->push_back(Muon_softId[i]);
+            t_Mu_tightId->push_back(Muon_tightId[i]);
+            t_Mu_nStations->push_back(Muon_nStations[i]);
+            t_Mu_nTrackerLayers->push_back(Muon_nTrackerLayers[i]);
+            t_index++;
+
+            if (is_data) {
+                continue;
+            }
+
+            
+            t_Mu_EffTRIG_DATA->push_back(corrector.give_eff(
+                "Muon_eff_DATAeff_TRIG",
+                mu_pt_corr[i], Muon_eta[i]));
+
+            t_Mu_EffTRIG_DATA_up->push_back(corrector.give_eff(
+                "Muon_eff_DATAeff_TRIG_up",
+                mu_pt_corr[i], Muon_eta[i]));
+
+            t_Mu_EffTRIG_DATA_down->push_back(corrector.give_eff(
+                "Muon_eff_DATAeff_TRIG_down",
+                mu_pt_corr[i], Muon_eta[i]));
+
+
+            t_Mu_EffTRIG_MC->push_back(corrector.give_eff(
+                "Muon_eff_MCeff_TRIG",
+                mu_pt_corr[i], Muon_eta[i]));
+
+            t_Mu_EffTRIG_MC_up->push_back(corrector.give_eff(
+                "Muon_eff_MCeff_TRIG_up",
+                mu_pt_corr[i], Muon_eta[i]));
+
+            t_Mu_EffTRIG_MC_down->push_back(corrector.give_eff(
+                "Muon_eff_MCeff_TRIG_down",
+                mu_pt_corr[i], Muon_eta[i]));
+
+
+
+            t_Mu_EffSF_ID->push_back(corrector.give_eff("Muon_eff_SF_ID", mu_pt_corr[i], Muon_eta[i]));
+            t_Mu_EffSF_ID_up->push_back(corrector.give_eff("Muon_eff_SF_ID_up", mu_pt_corr[i], Muon_eta[i]));
+            t_Mu_EffSF_ID_down->push_back(corrector.give_eff("Muon_eff_SF_ID_down", mu_pt_corr[i], Muon_eta[i]));
+
+            
+            t_Mu_EffSF_ISO->push_back(corrector.give_eff("Muon_eff_SF_ISO", mu_pt_corr[i], Muon_eta[i]));
+            t_Mu_EffSF_ISO_up->push_back(corrector.give_eff("Muon_eff_SF_ISO_up", mu_pt_corr[i], Muon_eta[i]));
+            t_Mu_EffSF_ISO_down->push_back(corrector.give_eff("Muon_eff_SF_ISO_down", mu_pt_corr[i], Muon_eta[i]));
+        }
+
+
+        t_mu1 = t_index_mu1;
+        t_mu2 = t_index_mu2;
         if (t_index_trigm_mu == 1)
             t_index_trigm_mu = t_mu1;
         else if (t_index_trigm_mu == 2)
@@ -378,29 +571,29 @@ void HmmAnalyzer::EventLoop() {
 
         // TLorentzVector dimu, mu1, mu2;
         ROOT::Math::PtEtaPhiMVector dimu;
-        ROOT::Math::PtEtaPhiMVector mu1((*t_Mu_pt)[index_mu1],
-                                        (*t_Mu_eta)[index_mu1],
-                                        (*t_Mu_phi)[index_mu1], MUON_MASS);
-        ROOT::Math::PtEtaPhiMVector mu2((*t_Mu_pt)[index_mu2],
-                                        (*t_Mu_eta)[index_mu2],
-                                        (*t_Mu_phi)[index_mu2], MUON_MASS);
+        ROOT::Math::PtEtaPhiMVector mu1((Muon_pt)[index_mu1],
+                                        (Muon_eta)[index_mu1],
+                                        (Muon_phi)[index_mu1], MUON_MASS);
+        ROOT::Math::PtEtaPhiMVector mu2((Muon_pt)[index_mu2],
+                                        (Muon_eta)[index_mu2],
+                                        (Muon_phi)[index_mu2], MUON_MASS);
 
         ROOT::Math::PtEtaPhiMVector dimuBSC;
-        ROOT::Math::PtEtaPhiMVector mu1BSC((*t_Mu_bsConstrainedPt)[index_mu1],
-                                        (*t_Mu_eta)[index_mu1],
-                                        (*t_Mu_phi)[index_mu1], MUON_MASS);
-        ROOT::Math::PtEtaPhiMVector mu2BSC((*t_Mu_bsConstrainedPt)[index_mu2],
-                                        (*t_Mu_eta)[index_mu2],
-                                        (*t_Mu_phi)[index_mu2], MUON_MASS);
-        // mu1.SetPtEtaPhiM((mu_pt_Roch_corr)[index_mu1], (Muon_eta)[index_mu1],
+        ROOT::Math::PtEtaPhiMVector mu1BSC((mu_pt_corr)[index_mu1],
+                                        (Muon_eta)[index_mu1],
+                                        (Muon_phi)[index_mu1], MUON_MASS);
+        ROOT::Math::PtEtaPhiMVector mu2BSC((mu_pt_corr)[index_mu2],
+                                        (Muon_eta)[index_mu2],
+                                        (Muon_phi)[index_mu2], MUON_MASS);
+        // mu1.SetPtEtaPhiM((mu_pt_corr)[index_mu1], (Muon_eta)[index_mu1],
         //(Muon_phi)[index_mu1], MUON_MASS);
-        // mu2.SetPtEtaPhiM((mu_pt_Roch_corr)[index_mu2], (Muon_eta)[index_mu2],
+        // mu2.SetPtEtaPhiM((mu_pt_corr)[index_mu2], (Muon_eta)[index_mu2],
         //(Muon_phi)[index_mu2], MUON_MASS);
         dimu = mu1 + mu2;
         dimuBSC = mu1BSC + mu2BSC;
         t_diMuon_pt = dimu.Pt();
-        t_diMuon_eta = dimu.Eta();
-        t_diMuon_phi = dimu.Phi();
+        t_diMuon_eta = dimuBSC.Eta();
+        t_diMuon_phi = dimuBSC.Phi();
         t_diMuon_mass = dimu.M();
 
         t_diMuon_bsConstrainedPt = dimuBSC.Pt();
@@ -440,13 +633,229 @@ void HmmAnalyzer::EventLoop() {
         /*if(t_diMuon_bsConstrainedMass < 80 || t_diMuon_bsConstrainedMass > 180){
             continue; //not in signal + Z range
         }*/
-        
+      
+
+
+        std::unique_ptr<JecApplication::Applier> data_jec_applier;
+        const JecApplication::Applier *jet_applier = mc_jec_applier.get();
+        if (is_data) {
+            data_jec_applier = std::make_unique<JecApplication::Applier>(
+                JecApplication::Applier::DataAK4(jec_config, jec_year, jec_data_era,
+                                                 false,
+                                                 static_cast<double>(run)));
+            jet_applier = data_jec_applier.get();
+        }
         
         //std::cout << "There are " << nJet << " jets in event " << jentry << std::endl;
+        
+
+
+        int leadJet_idx = INT_NULL_VALUE;
+        int subleadJet_idx = INT_NULL_VALUE;
+
+        float leadJet_pt = FLOAT_NULL_VALUE; 
+        float subleadJet_pt = FLOAT_NULL_VALUE;
         for (int j = 0; j < nJet; j++) {
             h_nJets->Fill(0.5);
             //std::cout << "looking at jet " << j << std::endl;
-            if (!isValidJet(j)) {
+
+            JecApplication::JesInputs jesIn{Jet_pt[j],
+                                            Jet_eta[j],
+                                            Jet_phi[j],
+                                            Jet_area[j],
+                                            Rho_fixedGridRhoFastjetAll,
+                                            Jet_rawFactor[j]};
+            float jec_correction = jet_applier->jesFactorNominal(jesIn);
+            float corrected_jet_pt_after_jes = Jet_pt[j] * jec_correction;
+            float corrected_jet_mass = Jet_mass[j] * jec_correction;
+            float corrected_jet_pt = corrected_jet_pt_after_jes;
+
+            std::map<std::string, double> shifted_jes_pts;
+            std::map<std::string, double> shifted_jer_pts;
+            std::map<std::string, double> shifted_jes_masses;
+            std::map<std::string, double> shifted_jer_masses;
+
+
+            for (const auto &syst_name : jet_jer_syst_names) {
+                for (const auto &direction : jer_directions) {
+                    const std::string branch_name =
+                        JetPtJerSystBranchName(syst_name, direction);
+
+                    shifted_jer_pts[branch_name] = corrected_jet_pt_after_jes;
+
+                    const std::string mass_branch_name =
+                        JetMassJerSystBranchName(syst_name, direction);
+
+                    shifted_jer_masses[mass_branch_name] = corrected_jet_mass;
+                }
+            }
+
+            auto shifted_jet_scale = [&](const std::string &uncertainty_name,
+                                       const std::string &direction) {
+                if (is_data) {
+                    return 1.0;
+                }
+
+                if (!JecSystAppliesToYear(uncertainty_name, yearst)) {
+                    return 1.0;
+                }
+
+                auto uncertainty = jes_uncertainties.find(uncertainty_name);
+
+                if (uncertainty == jes_uncertainties.end()) {
+                    throw std::runtime_error(
+                        "ERROR: JES uncertainty not found: " + uncertainty_name +
+                        ". Check that this name exists in the reduced JES uncertainty set.");
+                }
+
+                return JecApplication::Applier::jesComponentSyst(
+                    uncertainty->second,
+                    direction,
+                    Jet_eta[j],
+                    corrected_jet_pt_after_jes,
+                    false);
+            };
+
+
+            for (const auto &syst_name : jet_jes_syst_names) {
+                for (const auto &direction : jes_directions) {
+                    const std::string branch_name =
+                        JetPtJesSystBranchName(syst_name, direction);
+
+                    const double jes_shift = shifted_jet_scale(syst_name, direction);
+                    shifted_jes_pts[branch_name] =
+                        corrected_jet_pt_after_jes * jes_shift;
+
+                    const std::string mass_branch_name =
+                        JetMassJesSystBranchName(syst_name, direction);
+                    shifted_jes_masses[mass_branch_name] =
+                        corrected_jet_mass * jes_shift;
+                }
+            }
+        
+            if (!is_data) {
+
+
+                JecApplication::JerInputs jer_inputs{};
+                jer_inputs.event = event;
+                jer_inputs.rho = Rho_fixedGridRhoFastjetAll;
+                jer_inputs.maxDr = 0.2;
+
+                double bestGenJetDR = jer_inputs.maxDr;
+                int bestGenJet = -1;
+
+                for (int genJetIndex = 0; genJetIndex < nGenJet; ++genJetIndex) {
+                    const double dR =
+                        DeltaR(Jet_eta[j], Jet_phi[j],
+                               GenJet_eta[genJetIndex],
+                               GenJet_phi[genJetIndex]);
+
+                    if (dR < bestGenJetDR) {
+                        bestGenJetDR = dR;
+                        bestGenJet = genJetIndex;
+                    }
+                }
+
+                if (bestGenJet >= 0) {
+                    jer_inputs.hasGen = true;
+                    jer_inputs.genPt = GenJet_pt[bestGenJet];
+                    jer_inputs.genEta = GenJet_eta[bestGenJet];
+                    jer_inputs.genPhi = GenJet_phi[bestGenJet];
+                }
+
+                JecApplication::SystematicOptions systJerNom{};
+                systJerNom.jerVar = "nom";
+
+                auto nominal_jer_factor = [&](double pt_after_jes) {
+                    JecApplication::JesInputs jet_after_jes{
+                        pt_after_jes,
+                        Jet_eta[j],
+                        Jet_phi[j],
+                        Jet_area[j],
+                        Rho_fixedGridRhoFastjetAll,
+                        0.0
+                    };
+
+                    return jet_applier->jerFactor(jet_after_jes,
+                                                  jer_inputs,
+                                                  systJerNom);
+                };
+
+                const double jer_correction =
+                    nominal_jer_factor(corrected_jet_pt_after_jes);
+
+                const double nominal_pt_after_jer =
+                    corrected_jet_pt_after_jes * jer_correction;
+
+
+                for (const auto &syst_name : jet_jer_syst_names) {
+                    for (const auto &direction : jer_directions) {
+                        const std::string branch_name =
+                            JetPtJerSystBranchName(syst_name, direction);
+
+                        shifted_jer_pts[branch_name] = nominal_pt_after_jer;
+
+                        const std::string mass_branch_name =
+                            JetMassJerSystBranchName(syst_name, direction);
+                        shifted_jer_masses[mass_branch_name] =
+                            corrected_jet_mass * jer_correction;
+
+                        if (!JecSystAppliesToYear(syst_name, yearst)) {
+                            continue;
+                        }
+
+                        auto uncertainty = jer_uncertainty.find(syst_name);
+
+                        if (uncertainty == jer_uncertainty.end()) {
+                            throw std::runtime_error(
+                                "ERROR: JER uncertainty not found: " +
+                                syst_name +
+                                " for year " + yearst);
+                        }
+
+                        const JecConfigReader::JerBin &jer_region = uncertainty->second;
+
+                        JecApplication::SystematicOptions systJer{};
+                        systJer.jerVar = ToLower(direction);  // "Up" -> "up", "Down" -> "down"
+                        systJer.jerRegion = jer_region;
+
+                        JecApplication::JesInputs jet_after_jes{
+                            corrected_jet_pt_after_jes,
+                            Jet_eta[j],
+                            Jet_phi[j],
+                            Jet_area[j],
+                            Rho_fixedGridRhoFastjetAll,
+                            0.0
+                        };
+
+                        const double shifted_jer_factor =
+                            jet_applier->jerFactor(jet_after_jes,
+                                                    jer_inputs,
+                                                    systJer);
+
+                        shifted_jer_pts[branch_name] =
+                            corrected_jet_pt_after_jes * shifted_jer_factor;
+                        shifted_jer_masses[mass_branch_name] =
+                            corrected_jet_mass * shifted_jer_factor;
+                    }
+                }
+
+                corrected_jet_pt *= jer_correction;
+                corrected_jet_mass *= jer_correction;
+
+                for (auto &entry : shifted_jes_pts) {
+                    double &shifted_pt = entry.second;
+                    const double shifted_jer_factor = nominal_jer_factor(shifted_pt);
+                    shifted_pt *= shifted_jer_factor;
+
+                    const std::string mass_branch_name =
+                        "t_Jet_mass_" + entry.first.substr(std::string("t_Jet_pt_").size());
+                    shifted_jes_masses.at(mass_branch_name) *= shifted_jer_factor;
+                }
+            }
+
+
+            if (!isValidJet(j, corrected_jet_pt)) {
                 //std::cout << "Jet " << j << " invalid" << std::endl;
                 continue;
             }
@@ -456,9 +865,9 @@ void HmmAnalyzer::EventLoop() {
             // Jet_jetId[j] >= 2 [> && Jet_puId[j]>=1 <])) {
             // continue;
             //}
-            double dR1 = DeltaR((*t_Mu_eta)[index_mu1], (*t_Mu_phi)[index_mu1],
+            double dR1 = DeltaR(Muon_eta[index_mu1], Muon_phi[index_mu1],
                                 Jet_eta[j], Jet_phi[j]);
-            double dR2 = DeltaR((*t_Mu_eta)[index_mu2], (*t_Mu_phi)[index_mu2],
+            double dR2 = DeltaR(Muon_eta[index_mu2], Muon_phi[index_mu2],
                                 Jet_eta[j], Jet_phi[j]);
             if (dR1 < 0.4 || dR2 < 0.4) {
                 //std::cout << "Jet " << j << " not well seperated" << std::endl;
@@ -471,15 +880,29 @@ void HmmAnalyzer::EventLoop() {
                 continue;
             }*/
             //std::cout << "Jet pass dR and EmEF" << std::endl;
-
-            if(jetCorrector.jetVeto(Jet_eta[j], Jet_phi[j])){
-                //std::cout << "Jet " << j << " vetoed" << std::endl;
+            if (jvm_checker.checkJetInVetoRegion(
+                    Jet_eta[j], Jet_phi[j], corrected_jet_pt, Jet_jetId[j],
+                    Jet_chEmEF[j], Jet_neEmEF[j])) {
+                // std::cout << "Jet " << j << " vetoed" << std::endl;
                 continue;
-                //add hist for jet veto
             }
+            
             h_nValidNotVetoedJets->Fill(0.5);
 
             //std::cout << "Jet pass jetVeto" << std::endl;
+            int stored_jet_idx = t_nJet;
+
+            if (corrected_jet_pt > leadJet_pt) {
+                subleadJet_pt = leadJet_pt;
+                subleadJet_idx = leadJet_idx;
+
+                leadJet_pt = corrected_jet_pt;
+                leadJet_idx = stored_jet_idx;
+            }
+            else if (corrected_jet_pt > subleadJet_pt) {
+                subleadJet_pt = corrected_jet_pt;
+                subleadJet_idx = stored_jet_idx;
+            }
 
             t_nJet++;
             t_Jet_area->push_back(Jet_area[j]);
@@ -490,11 +913,37 @@ void HmmAnalyzer::EventLoop() {
             t_Jet_chEmEF->push_back(Jet_chEmEF[j]);
             t_Jet_chHEF->push_back(Jet_chHEF[j]);
             t_Jet_eta->push_back(Jet_eta[j]);
-            t_Jet_mass->push_back(Jet_mass[j]);
+            t_Jet_mass->push_back(corrected_jet_mass);
+            t_Jet_mass_nanoAOD->push_back(Jet_mass[j]);
             t_Jet_neEmEF->push_back(Jet_neEmEF[j]);
             t_Jet_neHEF->push_back(Jet_neHEF[j]);
             t_Jet_phi->push_back(Jet_phi[j]);
-            t_Jet_pt->push_back(Jet_pt[j]);
+            t_Jet_pt->push_back(corrected_jet_pt);
+            for (const auto &entry : shifted_jes_pts) {
+                const std::string &branch_name = entry.first;
+                const double shifted_pt = entry.second;
+
+                t_Jet_pt_jes_syst.at(branch_name)->push_back(shifted_pt);
+            }
+            for (const auto &entry : shifted_jer_pts) {
+                const std::string &branch_name = entry.first;
+                const double shifted_pt = entry.second;
+
+                t_Jet_pt_jer_syst.at(branch_name)->push_back(shifted_pt);
+            }
+            for (const auto &entry : shifted_jes_masses) {
+                const std::string &branch_name = entry.first;
+                const double shifted_mass = entry.second;
+
+                t_Jet_mass_jes_syst.at(branch_name)->push_back(shifted_mass);
+            }
+            for (const auto &entry : shifted_jer_masses) {
+                const std::string &branch_name = entry.first;
+                const double shifted_mass = entry.second;
+
+                t_Jet_mass_jer_syst.at(branch_name)->push_back(shifted_mass);
+            }
+            t_Jet_pt_nanoAOD->push_back(Jet_pt[j]);
             // t_Jet_qgl->push_back(Jet_qgl[j]);
             // t_Jet_jetId->push_back(Jet_jetId[j]);
             t_Jet_nConstituents->push_back(Jet_nConstituents[j]);
@@ -515,11 +964,11 @@ void HmmAnalyzer::EventLoop() {
             t_bJet_chEmEF->push_back(Jet_chEmEF[j]);
             t_bJet_chHEF->push_back(Jet_chHEF[j]);
             t_bJet_eta->push_back(Jet_eta[j]);
-            t_bJet_mass->push_back(Jet_mass[j]);
+            t_bJet_mass->push_back(corrected_jet_mass);
             t_bJet_neEmEF->push_back(Jet_neEmEF[j]);
             t_bJet_neHEF->push_back(Jet_neHEF[j]);
             t_bJet_phi->push_back(Jet_phi[j]);
-            t_bJet_pt->push_back(Jet_pt[j]);
+            t_bJet_pt->push_back(corrected_jet_pt);
             // t_bJet_qgl->push_back(Jet_qgl[j]);
             t_bJet_jetId->push_back(Jet_jetId[j]);
             t_bJet_nConstituents->push_back(Jet_nConstituents[j]);
@@ -527,7 +976,7 @@ void HmmAnalyzer::EventLoop() {
             t_bJet_nMuons->push_back(Jet_nMuons[j]);
             // t_bJet_puId->push_back(Jet_puId[j]);
 
-            if (!is_data) {
+            if (is_data) {
                 continue;
             }
 
@@ -536,11 +985,11 @@ void HmmAnalyzer::EventLoop() {
                 reader.eval_auto_bounds("central", BTagEntry::FLAV_B,
                                         fabs(Jet_eta[j]), // absolute value
                                                           // of eta
-                                        Jet_pt[j]);
+                                        corrected_jet_pt);
             double jet_scalefactor_up = reader.eval_auto_bounds(
-                "up", BTagEntry::FLAV_B, fabs(Jet_eta[j]), Jet_pt[j]);
+                "up", BTagEntry::FLAV_B, fabs(Jet_eta[j]), corrected_jet_pt);
             double jet_scalefactor_do = reader.eval_auto_bounds(
-                "down", BTagEntry::FLAV_B, fabs(Jet_eta[j]), Jet_pt[j]);
+                "down", BTagEntry::FLAV_B, fabs(Jet_eta[j]), corrected_jet_pt);
             // std::cout<<jet_scalefactor<<"
             // "<<jet_scalefactor_up<<"
             // "<<jet_scalefactor_do<<std::endl;
@@ -548,47 +997,55 @@ void HmmAnalyzer::EventLoop() {
             t_bJet_SFup->push_back(jet_scalefactor_up);
             t_bJet_SFdown->push_back(jet_scalefactor_do);
         }
+       
+        t_leadJet_idx = leadJet_idx;
+        t_subleadJet_idx = subleadJet_idx;
 
-        if(t_nbJet_Loose > 1 || t_nbJet > 0){
-            //std::cout << "Too many bJets" << std::endl;
-            continue;
-        }
+        //if(t_nbJet_Loose > 1 || t_nbJet > 0){
+            ////std::cout << "Too many bJets" << std::endl;
+            //continue;
+        //}
 
         h_nBjetRejection->Fill(0.5);
 
 
 
         // if (t_Jet_pt->size() >= 2) {
-        if (t_nJet >= 2) {
-            // TLorentzVector j1, j2, jj;
+        if (t_nJet >= 2 &&
+            leadJet_idx != INT_NULL_VALUE &&
+            subleadJet_idx != INT_NULL_VALUE) {
+
             ROOT::Math::PtEtaPhiMVector j1, j2, jj;
-            // j1.SetPtEtaPhiM((*t_Jet_pt)[0], (*t_Jet_eta)[0],
-            //(*t_Jet_phi)[0], (*t_Jet_mass)[0]);
-            // j2.SetPtEtaPhiM((*t_Jet_pt)[1], (*t_Jet_eta)[1],
-            //(*t_Jet_phi)[1], (*t_Jet_mass)[1]);
-            j1.SetCoordinates((*t_Jet_pt)[0], (*t_Jet_eta)[0], (*t_Jet_phi)[0],
-                              (*t_Jet_mass)[0]);
-            j2.SetCoordinates((*t_Jet_pt)[1], (*t_Jet_eta)[1], (*t_Jet_phi)[1],
-                              (*t_Jet_mass)[1]);
+
+            j1.SetCoordinates((*t_Jet_pt)[leadJet_idx],
+                              (*t_Jet_eta)[leadJet_idx],
+                              (*t_Jet_phi)[leadJet_idx],
+                              (*t_Jet_mass)[leadJet_idx]);
+
+            j2.SetCoordinates((*t_Jet_pt)[subleadJet_idx],
+                              (*t_Jet_eta)[subleadJet_idx],
+                              (*t_Jet_phi)[subleadJet_idx],
+                              (*t_Jet_mass)[subleadJet_idx]);
+
             jj = j1 + j2;
+
             t_diJet_pt = jj.Pt();
             t_diJet_eta = jj.Eta();
             t_diJet_phi = jj.Phi();
             t_diJet_mass = jj.M();
             t_diJet_mass_mo = jj.M();
+
             for (int k = 0; k < t_nJet; k++) {
                 for (int m = k + 1; m < t_nJet; m++) {
-                    // j1.SetPtEtaPhiM((*t_Jet_pt)[k], (*t_Jet_eta)[k],
-                    //(*t_Jet_phi)[k], (*t_Jet_mass)[k]);
-                    // j2.SetPtEtaPhiM((*t_Jet_pt)[m], (*t_Jet_eta)[m],
-                    //(*t_Jet_phi)[m], (*t_Jet_mass)[m]);
                     j1.SetCoordinates((*t_Jet_pt)[k], (*t_Jet_eta)[k],
                                       (*t_Jet_phi)[k], (*t_Jet_mass)[k]);
                     j2.SetCoordinates((*t_Jet_pt)[m], (*t_Jet_eta)[m],
                                       (*t_Jet_phi)[m], (*t_Jet_mass)[m]);
                     jj = j1 + j2;
-                    if (t_diJet_mass_mo < jj.M())
+
+                    if (t_diJet_mass_mo < jj.M()) {
                         t_diJet_mass_mo = jj.M();
+                    }
                 }
             }
         }

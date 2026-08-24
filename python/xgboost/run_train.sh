@@ -25,6 +25,7 @@ declare -a tuples=("Data" "DY" "EWK" "TT" "DiBoson" "ggH" "VBF")
 
 ifRetrain="T"
 ifOptimize="F"
+doSystematics="F"
 
 # now loop through the above array
 for bs in "${bkg_subset[@]}"; do
@@ -32,7 +33,7 @@ for bs in "${bkg_subset[@]}"; do
         echo "--------- B ${bs} - S ${ss} ---------"
         for era in "${eras[@]}"; do
             #echo "python3 train.py ${HIGGS_CHANNEL} ${era} ${bs} ${ss}"
-            python3 train.py ${HIGGS_CHANNEL} ${era} $ifRetrain $ifOptimize ${bs} ${ss}
+            python3 train.py ${HIGGS_CHANNEL} ${era} $ifRetrain $ifOptimize $doSystematics ${bs} ${ss}
 
             #for type in "signal" "background" "data"; do
                 #echo "         --- ${era} Skim ${type} ---"

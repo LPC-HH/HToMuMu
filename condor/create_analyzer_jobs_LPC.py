@@ -51,37 +51,52 @@ skip_pattern = [
 list_datasets = datasets_info.keys()
 # # Use in case you want to run over a specific list of datasets!
 #list_datasets = [
-    #"DY120to200_Summer22",
+    #"DY120to200_Summer24",
     #"EWK_2L2J_Summer24",
     #"Muon_2022E",
     #"Muon0_2024C",
     #"Muon0_2023C_v1",
     #"Muon0_2024I_v2",
-    #"Muon0_2025B",
+#    "Muon0_2025B",
     #"Muon0_2025G",
     #"TTto2L2Nu_Summer23",
+#    "TTtoLNu2Q_Summer22_ext1",
+#    "TTtoLNu2Q_Summer22",
+#    "TTtoLNu2Q_Summer24",
+#    "TTto2L2Nu_Summer24",
     #"VBF_Summer22",
     #"WZZ_Summer23BPix",
     #"VBF_Summer22",
     #"VBF_Summer22EE",
     #"VBF_Summer23",
     #"VBF_Summer23BPix",
-    #"VBF_Summer24",
+#    "VBF_Summer24",
     #"ggH_Summer22",
     #"ggH_Summer22EE",
     #"ggH_Summer23",
     #"ggH_Summer23BPix",
-    #"ggH_Summer24",
-#    "DY50to120_Summer22",
-#    "DY120to200_Summer24",
     #"WWtoLNu2Q_Summer22",
     #"Muon_2022C",
 #    "Muon_2022D",
 #    "SingleMuon_2022C",
 #]
 
+
+
 include_Z = "F"
 include_H = "T"
+muon_pt_syst = os.getenv("MUON_PT_SYST", "nominal")
+valid_muon_pt_systs = [
+    "nominal",
+    "scale_up",
+    "scale_down",
+    "smearing_up",
+    "smearing_down",
+]
+if muon_pt_syst not in valid_muon_pt_systs:
+    print("Unsupported MUON_PT_SYST '{}'. Use one of: {}".format(
+        muon_pt_syst, ", ".join(valid_muon_pt_systs)))
+    sys.exit(1)
 
 # cmsswReleaseVersion = "CMSSW_10_6_5"
 CMSSW_BASE_DIR = os.getenv('CMSSW_BASE')
@@ -95,6 +110,7 @@ Inputfiles_DIR = Analyzer_DIR + "list/"
 cmsswReleaseVersion = CMSSW_BASE_DIR.split("/")[-1]
 print("Using CMSSW version " + cmsswReleaseVersion)
 print("Running analysis version " + v.ANALYZER_VERSION_NUMBER)
+print("Muon pT systematic " + muon_pt_syst)
 print("Analyzer: " + "%s/bin/%s"%(Analyzer_DIR, analyzer))
 
 # Create script to send all of the jobs directly
@@ -118,8 +134,13 @@ for dataset_name in list_datasets:
 
     isData, max_runs_per_job, year, type_info, _ = datasets_info[dataset_name]
 
-    Output_DIR = "analyzer_%s/"%(outputfile) + "%s/"%(dataset_name)
+    if muon_pt_syst == "nominal":
+        Output_DIR = "analyzer_%s/"%(outputfile) + "%s/"%(dataset_name)
+    else:
+        Output_DIR = "analyzer_%s/"%(outputfile) + "%s_"%(dataset_name)+ "%s/"%(muon_pt_syst)
+
     Job_DIR = Condor_BASE_DIR + Output_DIR
+    print("jobdir", Job_DIR)
     if os.path.exists(Job_DIR + "input_list.tgz"):
         print(" (!) Condor directory already exists. Skipping!")
         continue
@@ -168,8 +189,25 @@ for dataset_name in list_datasets:
     # os.system("mkdir -p " + Job_Data_DIR + "leptonSF/%s"%(year))
     # os.system("cp " + "%s/leptonSF/%s/*.root"%(Analyzer_Data_DIR, year) + " " + "%s/leptonSF/%s/"%(Job_Data_DIR, year))
     os.system("mkdir -p " + Job_Data_DIR + "jetCorrections/%s/"%(year))
-    os.system("cp " + "%s/jetCorrections/%s/jetvetomaps.json.gz"%(Analyzer_Data_DIR, year) + " " + "%s/jetCorrections/%s/"%(Job_Data_DIR, year))
+    os.system("mkdir -p " + Job_Data_DIR + "jetCorrections/")
+    # os.system("cp " + "%s/jetCorrections/%s/jetvetomaps.json.gz"%(Analyzer_Data_DIR, year) + " " + "%s/jetCorrections/%s/"%(Job_Data_DIR, year))
 
+    # os.system("mkdir -p " + Job_Data_DIR + "jetCorrections/%s/"%(year))
+    # os.system("cp " + "%s/jetCorrections/%s/jetvetomaps.json.gz"%(Analyzer_Data_DIR, year) + " " + "%s/jetCorrections/%s/"%(Job_Data_DIR, year))
+    # os.system("cp " + "%s/jetCorrections/%s/jet_jerc.json.gz"%(Analyzer_Data_DIR, year) + " " + "%s/jetCorrections/%s/"%(Job_Data_DIR, year))
+    # os.system("cp " + "%s/jetCorrections/JecConfigAK4.json"%(Analyzer_Data_DIR) + " " + "%s/jetCorrections/%s/"%(Job_Data_DIR, year))
+    # os.system("cp " + "%s/jetCorrections/JecConfigAK8.json"%(Analyzer_Data_DIR) + " " + "%s/jetCorrections/%s/"%(Job_Data_DIR, year))
+    # os.system("cp " + "%s/jetCorrections/jer_smear.json.gz"%(Analyzer_Data_DIR) + " " + "%s/jetCorrections/%s/"%(Job_Data_DIR, year))
+    # os.system("cp " + "%s/jetCorrections/JvmConfig.json"%(Analyzer_Data_DIR) + " " + "%s/jetCorrections/%s/"%(Job_Data_DIR, year))
+
+
+    os.system("mkdir -p " + Job_Data_DIR + "jetCorrections/%s/"%(year))
+    os.system("cp " + "%s/jetCorrections/%s/jetvetomaps.json.gz"%(Analyzer_Data_DIR, year) + " " + "%s/jetCorrections/"%(Job_Data_DIR))
+    os.system("cp " + "%s/jetCorrections/%s/jet_jerc.json.gz"%(Analyzer_Data_DIR, year) + " " + "%s/jetCorrections/"%(Job_Data_DIR))
+    os.system("cp " + "%s/jetCorrections/JecConfigAK4.json"%(Analyzer_Data_DIR) + " " + "%s/jetCorrections/"%(Job_Data_DIR))
+    os.system("cp " + "%s/jetCorrections/JecConfigAK8.json"%(Analyzer_Data_DIR) + " " + "%s/jetCorrections/"%(Job_Data_DIR))
+    os.system("cp " + "%s/jetCorrections/jer_smear.json.gz"%(Analyzer_Data_DIR) + " " + "%s/jetCorrections/"%(Job_Data_DIR))
+    os.system("cp " + "%s/jetCorrections/JvmConfig.json"%(Analyzer_Data_DIR) + " " + "%s/jetCorrections/"%(Job_Data_DIR))
     #get RazorCommon as well
     if(isData=="T"):
         os.system("mkdir -p " + Job_DIR + "RazorCommon/data/")
@@ -179,9 +217,9 @@ for dataset_name in list_datasets:
         os.system("cp " + "%s/bin/%s/FWLiteGoodLumi"%(CMSSW_BASE_DIR,SCRAM_ARCH) + " " "%s/RazorCommon/bin/"%(Job_DIR))
         os.system("cp " + "%s/RazorCommon/python/loadJson.py"%(Analyzer_DIR) + " " "%s/RazorCommon/python/"%(Job_DIR))
     
-    if(year != "2025"):
-        os.system("mkdir -p " + Job_Data_DIR + "leptonSF/%s/"%(year))
-        os.system("cp " + "%s/leptonSF/%s/*.gz"%(Analyzer_Data_DIR, year) + " " + "%s/leptonSF/%s/"%(Job_Data_DIR, year))
+    os.system("mkdir -p " + Job_Data_DIR + "leptonSF/%s/"%(year))
+    os.system("cp " + "%s/leptonSF/%s/muon_scalesmearing.json.gz"%(Analyzer_Data_DIR, year) + " " + "%s/leptonSF/%s/"%(Job_Data_DIR, year))
+    os.system("cp " + "%s/leptonSF/%s/muon_Z.json.gz"%(Analyzer_Data_DIR, year) + " " + "%s/leptonSF/%s/"%(Job_Data_DIR, year))
     os.system("mkdir -p " + Job_Data_DIR + "pileup")
     pileup_file = "PileupReweight_Summer%s"%(year[2:])
     if not os.path.exists(Analyzer_Data_DIR + "/pileup/%s.root"%(pileup_file)):
@@ -195,10 +233,14 @@ for dataset_name in list_datasets:
     jobfile_JDL = open(Job_DIR + "/task.jdl", "w+")
     jobfile_JDL.write("Universe  = vanilla" + "\n")
     jobfile_JDL.write("Executable = ./run_job_LPC.sh" + "\n")
+    
+    if muon_pt_syst == "nominal":
+        EOS_SUBPATH = os.getenv('LOGNAME') + "/analyzer_%s/"%(outputfile) + type_info + "/%s/"%(dataset_name)
+    else:
+        EOS_SUBPATH = os.getenv('LOGNAME') + "/analyzer_%s/"%(outputfile) + type_info + "/%s"%(dataset_name) + "_%s/"%(muon_pt_syst) 
 
-    EOS_SUBPATH = os.getenv('LOGNAME') + "/analyzer_%s/"%(outputfile) + type_info + "/%s/"%(dataset_name)
     os.system("xrdfs root://cmseos.fnal.gov mkdir -p /store/group/lpchmumu/"+ EOS_SUBPATH)
-    args = outputfile + " $(I) " + isData + " " + year + " " + EOS_SUBPATH + " " + cmsswReleaseVersion + " "  + include_Z + " " + include_H
+    args = outputfile + " $(I) " + isData + " " + year + " " + EOS_SUBPATH + " " + cmsswReleaseVersion + " "  + include_Z + " " + include_H + " " + muon_pt_syst
     jobfile_JDL.write("Arguments = " + args + "\n")
 
     jobfile_JDL.write("Log = log/jobR$(I).$(Cluster).$(Process).log" + "\n")
@@ -211,10 +253,15 @@ for dataset_name in list_datasets:
     transfer_files += Job_DIR + "/" + analyzer + ", "
     transfer_files += Job_Data_DIR + "/Rocco/RoccoR" + year + ".txt, "
     transfer_files += Job_Data_DIR + "/btagSF/DeepCSV_94XSF_V3_B_F.csv, "
-    transfer_files += Job_Data_DIR + "/jetCorrections/" + year + "/jetvetomaps.json.gz, "
+    transfer_files += Job_Data_DIR + "/jetCorrections/jetvetomaps.json.gz, "
+    transfer_files += Job_Data_DIR + "/jetCorrections/jet_jerc.json.gz, "
+    transfer_files += Job_Data_DIR + "/jetCorrections/JecConfigAK4.json, "
+    transfer_files += Job_Data_DIR + "/jetCorrections/JecConfigAK8.json, "
+    transfer_files += Job_Data_DIR + "/jetCorrections/jer_smear.json.gz, "
+    transfer_files += Job_Data_DIR + "/jetCorrections/JvmConfig.json, "
 
-    if(year != "2025"):
-        transfer_files += Job_Data_DIR + "/leptonSF/" + year + "/muon_Z.json.gz, "
+    transfer_files += Job_Data_DIR + "/leptonSF/" + year + "/muon_scalesmearing.json.gz, "
+    transfer_files += Job_Data_DIR + "/leptonSF/" + year + "/muon_Z.json.gz, "
     if(isData=="T"):
         transfer_files += Job_DIR + "/RazorCommon/bin/FWLiteGoodLumi, "
         transfer_files += Job_DIR + "/RazorCommon/data/Run3/" + golden_json[year] + ", "
@@ -225,7 +272,7 @@ for dataset_name in list_datasets:
 
     jobfile_JDL.write("should_transfer_files = YES" + "\n")
     jobfile_JDL.write("when_to_transfer_output = ON_EXIT" + "\n\n# Resources request\n")
-    jobfile_JDL.write("RequestMemory = 4500 \n\n# Jobs selection\n")
+    jobfile_JDL.write("RequestMemory = 1500 \n\n# Jobs selection\n")
 
     jobfile_JDL.write("Queue I from (")
     for i in range(1, n_jobs+1):

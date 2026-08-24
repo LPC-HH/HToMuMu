@@ -17,12 +17,15 @@
 #include <iostream>
 #include <map>
 #include <math.h>
+#include <algorithm>
+#include <cctype>
+#include <stdexcept>
+#include <memory>
 // Header file for the classes stored in the TTree if any.
 #include "../src/BTagCalibrationStandalone.cpp"
 #include "BTagCalibrationStandalone.h"
 #include "LeptonEfficiencyCorrector.h"
 #include "MainEvent.h"
-#include "RoccoR.h"
 #include "TAxis.h"
 #include "TF1.h"
 #include "TH1F.h"
@@ -45,9 +48,245 @@ constexpr float MUON_MASS = 0.1056583745;
 constexpr float FLOAT_NULL_VALUE = -999.;
 constexpr int INT_NULL_VALUE = -999;
 
-std::map<TString, TString> NANOAOD_VERSION = {
+inline const std::map<TString, TString> NANOAOD_VERSION = {
     {"2022", "v12"}, {"2022EE", "v12"},  {"2023", "v12"}, {"2023BPix", "v12"}, {"2024", "v15"}, {"2025", "v15"}
 };
+
+inline std::string GetJercYear(const std::string &year) {
+    if (year == "2022")
+        return "2022Pre";
+    else if (year == "2022EE")
+        return "2022Post";
+    else if (year == "2023")
+        return "2023Pre";
+    else if (year == "2023BPix")
+        return "2023Post";
+    else if (year == "2024")
+        return "2024";
+    else if (year == "2025")
+        return "2025";
+    else
+        throw std::runtime_error("Unsupported JERC year: " + year);
+}
+
+inline std::string GetJercEra(const std::string &jec_year) {
+    if (jec_year == "2022Pre")
+        return "Era2022PreAll";
+    if (jec_year == "2022Post")
+        return "Era2022PostAll";
+    if (jec_year == "2023Pre")
+        return "Era2023PreAll";
+    if (jec_year == "2023Post")
+        return "Era2023PostAll";
+    if (jec_year == "2024")
+        return "Era2024All";
+    if (jec_year == "2025")
+        return "Era2025All";
+    throw std::runtime_error("Unsupported JEC era year: " + jec_year);
+}
+
+
+inline const std::vector<std::string> jet_jes_syst_names = {
+    "CMS_scale_j_FlavorQCD",
+    "CMS_scale_j_RelativeBal",
+    "CMS_scale_j_HF",
+    "CMS_scale_j_BBEC1",
+    "CMS_scale_j_EC2",
+    "CMS_scale_j_Absolute",
+   
+    "CMS_scale_j_BBEC1_2022",
+    "CMS_scale_j_RelativeSample_2022",
+    "CMS_scale_j_EC2_2022",
+    "CMS_scale_j_HF_2022",
+    "CMS_scale_j_Absolute_2022",
+    
+    "CMS_scale_j_BBEC1_2022EE",
+    "CMS_scale_j_RelativeSample_2022EE",
+    "CMS_scale_j_EC2_2022EE",
+    "CMS_scale_j_HF_2022EE",
+    "CMS_scale_j_Absolute_2022EE",
+
+    "CMS_scale_j_BBEC1_2023",
+    "CMS_scale_j_RelativeSample_2023",
+    "CMS_scale_j_EC2_2023",
+    "CMS_scale_j_HF_2023",
+    "CMS_scale_j_Absolute_2023",
+    
+    "CMS_scale_j_BBEC1_2023BPix",
+    "CMS_scale_j_RelativeSample_2023BPix",
+    "CMS_scale_j_EC2_2023BPix",
+    "CMS_scale_j_HF_2023BPix",
+    "CMS_scale_j_Absolute_2023BPix",
+
+    "CMS_scale_j_BBEC1_2024",
+    "CMS_scale_j_RelativeSample_2024",
+    "CMS_scale_j_EC2_2024",
+    "CMS_scale_j_HF_2024",
+    "CMS_scale_j_Absolute_2024",
+
+    "CMS_scale_j_BBEC1_2025",
+    "CMS_scale_j_RelativeSample_2025",
+    "CMS_scale_j_EC2_2025",
+    "CMS_scale_j_HF_2025",
+    "CMS_scale_j_Absolute_2025",
+
+};
+
+inline const std::vector<std::string> jes_directions = {
+    "Up",
+    "Down"
+};
+
+inline const std::vector<std::string> jet_jer_syst_names = {
+    "CMS_res_j_eta0to1p93_pt0toInf_2022",
+    "CMS_res_j_eta1p93to2p5_pt0toInf_2022",
+    "CMS_res_j_eta2p5to3p0_pt0to50_2022",
+    "CMS_res_j_eta2p5to3p0_pt50toInf_2022",
+    "CMS_res_j_eta3to5_pt0to50_2022",
+    "CMS_res_j_eta3to5_pt50toInf_2022",
+
+    "CMS_res_j_eta0to1p93_pt0toInf_2022EE",
+    "CMS_res_j_eta1p93to2p5_pt0toInf_2022EE",
+    "CMS_res_j_eta2p5to3p0_pt0to50_2022EE",
+    "CMS_res_j_eta2p5to3p0_pt50toInf_2022EE",
+    "CMS_res_j_eta3to5_pt0to50_2022EE",
+    "CMS_res_j_eta3to5_pt50toInf_2022EE",
+
+    "CMS_res_j_eta0to1p93_pt0toInf_2023",
+    "CMS_res_j_eta1p93to2p5_pt0toInf_2023",
+    "CMS_res_j_eta2p5to3p0_pt0to50_2023",
+    "CMS_res_j_eta2p5to3p0_pt50toInf_2023",
+    "CMS_res_j_eta3to5_pt0to50_2023",
+    "CMS_res_j_eta3to5_pt50toInf_2023",
+
+    "CMS_res_j_eta0to1p93_pt0toInf_2023BPix",
+    "CMS_res_j_eta1p93to2p5_pt0toInf_2023BPix",
+    "CMS_res_j_eta2p5to3p0_pt0to50_2023BPix",
+    "CMS_res_j_eta2p5to3p0_pt50toInf_2023BPix",
+    "CMS_res_j_eta3to5_pt0to50_2023BPix",
+    "CMS_res_j_eta3to5_pt50toInf_2023BPix",
+
+    "CMS_res_j_eta0to1p93_pt0toInf_2024",
+    "CMS_res_j_eta1p93to2p5_pt0toInf_2024",
+    "CMS_res_j_eta2p5to3p0_pt0to50_2024",
+    "CMS_res_j_eta2p5to3p0_pt50toInf_2024",
+    "CMS_res_j_eta3to5_pt0to50_2024",
+    "CMS_res_j_eta3to5_pt50toInf_2024",
+
+    "CMS_res_j_eta0to1p93_pt0toInf_2025",
+    "CMS_res_j_eta1p93to2p5_pt0toInf_2025",
+    "CMS_res_j_eta2p5to3p0_pt0to50_2025",
+    "CMS_res_j_eta2p5to3p0_pt50toInf_2025",
+    "CMS_res_j_eta3to5_pt0to50_2025",
+    "CMS_res_j_eta3to5_pt50toInf_2025",
+
+};
+
+inline const std::vector<std::string> jer_directions = {
+    "Up",
+    "Down"
+};
+
+inline std::string ToLower(std::string s) {
+    std::transform(s.begin(), s.end(), s.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    return s;
+}
+
+
+inline std::string NormalizeMuonPtSyst(std::string syst) {
+    syst = ToLower(syst);
+
+    if (syst == "nominal" || syst == "none") {
+        return "nominal";
+    }
+    if (syst == "scale_up" || syst == "scale_down" ||
+        syst == "smearing_up" || syst == "smearing_down") {
+        return syst;
+    }
+
+    throw std::runtime_error(
+        "Unsupported muon pT systematic: " + syst +
+        ". Use nominal, scale_up, scale_down, smearing_up, or smearing_down.");
+}
+
+inline bool IsMuonScaleSyst(const std::string &syst) {
+    return syst == "scale_up" || syst == "scale_down";
+}
+
+inline bool IsMuonSmearingSyst(const std::string &syst) {
+    return syst == "smearing_up" || syst == "smearing_down";
+}
+
+inline std::string MuonSystDirection(const std::string &syst) {
+    if (syst.size() >= 3 && syst.substr(syst.size() - 3) == "_up") {
+        return "up";
+    }
+    if (syst.size() >= 5 && syst.substr(syst.size() - 5) == "_down") {
+        return "down";
+    }
+    return "nominal";
+}
+
+inline std::string JetPtJesSystBranchName(const std::string &syst_name,
+                                const std::string &direction) {
+    return "t_Jet_pt_" + syst_name + "_" + ToLower(direction);
+}
+
+inline std::string JetPtJerSystBranchName(const std::string &syst_name,
+                                   const std::string &direction) {
+    return "t_Jet_pt_" + syst_name + "_" + ToLower(direction);
+}
+
+inline std::string JetMassJesSystBranchName(const std::string &syst_name,
+                                            const std::string &direction) {
+    return "t_Jet_mass_" + syst_name + "_" + ToLower(direction);
+}
+
+inline std::string JetMassJerSystBranchName(const std::string &syst_name,
+                                            const std::string &direction) {
+    return "t_Jet_mass_" + syst_name + "_" + ToLower(direction);
+}
+
+inline bool IsYearLabel(const std::string &label) {
+    static const std::vector<std::string> valid_year_labels = {
+        "2022",
+        "2022EE",
+        "2023",
+        "2023BPix",
+        "2024",
+        "2025"
+    };
+
+    return std::find(valid_year_labels.begin(),
+                     valid_year_labels.end(),
+                     label) != valid_year_labels.end();
+}
+
+inline std::string GetSuffixAfterLastUnderscore(const std::string &name) {
+    const size_t pos = name.find_last_of('_');
+
+    if (pos == std::string::npos || pos + 1 >= name.size()) {
+        return "";
+    }
+
+    return name.substr(pos + 1);
+}
+
+inline bool JecSystAppliesToYear(const std::string &syst_name,
+                          const std::string &yearst) {
+    const std::string suffix = GetSuffixAfterLastUnderscore(syst_name);
+
+    if (!IsYearLabel(suffix)) {
+        return true;
+    }
+
+    return suffix == yearst;
+}
+
+
+
+
 
 class HmmAnalyzer : public MainEvent {
   public:
@@ -65,13 +304,8 @@ class HmmAnalyzer : public MainEvent {
     float getPileupWeight(int);
     float getPileupWeightUp(int);
     float getPileupWeightDown(int);
-    bool passesJetPtSelection(int index);
-    bool isValidJet(int index);
-    void CorrectPtRoch(const RoccoR &_calib, const bool _doSys,
-                       const ROOT::Math::PtEtaPhiMVector _mu_vec, const float _mu_ptErr_raw, float &_pt,
-                       float &_ptErr, float &_pt_sys_up, float &_pt_sys_down,
-                       const int _charge, const int _trk_layers,
-                       const float _GEN_pt, const bool _isData);
+    //bool passesJetPtSelection(int index, float corrected_pt);
+    bool isValidJet(int index, float corrected_pt);
     void EventLoop();
 
     //read run3 muon efficiency json file
@@ -83,6 +317,8 @@ class HmmAnalyzer : public MainEvent {
     TString year;
     bool include_Z; /**< Flag indicating if save Z region. */
     bool include_H; /**< Flag indicating if save H region. */
+    std::string muon_pt_syst;
+    bool apply_muon_pt_syst_to_signal;
     std::string yearst;
     std::map<std::string, float> muon_pt_cut;
     std::map<std::string, float> btagLoose_cut;
@@ -93,7 +329,6 @@ class HmmAnalyzer : public MainEvent {
         new TH1D("h_sumOfgenpuWeight", "h_sumOfgenpuWeight", 1, 0, 1);
     TH1D *h_pileup = new TH1D("h_pileup", "h_pileup", 99, 0, 99);
     TH1D *h_pileup_nTrue = new TH1D("h_pileup_nTrue", "h_pileup_nTrue", 99, 0, 99);
-    RoccoR _Roch_calib;
 
     TFile *pileupWeightFile;
     TH1F *pileupWeightHist, *pileupWeightSysUpHist, *pileupWeightSysDownHist;
@@ -120,17 +355,6 @@ class HmmAnalyzer : public MainEvent {
     TH1D *h_nValidJets = new TH1D("h_nValidJets", "h_nValidJets", 1, 0, 1);
     TH1D *h_nValidSeperatedJets = new TH1D("h_nValidSeperatedJets", "h_nValidSeperatedJets", 1, 0, 1);
     TH1D *h_nValidNotVetoedJets = new TH1D("h_nValidNotVetoedJets", "h_nValidNotVetoedJets", 1, 0, 1);
-
-    /*
-    LeptonEfficiencyCorrector Mu_eff_SF_TRIG;
-    LeptonEfficiencyCorrector Mu_eff_SF_ID;
-    LeptonEfficiencyCorrector Mu_eff_SF_ID_stat;
-    LeptonEfficiencyCorrector Mu_eff_SF_ID_syst;
-    LeptonEfficiencyCorrector Mu_eff_SF_ISO;
-    LeptonEfficiencyCorrector Mu_eff_SF_ISO_stat;
-    LeptonEfficiencyCorrector Mu_eff_SF_ISO_syst;
-    */
-    
 
     TFile *oFile;
     // TFile *ohistFile;
@@ -181,18 +405,28 @@ class HmmAnalyzer : public MainEvent {
     std::vector<int> *t_Mu_genPartIdx;
     std::vector<UChar_t> *t_Mu_genPartFlav;
     std::vector<int> *t_Mu_charge;
-    std::vector<float> *t_Mu_EffSF_TRIG;
-    std::vector<float> *t_Mu_EffSFErr_TRIG;
+    //std::vector<float> *t_Mu_EffSF_TRIG;
+    //std::vector<float> *t_Mu_EffSF_TRIG_up;
+    //std::vector<float> *t_Mu_EffSF_TRIG_down;
+    std::vector<float> *t_Mu_EffTRIG_DATA;
+    std::vector<float> *t_Mu_EffTRIG_DATA_up;
+    std::vector<float> *t_Mu_EffTRIG_DATA_down;
+    std::vector<float> *t_Mu_EffTRIG_MC;
+    std::vector<float> *t_Mu_EffTRIG_MC_up;
+    std::vector<float> *t_Mu_EffTRIG_MC_down;
+
     std::vector<float> *t_Mu_EffSF_ID;
-    std::vector<float> *t_Mu_EffSF_ID_stat;
-    std::vector<float> *t_Mu_EffSF_ID_syst;
+    std::vector<float> *t_Mu_EffSF_ID_up;
+    std::vector<float> *t_Mu_EffSF_ID_down;
     std::vector<float> *t_Mu_EffSF_ISO;
-    std::vector<float> *t_Mu_EffSF_ISO_stat;
-    std::vector<float> *t_Mu_EffSF_ISO_syst;
+    std::vector<float> *t_Mu_EffSF_ISO_up;
+    std::vector<float> *t_Mu_EffSF_ISO_down;
     std::vector<float> *t_Mu_pt;
     std::vector<float> *t_Mu_ptErr;
     std::vector<float> *t_Mu_bsConstrainedPt;
     std::vector<float> *t_Mu_bsConstrainedPtErr;
+    std::vector<float> *t_Mu_bsConstrainedPt_nanoAOD;
+    std::vector<float> *t_Mu_bsConstrainedPtErr_nanoAOD;
     std::vector<float> *t_Mu_phi;
     std::vector<float> *t_Mu_eta;
     std::vector<float> *t_Mu_mass;
@@ -260,6 +494,11 @@ class HmmAnalyzer : public MainEvent {
     std::vector<float> *t_SubJet_tau2;
     std::vector<float> *t_SubJet_tau3;
     std::vector<float> *t_SubJet_tau4;
+    
+
+    int t_leadJet_idx;
+    int t_subleadJet_idx;
+
     int t_nJet;
     std::vector<float> *t_Jet_area;
     // std::vector<float>         *t_Jet_btagCMVA;
@@ -272,10 +511,16 @@ class HmmAnalyzer : public MainEvent {
     std::vector<float> *t_Jet_chHEF;
     std::vector<float> *t_Jet_eta;
     std::vector<float> *t_Jet_mass;
+    std::vector<float> *t_Jet_mass_nanoAOD;
     std::vector<float> *t_Jet_neEmEF;
     std::vector<float> *t_Jet_neHEF;
     std::vector<float> *t_Jet_phi;
     std::vector<float> *t_Jet_pt;
+    std::map<std::string, std::vector<float> *> t_Jet_pt_jes_syst;
+    std::map<std::string, std::vector<float> *> t_Jet_pt_jer_syst;
+    std::map<std::string, std::vector<float> *> t_Jet_mass_jes_syst;
+    std::map<std::string, std::vector<float> *> t_Jet_mass_jer_syst;
+    std::vector<float> *t_Jet_pt_nanoAOD;
     std::vector<float> *t_Jet_qgl;
     std::vector<int> *t_Jet_jetId;
     std::vector<int> *t_Jet_chMultiplicity;
@@ -361,6 +606,8 @@ HmmAnalyzer::HmmAnalyzer(const TString &inputFileList, const char *outFileName,
     year = year_num;
     include_Z = include_Z_;
     include_H = include_H_;
+    muon_pt_syst = "nominal";
+    apply_muon_pt_syst_to_signal = false;
     yearst = std::string(year.Data());
     
     if(include_Z){
@@ -370,9 +617,6 @@ HmmAnalyzer::HmmAnalyzer(const TString &inputFileList, const char *outFileName,
         std::cout << "H range included" << std::endl;
     }
 
-    std::string path_RochCor = "./data/Rocco/RoccoR" + yearst + ".txt";
-    std::cout << "Rochester correction files: " << path_RochCor << std::endl;
-    _Roch_calib.init(path_RochCor);
 
     h_sumOfgw->SetBinContent(1, 0.0);
     h_sumOfgpw->SetBinContent(1, 0.0);
@@ -415,135 +659,6 @@ HmmAnalyzer::HmmAnalyzer(const TString &inputFileList, const char *outFileName,
         getPileupHistograms();
     }
 
-    /*
-    // muon eff SFs
-    muon_effSF_TRIG_files.clear();
-    muon_effSF_ID_files.clear();
-    muon_effSF_ISO_files.clear();
-    histo_names_TRIG.clear();
-    histo_names_ID.clear();
-    histo_names_ISO.clear();
-    // if (year == "2016") {
-
-    
-    std::string Mu_ID_file1 =
-        //"./data/leptonSF/" + yearst + "/RunBCDEF_SF_ID.root";
-        // std::string Mu_Iso_file1 =
-        //"./data/leptonSF/" + yearst + "/RunBCDEF_SF_ISO.root";
-        // std::string Mu_ID_file2 =
-        //"./data/leptonSF/" + yearst + "/RunGH_SF_ID.root";
-        // std::string Mu_Iso_file2 =
-        //"./data/leptonSF/" + yearst + "/RunGH_SF_ISO.root";
-        // std::string Mu_Trg_file1 =
-        //"./data/leptonSF/" + yearst + "/EfficienciesAndSF_RunBtoF.root";
-        // std::string Mu_Trg_file2 =
-        //"./data/leptonSF/" + yearst + "/EfficienciesAndSF_RunGtoH.root";
-        "./data/leptonSF/2016/RunBCDEF_SF_ID.root";
-    std::string Mu_Iso_file1 = "./data/leptonSF/2016/RunBCDEF_SF_ISO.root";
-    std::string Mu_ID_file2 = "./data/leptonSF/2016/RunGH_SF_ID.root";
-    std::string Mu_Iso_file2 = "./data/leptonSF/2016/RunGH_SF_ISO.root";
-    std::string Mu_Trg_file1 =
-        "./data/leptonSF/2016/EfficienciesAndSF_RunBtoF.root";
-    std::string Mu_Trg_file2 =
-        "./data/leptonSF/2016/EfficienciesAndSF_RunGtoH.root";
-    std::cout << "Muon ID correction files: " << Mu_ID_file1 << " "
-              << Mu_ID_file2 << std::endl;
-    std::cout << "Muon Isolation correction files: " << Mu_Iso_file1 << " "
-              << Mu_Iso_file2 << std::endl;
-    std::cout << "Muon triger SF files: " << Mu_Trg_file1 << " " << Mu_Trg_file2
-              << std::endl;
-
-    muon_effSF_TRIG_files.push_back(Mu_Trg_file1);
-    muon_effSF_TRIG_files.push_back(Mu_Trg_file2);
-    muon_effSF_ID_files.push_back(Mu_ID_file1);
-    muon_effSF_ID_files.push_back(Mu_ID_file2);
-    muon_effSF_ISO_files.push_back(Mu_Iso_file1);
-    muon_effSF_ISO_files.push_back(Mu_Iso_file2);
-    std::string Mu_Trg_name = "IsoMu24_OR_IsoTkMu24_PtEtaBins/abseta_pt_ratio";
-    std::string Mu_ID_name = "NUM_MediumID_DEN_genTracks_eta_pt";
-    std::string Mu_Iso_name = "NUM_LooseRelIso_DEN_MediumID_eta_pt";
-    histo_names_TRIG.push_back(Mu_Trg_name);
-    histo_names_ID.push_back(Mu_ID_name);
-    histo_names_ISO.push_back(Mu_Iso_name);
-    histo_names_TRIG.push_back(Mu_Trg_name);
-    histo_names_ID.push_back(Mu_ID_name);
-    histo_names_ISO.push_back(Mu_Iso_name);
-                            
-    //} else if (year == "2017") {
-    // std::string Mu_Trg_file =
-    //"./data/leptonSF/" + yearst +
-    //"/EfficienciesAndSF_RunBtoF_Nov17Nov2017.root";
-    // std::string Mu_ID_file =
-    //"./data/leptonSF/" + yearst + "/RunBCDEF_SF_ID_syst.root";
-    // std::string Mu_Iso_file =
-    //"./data/leptonSF/" + yearst + "/RunBCDEF_SF_ISO_syst.root";
-    // muon_effSF_TRIG_files.push_back(Mu_Trg_file);
-    // muon_effSF_ID_files.push_back(Mu_ID_file);
-    // muon_effSF_ISO_files.push_back(Mu_Iso_file);
-    // std::string Mu_Trg_name = "IsoMu27_PtEtaBins/pt_abseta_ratio";
-    // std::string Mu_ID_name = "NUM_MediumID_DEN_genTracks_pt_abseta";
-    // std::string Mu_Iso_name = "NUM_LooseRelIso_DEN_MediumID_pt_abseta";
-    // histo_names_TRIG.push_back(Mu_Trg_name);
-    // histo_names_ID.push_back(Mu_ID_name);
-    // histo_names_ISO.push_back(Mu_Iso_name);
-    //} else {
-    // std::string Mu_Trg_file =
-    //"./data/leptonSF/" + yearst +
-    //"/EfficienciesAndSF_2018Data_AfterMuonHLTUpdate.root";
-    // std::string Mu_ID_file =
-    //"./data/leptonSF/" + yearst + "/RunABCD_SF_ID.root";
-    // std::string Mu_Iso_file =
-    //"./data/leptonSF/" + yearst + "/RunABCD_SF_ISO.root";
-    // muon_effSF_TRIG_files.push_back(Mu_Trg_file);
-    // muon_effSF_ID_files.push_back(Mu_ID_file);
-    // muon_effSF_ISO_files.push_back(Mu_Iso_file);
-    // std::string Mu_Trg_name = "IsoMu24_PtEtaBins/pt_abseta_ratio";
-    // std::string Mu_ID_name = "NUM_MediumID_DEN_TrackerMuons_pt_abseta";
-    // std::string Mu_Iso_name = "NUM_LooseRelIso_DEN_MediumID_pt_abseta";
-    // histo_names_TRIG.push_back(Mu_Trg_name);
-    // histo_names_ID.push_back(Mu_ID_name);
-    // histo_names_ISO.push_back(Mu_Iso_name);
-    //}
-
-    Mu_eff_SF_TRIG.init(muon_effSF_TRIG_files, histo_names_TRIG);
-    Mu_eff_SF_ID.init(muon_effSF_ID_files, histo_names_ID);
-    Mu_eff_SF_ISO.init(muon_effSF_ISO_files, histo_names_ISO);
-                            */
-
-
-    /*
-    std::string Mu_ID_name_stat = "NUM_MediumID_DEN_genTracks_eta_pt_stat";
-    std::string Mu_ID_name_syst = "NUM_MediumID_DEN_genTracks_eta_pt_syst";
-    std::string Mu_Iso_name_stat = "NUM_LooseRelIso_DEN_MediumID_eta_pt_stat";
-    std::string Mu_Iso_name_syst = "NUM_LooseRelIso_DEN_MediumID_eta_pt_syst";
-    // if (year == "2017") {
-    // Mu_ID_name_stat = "NUM_MediumID_DEN_genTracks_pt_abseta_stat";
-    // Mu_ID_name_syst = "NUM_MediumID_DEN_genTracks_pt_abseta_syst";
-    // Mu_Iso_name_stat = "NUM_LooseRelIso_DEN_MediumID_pt_abseta_stat";
-    // Mu_Iso_name_syst = "NUM_LooseRelIso_DEN_MediumID_pt_abseta_syst";
-    //} else if (year == "2018") {
-    // Mu_ID_name_stat = "NUM_MediumID_DEN_TrackerMuons_pt_abseta_stat";
-    // Mu_ID_name_syst = "NUM_MediumID_DEN_TrackerMuons_pt_abseta_syst";
-    // Mu_Iso_name_stat = "NUM_LooseRelIso_DEN_MediumID_pt_abseta_stat";
-    // Mu_Iso_name_syst = "NUM_LooseRelIso_DEN_MediumID_pt_abseta_syst";
-    //}
-    histo_names_ID_stat.push_back(Mu_ID_name_stat);
-    histo_names_ID_syst.push_back(Mu_ID_name_syst);
-    histo_names_ISO_stat.push_back(Mu_Iso_name_stat);
-    histo_names_ISO_syst.push_back(Mu_Iso_name_syst);
-
-    // if (year == "2016") {
-    histo_names_ID_stat.push_back(Mu_ID_name_stat);
-    histo_names_ID_syst.push_back(Mu_ID_name_syst);
-    histo_names_ISO_stat.push_back(Mu_Iso_name_stat);
-    histo_names_ISO_syst.push_back(Mu_Iso_name_syst);
-    //}
-
-    Mu_eff_SF_ID_stat.init(muon_effSF_ID_files, histo_names_ID_stat);
-    Mu_eff_SF_ID_syst.init(muon_effSF_ID_files, histo_names_ID_syst);
-    Mu_eff_SF_ISO_stat.init(muon_effSF_ISO_files, histo_names_ISO_stat);
-    Mu_eff_SF_ISO_syst.init(muon_effSF_ISO_files, histo_names_ISO_syst);
-    */
     TChain *tree = new TChain("Events");
 
     if (!FillChain(tree, inputFileList)) {
@@ -556,8 +671,8 @@ HmmAnalyzer::HmmAnalyzer(const TString &inputFileList, const char *outFileName,
             std::cout << "Initiating analysis on MC" << endl;
     }
 
-    std::cout << "NanoAOD Version: " << NANOAOD_VERSION[year] << std::endl;
-    MainEvent::Init(tree, NANOAOD_VERSION[year]);
+    std::cout << "NanoAOD Version: " << NANOAOD_VERSION.at(year) << std::endl;
+    MainEvent::Init(tree, NANOAOD_VERSION.at(year));
     //tree->Scan("Jet_jetId","","",5);
     if (!is_data) {
         MainEvent::InitSimulationVariables(tree);
@@ -635,41 +750,45 @@ float HmmAnalyzer::getPileupWeightDown(int NPU) {
     }
 }
 
-bool HmmAnalyzer::passesJetPtSelection(int index) {
-    if (yearst == "2022" || yearst == "2022EE" || yearst == "2023" || yearst == "2023BPix"){
-        if (fabs(Jet_eta[index]) < 2.5){
-            return true;
-        }
-        else if (fabs(Jet_eta[index]) < 5){
-            return (Jet_pt[index] > 50);
-        }
+//bool HmmAnalyzer::passesJetPtSelection(int index, float corrected_pt) {
+    //if (yearst == "2022" || yearst == "2022EE" || yearst == "2023" || yearst == "2023BPix"){
+        //if (fabs(Jet_eta[index]) < 2.5){
+            //return true;
+        //}
+        //else if (fabs(Jet_eta[index]) < 5){
+            //return (corrected_pt > 50);
+        //}
 
-    } else if (yearst == "2024"){
-        if (fabs(Jet_eta[index]) < 2.5){ //TODO: Fix this
-            return true;
-        }
-        else if (fabs(Jet_eta[index]) < 3){
-            return (Jet_pt[index] > 50);
-        }
-        else {
-            return true;
-        }
-    } else if (yearst == "2025"){
-        return true;
+    //} else if (yearst == "2024"){
+        //if (fabs(Jet_eta[index]) < 2.5){ //TODO: Fix this
+            //return true;
+        //}
+        //else if (fabs(Jet_eta[index]) < 3){
+            //return (corrected_pt > 50);
+        //}
+        //else {
+            //return true;
+        //}
+    //} else if (yearst == "2025"){
+        //return true;
 
-    } else {
-        std::cerr << "Jet pT era not found" << std::endl;
-        return false;
-    }
-}
+    //} else {
+        //std::cerr << "Jet pT era not found" << std::endl;
+        //return false;
+    //}
+//}
 
-bool HmmAnalyzer::isValidJet(int index) {
+bool HmmAnalyzer::isValidJet(int index, float corrected_pt) {
     bool Jet_passJetIdTight = false;
-    if(NANOAOD_VERSION[year] == "v12"){ //nanoAODv12
+    bool Jet_passJetIdTightLepVeto = false;
+    if(NANOAOD_VERSION.at(year) == "v12"){ //nanoAODv12
         //std::cout << "Running v12" << std::endl;
         if (fabs(Jet_eta[index]) <= 2.7) Jet_passJetIdTight = Jet_jetId[index] & (1 << 1);
         else if (fabs(Jet_eta[index]) > 2.7 && fabs(Jet_eta[index]) <= 3.0) Jet_passJetIdTight = (Jet_jetId[index] & (1 << 1)) && (Jet_neHEF[index] < 0.99);
         else if (fabs(Jet_eta[index]) > 3.0) Jet_passJetIdTight = (Jet_jetId[index] & (1 << 1)) && (Jet_neEmEF[index] < 0.4);
+        
+        if (abs(Jet_eta[index]) <= 2.7) Jet_passJetIdTightLepVeto = Jet_passJetIdTight && (Jet_muEF[index] < 0.8) && (Jet_chEmEF[index] < 0.8);
+        else Jet_passJetIdTightLepVeto = Jet_passJetIdTight;
     }
 
     else{ //nanoAODv15
@@ -687,83 +806,15 @@ bool HmmAnalyzer::isValidJet(int index) {
         else if (fabs(Jet_eta[index]) > 3.0){
             Jet_passJetIdTight = (Jet_neMultiplicity[index] >= 2) && (Jet_neEmEF[index] < 0.4);
         }
+        
+        if (abs(Jet_eta[index]) <= 2.7) 
+           Jet_passJetIdTightLepVeto = Jet_passJetIdTight && (Jet_muEF[index] < 0.8) && (Jet_chEmEF[index] < 0.8);
+        else 
+           Jet_passJetIdTightLepVeto = Jet_passJetIdTight;
     }
 
-    return (Jet_pt[index] > 25. && fabs(Jet_eta[index]) < 4.7 &&
-            Jet_passJetIdTight && passesJetPtSelection(index) /* && Jet_puId[index]>=1 */);
-}
-
-void HmmAnalyzer::CorrectPtRoch(const RoccoR &_calib, const bool _doSys,
-                                const ROOT::Math::PtEtaPhiMVector _mu_vec,
-                                const float _mu_ptErr_raw,
-                                float &_pt, float &_ptErr, float &_pt_sys_up,
-                                float &_pt_sys_down, const int _charge,
-                                const int _trk_layers, const float _GEN_pt,
-                                const bool _isData) {
-
-    _pt = _mu_vec.Pt();
-    _pt_sys_up = FLOAT_NULL_VALUE;
-    _pt_sys_down = FLOAT_NULL_VALUE;
-    float q_term = 1.0;
-    // float q_term_sys = -99;
-
-    float fRand_1 = gRandom->Rndm();
-    // float fRand_2 = gRandom->Rndm();
-
-    if (_isData) {
-        q_term = _calib.kScaleDT(_charge, _mu_vec.Pt(), _mu_vec.Eta(),
-                                 _mu_vec.Phi(), 0, 0);
-    } else if (_GEN_pt > 0) {
-        q_term = _calib.kSpreadMC(_charge, _mu_vec.Pt(), _mu_vec.Eta(),
-                                  _mu_vec.Phi(), _GEN_pt, 0, 0);
-        // q_term = _calib.kScaleFromGenMC( _charge, _mu_vec.Pt(),
-        // _mu_vec.Eta(), _mu_vec.Phi(),_trk_layers, _GEN_pt, fRand_1, 0, 0 );
-    } else {
-        q_term = _calib.kSmearMC(_charge, _mu_vec.Pt(), _mu_vec.Eta(),
-                                 _mu_vec.Phi(), _trk_layers, fRand_1, 0, 0);
-        // q_term = _calib.kScaleAndSmearMC( _charge, _mu_vec.Pt(),
-        // _mu_vec.Eta(), _mu_vec.Phi(), _trk_layers, fRand_1, fRand_2, 0, 0 );
-    }
-    if (fabs(q_term - 1.0) > 0.4) {
-        std::cout << "\n*** BIZZARELY HIGH QTERM ***" << std::endl;
-        std::cout << "GEN pT = " << _GEN_pt << ", RECO pT = " << _mu_vec.Pt()
-                  << ", Q term = " << q_term << ", fRand_1 = " << fRand_1
-                  << std::endl;
-        std::cout << "Layers = " << _trk_layers << ", charge = " << _charge
-                  << ", eta = " << _mu_vec.Eta() << ", phi = " << _mu_vec.Phi()
-                  << std::endl;
-    }
-
-    int nUp = 0;
-    int nDown = 0;
-    double sum_sq_up = 0;
-    double sum_sq_down = 0;
-
-    /*
-    for (int i = 0; i < 100; i++) {
-      if (!_doSys) break;
-
-      if (_isData)          q_term_sys = _calib.kScaleDT( _charge, _mu_vec.Pt(),
-    _mu_vec.Eta(), _mu_vec.Phi(), 1, i ); else if (_GEN_pt > 0) q_term_sys =
-    _calib.kScaleFromGenMC( _charge, _mu_vec.Pt(), _mu_vec.Eta(), _mu_vec.Phi(),
-                                                                 _trk_layers,
-    _GEN_pt, fRand_1, 1, i ); else                  q_term_sys =
-    _calib.kScaleAndSmearMC( _charge, _mu_vec.Pt(), _mu_vec.Eta(),
-    _mu_vec.Phi(), _trk_layers, fRand_1, fRand_2, 1, i ); if ( q_term_sys >=
-    q_term ) { nUp   += 1; sum_sq_up
-    += pow( q_term_sys - q_term, 2 ); } else { nDown += 1; sum_sq_down += pow(
-    q_term_sys - q_term, 2 );
-      }
-    }
-    */
-
-    _pt = _mu_vec.Pt() * q_term;
-    _ptErr = _mu_ptErr_raw * q_term; // Account for shift in pT scale
-    // std::cout << "ptErr: " << _ptErr << " q_term: " << q_term << std::endl;
-    if (!_isData)
-        _ptErr *= std::fmax(q_term, 1. / q_term); // Account for smearing in MC
-    _pt_sys_up = (_doSys ? _pt * sqrt(sum_sq_up / nUp) : -999);
-    _pt_sys_down = (_doSys ? _pt * sqrt(sum_sq_down / nDown) : -999);
+    return (corrected_pt > 15. && fabs(Jet_eta[index]) < 4.7 &&
+            Jet_passJetIdTightLepVeto /* && Jet_puId[index]>=1 */);
 }
 
 bool HmmAnalyzer::FillChain(TChain *chain, const TString &inputFileList) {
@@ -925,18 +976,29 @@ void HmmAnalyzer::clearTreeVectors() {
     t_Mu_genPartIdx->clear();
     t_Mu_genPartFlav->clear();
     t_Mu_charge->clear();
-    t_Mu_EffSF_TRIG->clear();
-    t_Mu_EffSFErr_TRIG->clear();
+    //t_Mu_EffSF_TRIG->clear();
+    //t_Mu_EffSF_TRIG_up->clear();
+    //t_Mu_EffSF_TRIG_down->clear();
+    
+    t_Mu_EffTRIG_DATA->clear();
+    t_Mu_EffTRIG_DATA_up->clear();
+    t_Mu_EffTRIG_DATA_down->clear();
+    t_Mu_EffTRIG_MC->clear();
+    t_Mu_EffTRIG_MC_up->clear();
+    t_Mu_EffTRIG_MC_down->clear();
+
     t_Mu_EffSF_ID->clear();
-    t_Mu_EffSF_ID_stat->clear();
-    t_Mu_EffSF_ID_syst->clear();
+    t_Mu_EffSF_ID_up->clear();
+    t_Mu_EffSF_ID_down->clear();
     t_Mu_EffSF_ISO->clear();
-    t_Mu_EffSF_ISO_stat->clear();
-    t_Mu_EffSF_ISO_syst->clear();
+    t_Mu_EffSF_ISO_up->clear();
+    t_Mu_EffSF_ISO_down->clear();
     t_Mu_pt->clear();
     t_Mu_ptErr->clear();
     t_Mu_bsConstrainedPt->clear();
     t_Mu_bsConstrainedPtErr->clear();
+    t_Mu_bsConstrainedPt_nanoAOD->clear();
+    t_Mu_bsConstrainedPtErr_nanoAOD->clear();
     t_Mu_phi->clear();
     t_Mu_eta->clear();
     t_Mu_mass->clear();
@@ -1005,6 +1067,9 @@ void HmmAnalyzer::clearTreeVectors() {
     t_SubJet_tau3->clear();
     t_SubJet_tau4->clear();
 
+
+    t_leadJet_idx = INT_NULL_VALUE;
+    t_subleadJet_idx = INT_NULL_VALUE;
     t_Jet_area->clear();
     // t_Jet_btagCMVA->clear();
     // t_Jet_btagCSVV2->clear();
@@ -1016,10 +1081,24 @@ void HmmAnalyzer::clearTreeVectors() {
     t_Jet_chHEF->clear();
     t_Jet_eta->clear();
     t_Jet_mass->clear();
+    t_Jet_mass_nanoAOD->clear();
     t_Jet_neEmEF->clear();
     t_Jet_neHEF->clear();
     t_Jet_phi->clear();
     t_Jet_pt->clear();
+    for (auto &entry : t_Jet_pt_jes_syst) {
+        entry.second->clear();
+    }
+    for (auto &entry : t_Jet_pt_jer_syst) {
+        entry.second->clear();
+    }
+    for (auto &entry : t_Jet_mass_jes_syst) {
+        entry.second->clear();
+    }
+    for (auto &entry : t_Jet_mass_jer_syst) {
+        entry.second->clear();
+    }
+    t_Jet_pt_nanoAOD->clear();
     t_Jet_qgl->clear();
     t_Jet_jetId->clear();
     t_Jet_chMultiplicity->clear();
@@ -1180,18 +1259,29 @@ void HmmAnalyzer::BookTreeBranches() {
     t_Mu_genPartIdx = new std::vector<int>();
     t_Mu_genPartFlav = new std::vector<UChar_t>();
     t_Mu_charge = new std::vector<int>();
-    t_Mu_EffSF_TRIG = new std::vector<float>();
-    t_Mu_EffSFErr_TRIG = new std::vector<float>();
+    //t_Mu_EffSF_TRIG = new std::vector<float>();
+    //t_Mu_EffSF_TRIG_up = new std::vector<float>();
+    //t_Mu_EffSF_TRIG_down = new std::vector<float>();
+  
+    t_Mu_EffTRIG_DATA = new std::vector<float>();
+    t_Mu_EffTRIG_DATA_up = new std::vector<float>();
+    t_Mu_EffTRIG_DATA_down = new std::vector<float>();
+    t_Mu_EffTRIG_MC = new std::vector<float>();
+    t_Mu_EffTRIG_MC_up = new std::vector<float>();
+    t_Mu_EffTRIG_MC_down = new std::vector<float>();
+
     t_Mu_EffSF_ID = new std::vector<float>();
-    t_Mu_EffSF_ID_stat = new std::vector<float>();
-    t_Mu_EffSF_ID_syst = new std::vector<float>();
+    t_Mu_EffSF_ID_up = new std::vector<float>();
+    t_Mu_EffSF_ID_down = new std::vector<float>();
     t_Mu_EffSF_ISO = new std::vector<float>();
-    t_Mu_EffSF_ISO_stat = new std::vector<float>();
-    t_Mu_EffSF_ISO_syst = new std::vector<float>();
+    t_Mu_EffSF_ISO_up = new std::vector<float>();
+    t_Mu_EffSF_ISO_down = new std::vector<float>();
     t_Mu_pt = new std::vector<float>();
     t_Mu_ptErr = new std::vector<float>();
     t_Mu_bsConstrainedPt = new std::vector<float>();
     t_Mu_bsConstrainedPtErr = new std::vector<float>();
+    t_Mu_bsConstrainedPt_nanoAOD = new std::vector<float>();
+    t_Mu_bsConstrainedPtErr_nanoAOD = new std::vector<float>();
     t_Mu_phi = new std::vector<float>();
     t_Mu_eta = new std::vector<float>();
     t_Mu_mass = new std::vector<float>();
@@ -1219,18 +1309,29 @@ void HmmAnalyzer::BookTreeBranches() {
     tree->Branch("t_Mu_genPartIdx", "vector<int>", &t_Mu_genPartIdx);
     tree->Branch("t_Mu_genPartFlav", "vector<UChar_t>", &t_Mu_genPartFlav);
     tree->Branch("t_Mu_charge", "vector<int>", &t_Mu_charge);
-    tree->Branch("t_Mu_EffSF_TRIG", "vector<float>", &t_Mu_EffSF_TRIG);
-    tree->Branch("t_Mu_EffSFErr_TRIG", "vector<float>", &t_Mu_EffSFErr_TRIG);
+    //tree->Branch("t_Mu_EffSF_TRIG", "vector<float>", &t_Mu_EffSF_TRIG);
+    //tree->Branch("t_Mu_EffSF_TRIG_up", "vector<float>", &t_Mu_EffSF_TRIG_up);
+    //tree->Branch("t_Mu_EffSF_TRIG_down", "vector<float>", &t_Mu_EffSF_TRIG_down);
+   
+    tree->Branch("t_Mu_EffTRIG_DATA", "vector<float>", &t_Mu_EffTRIG_DATA);
+    tree->Branch("t_Mu_EffTRIG_DATA_up", "vector<float>", &t_Mu_EffTRIG_DATA_up);
+    tree->Branch("t_Mu_EffTRIG_DATA_down", "vector<float>", &t_Mu_EffTRIG_DATA_down);
+    tree->Branch("t_Mu_EffTRIG_MC", "vector<float>", &t_Mu_EffTRIG_MC);
+    tree->Branch("t_Mu_EffTRIG_MC_up", "vector<float>", &t_Mu_EffTRIG_MC_up);
+    tree->Branch("t_Mu_EffTRIG_MC_down", "vector<float>", &t_Mu_EffTRIG_MC_down);
+
     tree->Branch("t_Mu_EffSF_ID", "vector<float>", &t_Mu_EffSF_ID);
-    tree->Branch("t_Mu_EffSF_ID_stat", "vector<float>", &t_Mu_EffSF_ID_stat);
-    tree->Branch("t_Mu_EffSF_ID_syst", "vector<float>", &t_Mu_EffSF_ID_syst);
+    tree->Branch("t_Mu_EffSF_ID_up", "vector<float>", &t_Mu_EffSF_ID_up);
+    tree->Branch("t_Mu_EffSF_ID_down", "vector<float>", &t_Mu_EffSF_ID_down);
     tree->Branch("t_Mu_EffSF_ISO", "vector<float>", &t_Mu_EffSF_ISO);
-    tree->Branch("t_Mu_EffSF_ISO_stat", "vector<float>", &t_Mu_EffSF_ISO_stat);
-    tree->Branch("t_Mu_EffSF_ISO_syst", "vector<float>", &t_Mu_EffSF_ISO_syst);
+    tree->Branch("t_Mu_EffSF_ISO_up", "vector<float>", &t_Mu_EffSF_ISO_up);
+    tree->Branch("t_Mu_EffSF_ISO_down", "vector<float>", &t_Mu_EffSF_ISO_down);
     tree->Branch("t_Mu_pt", "vector<float>", &t_Mu_pt);
     tree->Branch("t_Mu_ptErr", "vector<float>", &t_Mu_ptErr);
     tree->Branch("t_Mu_bsConstrainedPt", "vector<float>", &t_Mu_bsConstrainedPt);
     tree->Branch("t_Mu_bsConstrainedPtErr", "vector<float>", &t_Mu_bsConstrainedPtErr);
+    tree->Branch("t_Mu_bsConstrainedPt_nanoAOD", "vector<float>", &t_Mu_bsConstrainedPt_nanoAOD);
+    tree->Branch("t_Mu_bsConstrainedPtErr_nanoAOD", "vector<float>", &t_Mu_bsConstrainedPtErr_nanoAOD);
     tree->Branch("t_Mu_phi", "vector<float>", &t_Mu_phi);
     tree->Branch("t_Mu_eta", "vector<float>", &t_Mu_eta);
     tree->Branch("t_Mu_mass", "vector<float>", &t_Mu_mass);
@@ -1345,10 +1446,39 @@ void HmmAnalyzer::BookTreeBranches() {
     t_Jet_chHEF = new std::vector<float>();
     t_Jet_eta = new std::vector<float>();
     t_Jet_mass = new std::vector<float>();
+    t_Jet_mass_nanoAOD = new std::vector<float>();
     t_Jet_neEmEF = new std::vector<float>();
     t_Jet_neHEF = new std::vector<float>();
     t_Jet_phi = new std::vector<float>();
     t_Jet_pt = new std::vector<float>();
+
+    for (const auto &syst_name : jet_jes_syst_names) {
+        for (const auto &direction : jes_directions) {
+            const std::string branch_name =
+                JetPtJesSystBranchName(syst_name, direction);
+
+            t_Jet_pt_jes_syst[branch_name] = new std::vector<float>();
+
+            const std::string mass_branch_name =
+                JetMassJesSystBranchName(syst_name, direction);
+
+            t_Jet_mass_jes_syst[mass_branch_name] = new std::vector<float>();
+        }
+    }
+    for (const auto &syst_name : jet_jer_syst_names) {
+        for (const auto &direction : jer_directions) {
+            const std::string branch_name =
+                JetPtJerSystBranchName(syst_name, direction);
+
+            t_Jet_pt_jer_syst[branch_name] = new std::vector<float>();
+
+            const std::string mass_branch_name =
+                JetMassJerSystBranchName(syst_name, direction);
+
+            t_Jet_mass_jer_syst[mass_branch_name] = new std::vector<float>();
+        }
+    }
+    t_Jet_pt_nanoAOD = new std::vector<float>();
     t_Jet_qgl = new std::vector<float>();
     t_Jet_jetId = new std::vector<int>();
     t_Jet_chMultiplicity = new std::vector<int>();
@@ -1383,14 +1513,45 @@ void HmmAnalyzer::BookTreeBranches() {
     // tree->Branch("t_Jet_btagDeepC"    , "vector<float>" ,&t_Jet_btagDeepC);
     // tree->Branch("t_Jet_btagDeepFlavB"    , "vector<float>"
     // ,&t_Jet_btagDeepFlavB);
+
+
+
+    tree->Branch("leadJet_idx", &t_leadJet_idx);
+    tree->Branch("subleadJet_idx", &t_subleadJet_idx);
     tree->Branch("t_Jet_chEmEF", "vector<float>", &t_Jet_chEmEF);
     tree->Branch("t_Jet_chHEF", "vector<float>", &t_Jet_chHEF);
     tree->Branch("t_Jet_eta", "vector<float>", &t_Jet_eta);
     tree->Branch("t_Jet_mass", "vector<float>", &t_Jet_mass);
+    tree->Branch("t_Jet_mass_nanoAOD", "vector<float>", &t_Jet_mass_nanoAOD);
     tree->Branch("t_Jet_neEmEF", "vector<float>", &t_Jet_neEmEF);
     tree->Branch("t_Jet_neHEF", "vector<float>", &t_Jet_neHEF);
     tree->Branch("t_Jet_phi", "vector<float>", &t_Jet_phi);
     tree->Branch("t_Jet_pt", "vector<float>", &t_Jet_pt);
+    for (auto &entry : t_Jet_pt_jes_syst) {
+        const std::string &branch_name = entry.first;
+        std::vector<float> *&branch_vector = entry.second;
+
+        tree->Branch(branch_name.c_str(), "vector<float>", &branch_vector);
+    }
+    for (auto &entry : t_Jet_pt_jer_syst) {
+        const std::string &branch_name = entry.first;
+        std::vector<float> *&branch_vector = entry.second;
+
+        tree->Branch(branch_name.c_str(), "vector<float>", &branch_vector);
+    }
+    for (auto &entry : t_Jet_mass_jes_syst) {
+        const std::string &branch_name = entry.first;
+        std::vector<float> *&branch_vector = entry.second;
+
+        tree->Branch(branch_name.c_str(), "vector<float>", &branch_vector);
+    }
+    for (auto &entry : t_Jet_mass_jer_syst) {
+        const std::string &branch_name = entry.first;
+        std::vector<float> *&branch_vector = entry.second;
+
+        tree->Branch(branch_name.c_str(), "vector<float>", &branch_vector);
+    }
+    tree->Branch("t_Jet_pt_nanoAOD", "vector<float>", &t_Jet_pt_nanoAOD);
     tree->Branch("t_Jet_qgl", "vector<float>", &t_Jet_qgl);
     tree->Branch("t_Jet_jetId", "vector<int>", &t_Jet_jetId);
     tree->Branch("t_Jet_chMultiplicity", "vector<int>", &t_Jet_chMultiplicity);

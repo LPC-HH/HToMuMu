@@ -9,6 +9,6 @@ docker_stderror
 *error_datasets.txt
 *.json
 *.txt
-
+submit_all_failed_jobs.sh
 #files used in cross CMS synchronization
 sync*

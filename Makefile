@@ -3,25 +3,33 @@ BIN := ./bin
 SRC := ./src
 LIB := ./lib
 
-# C++ compiler flags.
-CXX   := g++ -g -Wall 
-FLAGS := -std=c++17 $(shell root-config --cflags) $(shell correction config --cflags --ldflags) -I/cvmfs/cms.cern.ch/el9_amd64_gcc12/external/boost/1.80.0-4e27c6908892e3529bfbcf4445a96fe6/include
+CXX := g++
 
-LIBS  := $(shell root-config --libs) $(shell correction config --cflags --ldflags) -L/cvmfs/cms.cern.ch/el9_amd64_gcc12/external/boost/1.80.0-4e27c6908892e3529bfbcf4445a96fe6/lib
+ROOT_CFLAGS := $(filter-out -std=c++%,$(shell root-config --cflags))
+ROOT_LIBS   := $(shell root-config --libs)
+
+CORR_CFLAGS := $(filter-out -std=c++%,$(shell correction config --cflags))
+CORR_LIBS   := $(shell correction config --ldflags)
+
+BOOST_INC := -I/cvmfs/cms.cern.ch/el9_amd64_gcc12/external/boost/1.80.0-4e27c6908892e3529bfbcf4445a96fe6/include
+BOOST_LIB := -L/cvmfs/cms.cern.ch/el9_amd64_gcc12/external/boost/1.80.0-4e27c6908892e3529bfbcf4445a96fe6/lib
+
+FLAGS := -O2 -g -Wall -std=c++20 $(ROOT_CFLAGS) $(CORR_CFLAGS) -I$(LIB) $(BOOST_INC)
+LIBS  := $(ROOT_LIBS) $(CORR_LIBS) $(BOOST_LIB)
 
 # Analyzer sources and header
 ANALYZER_SRC := $(SRC)/LeptonEfficiencyCorrector.cc \
 				$(SRC)/JetCorrector.cc \
+				$(SRC)/MuonScaRe.cc \
 				$(SRC)/MainEvent.cc \
-				$(SRC)/RoccoR.cc \
 				$(SRC)/WeightCalculatorFromHistogram.cc \
 				$(SRC)/HmmAnalyzer.cc
 
 ANALYZER_HEADERS := $(LIB)/BTagCalibrationStandalone.h \
 				$(LIB)/LeptonEfficiencyCorrector.h \
 				$(LIB)/JetCorrector.h \
+				$(LIB)/MuonScaRe.h \
 				$(LIB)/MainEvent.h \
-				$(LIB)/RoccoR.h \
 				$(LIB)/WeightCalculatorFromHistogram.h \
 				$(LIB)/HmmAnalyzer.h
 
@@ -39,10 +47,15 @@ SOURCES := $(ANALYZER_SRC) $(HISTOGRAM_SRC) $(SKIM_ggH_SRC) $(SKIM_VBF_SRC) $(TU
 
 
 # Object files
+JERC_OBJECTS := JecConfigReader.o \
+				JecApplication.o \
+				JvmConfigReader.o \
+				JvmApplication.o
+
 ANALYZER_OBJECTS := LeptonEfficiencyCorrector.o \
+				MuonScaRe.o \
 				JetCorrector.o \
 				MainEvent.o \
-				RoccoR.o \
 				WeightCalculatorFromHistogram.o \
 				HmmAnalyzer.o
  
@@ -79,13 +92,19 @@ skim: $(SKIM_ggH_EXECUTABLE)
 
 # Compile only the Skim VBF
 .PHONY: skim_vbf
-skim: $(SKIM_VBF_EXECUTABLE)
+skim_vbf: $(SKIM_VBF_EXECUTABLE)
 
 # Compile all the objects
 $(OBJECTS): %.o: $(SRC)/%.cc $(LIB)/%.h
 #$(OBJECTS): %.o: $(SOURCES) $(LIB)/%.h
 	@echo "Compiling $<..."
 	$(CXX) $(FLAGS) -c $< -o $@
+
+$(JERC_OBJECTS): %.o: $(SRC)/%.cc $(LIB)/%.h
+	@echo "Compiling $<..."
+	$(CXX) $(FLAGS) -c $< -o $@
+
+HmmAnalyzer.o: $(LIB)/JecApplication.h $(LIB)/JecConfigReader.h $(LIB)/JvmApplication.h $(LIB)/JvmConfigReader.h
 
 # Special rule for SkimTuplesggH.o without a header file
 $(SKIM_ggH_OBJECTS): %.o: $(SRC)/%.cc
@@ -98,7 +117,7 @@ $(SKIM_VBF_OBJECTS): %.o: $(SRC)/%.cc
 	$(CXX) $(FLAGS) -c $< -o $@
 
 # Linking for HmmAnalyzer
-$(ANALYZER_EXECUTABLE): $(ANALYZER_OBJECTS)
+$(ANALYZER_EXECUTABLE): $(ANALYZER_OBJECTS) $(JERC_OBJECTS)
 	@echo "Linking $(ANALYZER_EXECUTABLE)..."
 	$(CXX) $(FLAGS) -o $@ $^ $(LIBS)
 	@echo "done"
@@ -128,9 +147,9 @@ $(SKIM_VBF_EXECUTABLE): $(SKIM_VBF_OBJECTS)
 	@echo "done"
 	
 # Specifying the object files as intermediates deletes them automatically after the build process.
-.INTERMEDIATE: $(ANALYZER_OBJECTS) $(HISTOGRAM_OBJECTS) $(SKIM_ggH_OBJECTS) $(SKIM_VBF_OBJECTS) $(TUPLE_OBJECTS)
+.INTERMEDIATE: $(ANALYZER_OBJECTS) $(JERC_OBJECTS) $(HISTOGRAM_OBJECTS) $(SKIM_ggH_OBJECTS) $(SKIM_VBF_OBJECTS) $(TUPLE_OBJECTS)
 
 # Clean target
 .PHONY: clean
 clean:
-	rm -f $(ANALYZER_OBJECTS) $(HISTOGRAM_OBJECTS) $(SKIM_ggH_OBJECTS) $(SKIM_VBF_OBJECTS) $(TUPLE_OBJECTS)	$(ANALYZER_EXECUTABLE) $(HISTOGRAM_EXECUTABLE) $(SKIM_ggH_EXECUTABLE) $(SKIM_VBF_EXECUTABLE) $(TUPLE_EXECUTABLE)
+	rm -f $(ANALYZER_OBJECTS) $(JERC_OBJECTS) $(HISTOGRAM_OBJECTS) $(SKIM_ggH_OBJECTS) $(SKIM_VBF_OBJECTS) $(TUPLE_OBJECTS)	$(ANALYZER_EXECUTABLE) $(HISTOGRAM_EXECUTABLE) $(SKIM_ggH_EXECUTABLE) $(SKIM_VBF_EXECUTABLE) $(TUPLE_EXECUTABLE)

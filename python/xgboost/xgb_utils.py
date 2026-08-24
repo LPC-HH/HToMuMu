@@ -2,6 +2,10 @@ import sys
 import matplotlib
 import mplhep as hep
 import os
+import subprocess
+import shutil
+import tempfile
+from array import array
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -157,6 +161,396 @@ def append_BDT_score(
 
     tree.GetCurrentFile().Write()
     tree.GetCurrentFile().Close()
+
+
+def append_BDT_score_to_sys(
+    file_type,
+    channel_US,
+    era,
+    model_era,
+    signal_subset,
+    background_subset,
+    variables,
+    mean_map,
+    std_map,
+    do_standardization,
+    use_bsConstrain,
+):
+    subset_title = f"B{background_subset}_S{signal_subset}"
+
+    systematics = [
+        "scale_up",
+        "scale_down",
+        "smearing_up",
+        "smearing_down",
+    ]
+
+    jet_jes_syst_names = [
+        "CMS_scale_j_FlavorQCD",
+        "CMS_scale_j_RelativeBal",
+        "CMS_scale_j_HF",
+        "CMS_scale_j_BBEC1",
+        "CMS_scale_j_EC2",
+        "CMS_scale_j_Absolute",
+        
+        "CMS_scale_j_BBEC1_2022",
+        "CMS_scale_j_RelativeSample_2022",
+        "CMS_scale_j_EC2_2022",
+        "CMS_scale_j_HF_2022",
+        "CMS_scale_j_Absolute_2022",
+        
+        "CMS_scale_j_BBEC1_2022EE",
+        "CMS_scale_j_RelativeSample_2022EE",
+        "CMS_scale_j_EC2_2022EE",
+        "CMS_scale_j_HF_2022EE",
+        "CMS_scale_j_Absolute_2022EE",
+        
+        "CMS_scale_j_BBEC1_2023",
+        "CMS_scale_j_RelativeSample_2023",
+        "CMS_scale_j_EC2_2023",
+        "CMS_scale_j_HF_2023",
+        "CMS_scale_j_Absolute_2023",
+       
+        "CMS_scale_j_BBEC1_2023BPix",
+        "CMS_scale_j_RelativeSample_2023BPix",
+        "CMS_scale_j_EC2_2023BPix",
+        "CMS_scale_j_HF_2023BPix",
+        "CMS_scale_j_Absolute_2023BPix",
+        
+        "CMS_scale_j_BBEC1_2024",
+        "CMS_scale_j_RelativeSample_2024",
+        "CMS_scale_j_EC2_2024",
+        "CMS_scale_j_HF_2024",
+        "CMS_scale_j_Absolute_2024",
+       
+        "CMS_scale_j_BBEC1_2025",
+        "CMS_scale_j_RelativeSample_2025",
+        "CMS_scale_j_EC2_2025",
+        "CMS_scale_j_HF_2025",
+        "CMS_scale_j_Absolute_2025",
+        
+        "CMS_res_j_eta0to1p93_pt0toInf_2022",
+        "CMS_res_j_eta1p93to2p5_pt0toInf_2022",
+        "CMS_res_j_eta2p5to3p0_pt0to50_2022",
+        "CMS_res_j_eta2p5to3p0_pt50toInf_2022",
+        "CMS_res_j_eta3to5_pt0to50_2022",
+        "CMS_res_j_eta3to5_pt50toInf_2022",
+        
+        "CMS_res_j_eta0to1p93_pt0toInf_2022EE",
+        "CMS_res_j_eta1p93to2p5_pt0toInf_2022EE",
+        "CMS_res_j_eta2p5to3p0_pt0to50_2022EE",
+        "CMS_res_j_eta2p5to3p0_pt50toInf_2022EE",
+        "CMS_res_j_eta3to5_pt0to50_2022EE",
+        "CMS_res_j_eta3to5_pt50toInf_2022EE",
+        
+        "CMS_res_j_eta0to1p93_pt0toInf_2023",
+        "CMS_res_j_eta1p93to2p5_pt0toInf_2023",
+        "CMS_res_j_eta2p5to3p0_pt0to50_2023",
+        "CMS_res_j_eta2p5to3p0_pt50toInf_2023",
+        "CMS_res_j_eta3to5_pt0to50_2023",
+        "CMS_res_j_eta3to5_pt50toInf_2023",
+        
+        "CMS_res_j_eta0to1p93_pt0toInf_2023BPix",
+        "CMS_res_j_eta1p93to2p5_pt0toInf_2023BPix",
+        "CMS_res_j_eta2p5to3p0_pt0to50_2023BPix",
+        "CMS_res_j_eta2p5to3p0_pt50toInf_2023BPix",
+        "CMS_res_j_eta3to5_pt0to50_2023BPix",
+        "CMS_res_j_eta3to5_pt50toInf_2023BPix",
+        
+        "CMS_res_j_eta0to1p93_pt0toInf_2024",
+        "CMS_res_j_eta1p93to2p5_pt0toInf_2024",
+        "CMS_res_j_eta2p5to3p0_pt0to50_2024",
+        "CMS_res_j_eta2p5to3p0_pt50toInf_2024",
+        "CMS_res_j_eta3to5_pt0to50_2024",
+        "CMS_res_j_eta3to5_pt50toInf_2024",
+        
+        "CMS_res_j_eta0to1p93_pt0toInf_2025",
+        "CMS_res_j_eta1p93to2p5_pt0toInf_2025",
+        "CMS_res_j_eta2p5to3p0_pt0to50_2025",
+        "CMS_res_j_eta2p5to3p0_pt50toInf_2025",
+        "CMS_res_j_eta3to5_pt0to50_2025",
+        "CMS_res_j_eta3to5_pt50toInf_2025",
+    ]
+
+    for syst_name in jet_jes_syst_names:
+        systematics.extend(
+            [
+                f"{syst_name}_up",
+                f"{syst_name}_down",
+            ]
+        )
+
+    tuple_path = (
+        "/eos/uscms/store/user/lpchmumu/mbarrial/"
+        "analyzer_HiggsMuMu_v2.0/tuples_v2.0.0/systematics/"
+    )
+
+    BDT_path = (
+        f"{tuple_path}BDT_score/"
+        f"{channel_US}/{subset_title}/"
+    )
+
+    os.makedirs(BDT_path, exist_ok=True)
+
+    model_file = (
+        f"./models/model_{channel_US}_{model_era}_"
+        f"{subset_title}.pkl"
+    )
+
+    if use_bsConstrain:
+        model_file = (
+            f"./models/model_{channel_US}_{model_era}_"
+            f"{subset_title}_bsC.pkl"
+        )
+
+    print(f"[INFO] Loading model: {model_file}")
+
+    with open(model_file, "rb") as pkl_file:
+        model = pickle.load(pkl_file)
+
+    if not hasattr(model, "use_label_encoder"):
+        model.use_label_encoder = False
+
+
+    variable_names = [var[0] for var in variables]
+    BDT_var_name = f"BDT_{channel_US}"
+
+    successful_systematics = []
+    missing_systematics = []
+    failed_systematics = []
+
+    for syst_index, systematic in enumerate(systematics, start=1):
+        tuple_name = (
+            f"{file_type}_{era}_{systematic}_tuples.root"
+        )
+
+        input_file_name = tuple_path + tuple_name
+
+        # Preserve the systematic tuple filename inside BDT_score.
+        BDT_name = tuple_name
+        output_file_name = BDT_path + BDT_name
+
+        print()
+        print("=" * 80)
+        print(
+            f"[INFO] Systematic {syst_index}/{len(systematics)}: "
+            f"{systematic}"
+        )
+        print(f"[INFO] Input:  {input_file_name}")
+        print(f"[INFO] Output: {output_file_name}")
+        print("=" * 80)
+
+        if not os.path.exists(input_file_name):
+            print(f"[WARNING] Input file does not exist. Skipping.")
+            missing_systematics.append(systematic)
+            continue
+
+        try:
+            # Copy and skim the original systematic tuple.
+            copy_and_skim_tree(
+                tuple_path,
+                tuple_name,
+                BDT_path,
+                BDT_name,
+                channel_US,
+                use_bsConstrain,
+            )
+
+            # Read the variables in exactly the same order used for training.
+            with uproot.open(output_file_name) as uproot_file:
+                if "tree_output" not in uproot_file:
+                    raise RuntimeError(
+                        f"tree_output not found in {output_file_name}"
+                    )
+
+                arrays = uproot_file["tree_output"].arrays(
+                    variable_names,
+                    library="np",
+                )
+
+                df = pd.DataFrame(
+                    {
+                        variable_name: arrays[variable_name]
+                        for variable_name in variable_names
+                    }
+                )
+
+            x_test = df.to_numpy(dtype=np.float32, copy=True)
+            number_of_events = len(x_test)
+
+            print(
+                f"[INFO] Number of events after skimming: "
+                f"{number_of_events}"
+            )
+
+            if do_standardization and number_of_events > 0:
+                for variable_index, variable in enumerate(variables):
+                    variable_name = variable[0]
+
+                    null_value = 0.0
+
+                    if variable_name in [
+                        "delta_phi_diJet",
+                        "pt_balance",
+                    ]:
+                        null_value = -1.0
+
+                    if variable_name not in mean_map:
+                        raise KeyError(
+                            f"Mean not found for {variable_name}"
+                        )
+
+                    if variable_name not in std_map:
+                        raise KeyError(
+                            f"Standard deviation not found for "
+                            f"{variable_name}"
+                        )
+
+                    if std_map[variable_name] == 0:
+                        raise ValueError(
+                            f"Standard deviation is zero for "
+                            f"{variable_name}"
+                        )
+
+                    mask = (
+                        x_test[:, variable_index] != null_value
+                    )
+
+                    x_test[mask, variable_index] = (
+                        x_test[mask, variable_index]
+                        - mean_map[variable_name]
+                    ) / std_map[variable_name]
+
+            if number_of_events > 0:
+                # Bypass the XGBClassifier sklearn wrapper because the model was
+                # pickled with an older XGBoost version.
+                booster = model.get_booster()
+
+                booster_feature_names = booster.feature_names
+
+                if (
+                    booster_feature_names is not None
+                    and len(booster_feature_names) != x_test.shape[1]
+                ):
+                    raise RuntimeError(
+                        "Number of BDT input variables does not match the model: "
+                        f"model expects {len(booster_feature_names)}, "
+                        f"but input contains {x_test.shape[1]}"
+                    )
+
+                dtest = xgb.DMatrix(
+                    x_test,
+                    feature_names=booster_feature_names,
+                )
+
+                try:
+                    best_iteration = booster.best_iteration
+                except (AttributeError, TypeError):
+                    best_iteration = None
+
+                if best_iteration is not None:
+                    y_pred = booster.predict(
+                        dtest,
+                        iteration_range=(0, best_iteration + 1),
+                    )
+                else:
+                    y_pred = booster.predict(dtest)
+
+                y_pred = np.asarray(y_pred, dtype=np.float32)
+
+            else:
+                y_pred = np.array([], dtype=np.float32)
+
+            root_file = root.TFile.Open(
+                output_file_name,
+                "UPDATE",
+            )
+
+            if not root_file or root_file.IsZombie():
+                raise RuntimeError(
+                    f"Could not open {output_file_name} with ROOT"
+                )
+
+            tree = root_file.Get("tree_output")
+
+            if not tree:
+                root_file.Close()
+                raise RuntimeError(
+                    f"tree_output not found in {output_file_name}"
+                )
+
+            n_entries = tree.GetEntries()
+
+            if n_entries != len(y_pred):
+                root_file.Close()
+                raise RuntimeError(
+                    f"Entry mismatch for {systematic}: "
+                    f"tree has {n_entries}, predictions have "
+                    f"{len(y_pred)}"
+                )
+
+            BDT_value = array("f", [0.0])
+
+            new_branch = tree.Branch(
+                BDT_var_name,
+                BDT_value,
+                f"{BDT_var_name}/F",
+            )
+
+            for entry_index in range(n_entries):
+                tree.GetEntry(entry_index)
+
+                if entry_index % 10000 == 0:
+                    print(
+                        f"[INFO] Processing entry "
+                        f"{entry_index}/{n_entries}"
+                    )
+
+                BDT_value[0] = float(y_pred[entry_index])
+                new_branch.Fill()
+
+            tree.Write("", root.TObject.kOverwrite)
+            root_file.Close()
+
+            successful_systematics.append(systematic)
+
+            print(
+                f"[INFO] Finished systematic: {systematic}"
+            )
+
+        except Exception as error:
+            failed_systematics.append(
+                (systematic, str(error))
+            )
+
+            print(
+                f"[ERROR] Failed systematic {systematic}: "
+                f"{error}"
+            )
+
+    print()
+    print("=" * 80)
+    print("[INFO] Systematic BDT processing completed")
+    print(f"[INFO] Successful: {len(successful_systematics)}")
+    print(f"[INFO] Missing:    {len(missing_systematics)}")
+    print(f"[INFO] Failed:     {len(failed_systematics)}")
+    print(f"[INFO] Output directory: {BDT_path}")
+    print("=" * 80)
+
+    if missing_systematics:
+        print("[WARNING] Missing systematics:")
+
+        for systematic in missing_systematics:
+            print(f"  {systematic}")
+
+    if failed_systematics:
+        print("[ERROR] Failed systematics:")
+
+        for systematic, error in failed_systematics:
+            print(f"  {systematic}: {error}")
+
+
+
 
 def get_variables(channel_US, use_bsConstrain):
     channel_vars = [
@@ -615,4 +1009,4 @@ if __name__ == "__main__":
         std_map,
         DO_STANDARDIZATION,
         USE_BSCONSTRAIN,
-    )
+    )'''

@@ -10,11 +10,16 @@
 #include <TH1F.h>
 #include <TLorentzVector.h>
 #include <TString.h>
+#include <TSystem.h>
 #include <TTree.h>
 #include <cmath>
+#include <algorithm>
 #include <iostream>
 #include <map>
 #include <math.h>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
 std::map<TString, int> MC_CAMPAIGN_MAP = {{"2022", 1}, {"2022EE", 2},
                                           {"2023", 3}, {"2023BPix", 4},
@@ -45,7 +50,8 @@ class CreateTuple {
      * @param include_H Boolean flag indicating if include H region
      */
     CreateTuple(TString input, TString weightFile, TString output, TString era, TString channel,
-                bool is_data, bool is_signal_,  bool include_Z, bool include_H);
+                bool is_data, bool is_signal_,  bool include_Z, bool include_H,
+                TString jet_syst);
     /**
      * @brief Destructor for CreateTuple, cleaning up dynamically allocated
      * objects.
@@ -85,6 +91,11 @@ class CreateTuple {
     int isggHCategory();
     int isVBFCategory();
 
+    static std::string NormalizeJetSyst(TString jet_syst);
+    static std::string JetPtBranchName(const std::string &jet_syst);
+    static std::string JetMassBranchName(const std::string &jet_pt_branch);
+    bool passesJetPtSelection(size_t index) const;
+
   private:
     TChain *tree_input; /**< Pointer to input TChain. */
     TTree *tree_output; /**< Pointer to output TTree. */
@@ -103,6 +114,9 @@ class CreateTuple {
     TFile *output_file;        /**< Pointer to output TFile. */
 
     TString analysis_channel;  /**< Directory for saving the output file. */
+    std::string jet_syst_name;
+    std::string jet_pt_branch_name;
+    std::string jet_mass_branch_name;
 
     /** MC Campaign variable: 1-22, 2-22EE, 3-23, 4-23BPix, 5-24, 6-25 */
     int mc_campaign;
@@ -110,17 +124,27 @@ class CreateTuple {
     /** Read event variables */
     float gen_weight, pileup_weight, pileup_weight_up, pileup_weight_down;
 
-    std::vector<float> *mu_trig_eff_SF_vec, *mu_trig_eff_SF_error_vec;
-    std::vector<float> *mu_ID_eff_SF_vec, *mu_ID_eff_SF_stat_vec,
-        *mu_ID_eff_SF_syst_vec;
-    std::vector<float> *mu_ISO_eff_SF_vec, *mu_ISO_eff_SF_stat_vec,
-        *mu_ISO_eff_SF_syst_vec;
+    //std::vector<float> *mu_trig_eff_SF_vec, *mu_trig_eff_SF_up_vec,
+        //*mu_trig_eff_SF_down_vec;
+    
+    std::vector<float> *mu_trig_eff_DATA_vec;
+    std::vector<float> *mu_trig_eff_DATA_up_vec;
+    std::vector<float> *mu_trig_eff_DATA_down_vec;
+
+    std::vector<float> *mu_trig_eff_MC_vec;
+    std::vector<float> *mu_trig_eff_MC_up_vec;
+    std::vector<float> *mu_trig_eff_MC_down_vec;
+
+    std::vector<float> *mu_ID_eff_SF_vec, *mu_ID_eff_SF_up_vec,
+        *mu_ID_eff_SF_down_vec;
+    std::vector<float> *mu_ISO_eff_SF_vec, *mu_ISO_eff_SF_up_vec,
+        *mu_ISO_eff_SF_down_vec;
 
 
     int n_SoftJet_pt2, n_SoftJet_pt5, n_SoftJet_pt10;
     float HT, HT_pt2, HT_pt5, HT_pt10;
     /** Read DiMuon variables */
-    float diMuon_mass, diMuon_bsConstrainedMass, diMuon_pt,
+    float diMuon_mass, diMuon_bsConstrainedMass_nanoAOD, diMuon_bsConstrainedMass, diMuon_pt,
         diMuon_bsConstrainedPt, diMuon_phi, diMuon_eta;
 
     /** Read MET variables **/
@@ -129,7 +153,8 @@ class CreateTuple {
     /** Read Muon variables */
     int mu1_index, mu2_index;
     std::vector<int> *mu_charge;
-    std::vector<float> *mu_pt, *mu_bsConstrainedPt, *mu_phi, *mu_eta, *mu_dz, *mu_dzErr;
+    std::vector<float> *mu_pt, *mu_bsConstrainedPt, *mu_bsConstrainedPt_nanoAOD,
+        *mu_phi, *mu_eta, *mu_dz, *mu_dzErr;
     std::vector<float> *mu_ptErr, *mu_bsConstrainedPtErr;
 
     /** Read electron variables */
@@ -138,13 +163,14 @@ class CreateTuple {
     /** Read Jet variables */
     int n_jet, n_bjet, n_bjet_Loose;
     std::vector<float> *jet_mass, *jet_pt, *jet_phi, *jet_eta, *jet_btagPNetB;
+    std::vector<float> *jet_pt_nanoAOD;
 
     /** Read Jet variables */
     float diJet_pt, diJet_eta, diJet_phi, diJet_mass, diJet_mass_mo;
 
     /** New Event variables */
     double scale_factor; // luminosity * cross_section / gen_weight_sum
-    Double_t weight;
+    Double_t weight, weight_no_eff_sf;
     double weight_no_lumi;
     float mu_trig_eff_SF, mu_trig_eff_SF_down, mu_trig_eff_SF_up;
     float mu_ID_eff_SF, mu_ID_eff_SF_down, mu_ID_eff_SF_up;
@@ -161,15 +187,17 @@ class CreateTuple {
     /** New Muon variables*/
     float mu1_pt_mass_ratio, mu2_pt_mass_ratio, mu1_bsConstrainedPt_mass_ratio,
         mu2_bsConstrainedPt_mass_ratio, mu1_eta, mu2_eta, phi_CS, cos_theta_CS;
-    float mu1_pt, mu2_pt, mu1_bsConstrainedPt, mu2_bsConstrainedPt, mu1_ptErr,
-        mu2_ptErr, mu1_bsConstrainedPtErr, mu2_bsConstrainedPtErr, mu1_dz,
-        mu2_dz, mu1_dzErr, mu2_dzErr;
+    float mu1_pt, mu2_pt, mu1_bsConstrainedPt_nanoAOD,
+        mu2_bsConstrainedPt_nanoAOD, mu1_bsConstrainedPt,
+        mu2_bsConstrainedPt, mu1_ptErr, mu2_ptErr, mu1_bsConstrainedPtErr,
+        mu2_bsConstrainedPtErr, mu1_dz, mu2_dz, mu1_dzErr, mu2_dzErr;
     /** New Error variables*/
     float relative_diMuon_mass_error, relative_diMuon_bsConstrainedMass_error;
 
     /** New jets variables*/
     float leading_jet_pt, leading_jet_eta, leading_jet_btagPNetB,
-        subleading_jet_pt, subleading_jet_eta, subleading_jet_btagPNetB;
+        subleading_jet_pt, subleading_jet_eta, subleading_jet_btagPNetB,
+        leading_jet_pt_nanoAOD, subleading_jet_pt_nanoAOD;
 
     /** New DiJets variables*/
     float delta_eta_diJet, delta_phi_diJet, z_zeppenfeld, pt_balance,
@@ -191,9 +219,23 @@ class CreateTuple {
     TH1D *h_nVBFCat = new TH1D("h_nVBFCat", "h_nVBFCat", 1, 0, 1);
 };
 
+inline std::string CreateTuple::JetPtBranchName(const std::string &jet_syst) {
+    if (jet_syst.empty()) {
+        return "t_Jet_pt";
+    }
+    return "t_Jet_pt_" + jet_syst;
+}
+
+inline std::string CreateTuple::JetMassBranchName(const std::string &jet_syst) {
+    if (jet_syst.empty()) {
+        return "t_Jet_mass";
+    }
+    return "t_Jet_mass_" + jet_syst;
+}
+
 CreateTuple::CreateTuple(TString input, TString weightFile, TString output, TString era,
                          TString channel, bool is_data_, bool is_signal_, bool include_Z_,
-                        bool include_H_)
+                         bool include_H_, TString jet_syst)
     : luminosity(LUMINOSITY.at(era)), cross_section(CROSS_SECTION.at(channel)) {
 
     tree_input = new TChain("tree");
@@ -201,11 +243,20 @@ CreateTuple::CreateTuple(TString input, TString weightFile, TString output, TStr
     input_name = input;
     weight_name = weightFile;
     output_directory = output;
+    if( jet_syst =="nominal")  {
+        jet_syst = "";
+    }
+    jet_syst_name = std::string(jet_syst.Data());
+    if (!output_directory.EndsWith("/")) {
+        output_directory += "/";
+    }
     is_signal = is_signal_;
     include_Z = include_Z_;
     include_H = include_H_;
     analysis_channel = channel;
     is_data = is_data_;
+    jet_pt_branch_name = JetPtBranchName(jet_syst_name);
+    jet_mass_branch_name = JetMassBranchName(jet_syst_name);
 
     if(include_Z){
         std::cout << "Z range included" << std::endl;
@@ -213,19 +264,22 @@ CreateTuple::CreateTuple(TString input, TString weightFile, TString output, TStr
     if(include_H){
         std::cout << "H range included" << std::endl;
     }
+    std::cout << "Jet systematic: " << jet_syst_name << std::endl;
+    std::cout << "Jet pT input branch: " << jet_pt_branch_name << std::endl;
 
     output_name = channel + "_" + era + "_tuples.root";
     std::cout << "Luminosity: " << luminosity
               << ", cross section: " << cross_section << std::endl;
     if (!is_data) {
         gen_weight_sum = GetGenWeightSum(weight_name);
-        if(era == "2024"){
-            scale_factor = GetScaleFactor(luminosity + LUMINOSITY.at("2025"), cross_section, gen_weight_sum);
-        }
-        else{
-            scale_factor = GetScaleFactor(luminosity, cross_section, gen_weight_sum);
-        }
+        //if(era == "2024"){
+            //scale_factor = GetScaleFactor(luminosity + LUMINOSITY.at("2025"), cross_section, gen_weight_sum);
+        //}
+        //else{
+            //scale_factor = GetScaleFactor(luminosity, cross_section, gen_weight_sum);
+        //}
         // is_data_int = 0;
+        scale_factor = GetScaleFactor(luminosity, cross_section, gen_weight_sum);
         // if (is_signal_) {
         // is_signal_int = 1;
         //} else {
@@ -241,6 +295,7 @@ CreateTuple::CreateTuple(TString input, TString weightFile, TString output, TStr
     mu_charge = nullptr;
     mu_pt = nullptr;
     mu_bsConstrainedPt = nullptr;
+    mu_bsConstrainedPt_nanoAOD = nullptr;
     mu_ptErr = nullptr;
     mu_bsConstrainedPtErr = nullptr;
     mu_phi = nullptr;
@@ -250,18 +305,29 @@ CreateTuple::CreateTuple(TString input, TString weightFile, TString output, TStr
     elec_pt = nullptr;
     jet_eta = nullptr;
     jet_pt = nullptr;
+    jet_pt_nanoAOD = nullptr;
     jet_phi = nullptr;
     jet_mass = nullptr;
     jet_btagPNetB = nullptr;
 
-    mu_trig_eff_SF_vec = nullptr;
-    mu_trig_eff_SF_error_vec = nullptr;
+    //mu_trig_eff_SF_vec = nullptr;
+    //mu_trig_eff_SF_up_vec = nullptr;
+    //mu_trig_eff_SF_down_vec = nullptr;
+    
+    mu_trig_eff_DATA_vec = nullptr;
+    mu_trig_eff_DATA_up_vec = nullptr;
+    mu_trig_eff_DATA_down_vec = nullptr;
+
+    mu_trig_eff_MC_vec = nullptr;
+    mu_trig_eff_MC_up_vec = nullptr;
+    mu_trig_eff_MC_down_vec = nullptr;
+
     mu_ID_eff_SF_vec = nullptr;
-    mu_ID_eff_SF_stat_vec = nullptr;
-    mu_ID_eff_SF_syst_vec = nullptr;
+    mu_ID_eff_SF_up_vec = nullptr;
+    mu_ID_eff_SF_down_vec = nullptr;
     mu_ISO_eff_SF_vec = nullptr;
-    mu_ISO_eff_SF_stat_vec = nullptr;
-    mu_ISO_eff_SF_syst_vec = nullptr;
+    mu_ISO_eff_SF_up_vec = nullptr;
+    mu_ISO_eff_SF_down_vec = nullptr;
 
     TFile *f_input = TFile::Open(input_name);
     h_nEntries = (TH1D*)f_input->Get("h_nEntries");
@@ -279,6 +345,7 @@ CreateTuple::CreateTuple(TString input, TString weightFile, TString output, TStr
     h_nTriggerMatch->SetDirectory(0);
     h_nBjetRejection = (TH1D*)f_input->Get("h_nBjetRejection");
     h_nBjetRejection->SetDirectory(0);
+    h_nBjetRejection->Reset();
     h_nJets = (TH1D*)f_input->Get("h_nJets");
     h_nJets->SetDirectory(0);
     h_nValidJets = (TH1D*)f_input->Get("h_nValidJets");
@@ -316,6 +383,7 @@ void CreateTuple::setBranchesAddressesOutput() {
                         "pileup_weight_down/f");
     tree_output->Branch("scale_factor", &scale_factor, "scale_factor/d");
     tree_output->Branch("weight", &weight, "weight/D");
+    tree_output->Branch("weight_no_eff_sf", &weight_no_eff_sf, "weight_no_eff_sf/D");
     tree_output->Branch("weight_no_lumi", &weight_no_lumi, "weight_no_lumi/d");
     // tree_output->Branch("is_data", &is_data_int, "is_data/i");
     // tree_output->Branch("is_signal", &is_signal_int, "signal/i");
@@ -356,6 +424,8 @@ void CreateTuple::setBranchesAddressesOutput() {
 
     // DiMuon variables
     tree_output->Branch("diMuon_mass", &diMuon_mass, "diMuon_mass/f");
+    tree_output->Branch("diMuon_bsConstrainedMass_nanoAOD", &diMuon_bsConstrainedMass_nanoAOD,
+                        "diMuon_bsConstrainedMass_nanoAOD/f");
     tree_output->Branch("diMuon_bsConstrainedMass", &diMuon_bsConstrainedMass,
                         "diMuon_bsConstrainedMass/f");
     tree_output->Branch("diMuon_pt", &diMuon_pt, "diMuon_pt/f");
@@ -386,6 +456,12 @@ void CreateTuple::setBranchesAddressesOutput() {
     tree_output->Branch("mu2_eta", &mu2_eta, "mu2_eta/f");
     tree_output->Branch("mu1_pt", &mu1_pt, "mu1_pt/f");
     tree_output->Branch("mu2_pt", &mu2_pt, "mu2_pt/f");
+    tree_output->Branch("mu1_bsConstrainedPt_nanoAOD",
+                        &mu1_bsConstrainedPt_nanoAOD,
+                        "mu1_bsConstrainedPt_nanoAOD/f");
+    tree_output->Branch("mu2_bsConstrainedPt_nanoAOD",
+                        &mu2_bsConstrainedPt_nanoAOD,
+                        "mu2_bsConstrainedPt_nanoAOD/f");
     tree_output->Branch("mu1_bsConstrainedPt", &mu1_bsConstrainedPt,
                         "mu1_bsConstrainedPt/f");
     tree_output->Branch("mu2_bsConstrainedPt", &mu2_bsConstrainedPt,
@@ -416,12 +492,20 @@ void CreateTuple::setBranchesAddressesOutput() {
     tree_output->Branch("n_bjet", &n_bjet, "n_bjet/i");
     tree_output->Branch("n_bjet_Loose", &n_bjet_Loose, "n_bjet_Loose/i");
     tree_output->Branch("leading_jet_pt", &leading_jet_pt, "leading_jet_pt/f");
+    if (jet_syst_name.empty()) {
+        tree_output->Branch("leading_jet_pt_nanoAOD", &leading_jet_pt_nanoAOD,
+                            "leading_jet_pt_nanoAOD/f");
+    }
     tree_output->Branch("leading_jet_eta", &leading_jet_eta,
                         "leading_jet_eta/f");
     tree_output->Branch("leading_jet_btagPNetB", &leading_jet_btagPNetB,
                         "leading_jet_btagPNetB/f");
     tree_output->Branch("subleading_jet_pt", &subleading_jet_pt,
                         "subleading_jet_pt/f");
+    if (jet_syst_name.empty()) {
+        tree_output->Branch("subleading_jet_pt_nanoAOD", &subleading_jet_pt_nanoAOD,
+                            "subleading_jet_pt_nanoAOD/f");
+    }
     tree_output->Branch("subleading_jet_eta", &subleading_jet_eta,
                         "subleading_jet_eta/f");
     tree_output->Branch("subleading_jet_btagPNetB", &subleading_jet_btagPNetB,
@@ -456,25 +540,38 @@ void CreateTuple::setBranchesAddressesInput() {
     tree_input->SetBranchAddress("t_puWeightDown", &pileup_weight_down);
     tree_input->SetBranchStatus("t_genWeight", 1);
     tree_input->SetBranchAddress("t_genWeight", &gen_weight);
-    tree_input->SetBranchStatus("t_Mu_EffSF_TRIG", 1);
-    tree_input->SetBranchAddress("t_Mu_EffSF_TRIG", &mu_trig_eff_SF_vec);
-    tree_input->SetBranchStatus("t_Mu_EffSFErr_TRIG", 1);
-    tree_input->SetBranchAddress("t_Mu_EffSFErr_TRIG",
-                                 &mu_trig_eff_SF_error_vec);
+    //tree_input->SetBranchStatus("t_Mu_EffSF_TRIG", 1);
+    //tree_input->SetBranchAddress("t_Mu_EffSF_TRIG", &mu_trig_eff_SF_vec);
+    //tree_input->SetBranchStatus("t_Mu_EffSF_TRIG_up", 1);
+    //tree_input->SetBranchAddress("t_Mu_EffSF_TRIG_up", &mu_trig_eff_SF_up_vec);
+    //tree_input->SetBranchStatus("t_Mu_EffSF_TRIG_down", 1);
+    //tree_input->SetBranchAddress("t_Mu_EffSF_TRIG_down", &mu_trig_eff_SF_down_vec);
+    tree_input->SetBranchStatus("t_Mu_EffTRIG_DATA", 1);
+    tree_input->SetBranchAddress("t_Mu_EffTRIG_DATA", &mu_trig_eff_DATA_vec);
+    tree_input->SetBranchStatus("t_Mu_EffTRIG_DATA_up", 1);
+    tree_input->SetBranchAddress("t_Mu_EffTRIG_DATA_up", &mu_trig_eff_DATA_up_vec);
+    tree_input->SetBranchStatus("t_Mu_EffTRIG_DATA_down", 1);
+    tree_input->SetBranchAddress("t_Mu_EffTRIG_DATA_down",&mu_trig_eff_DATA_down_vec);
+    tree_input->SetBranchStatus("t_Mu_EffTRIG_MC", 1);
+    tree_input->SetBranchAddress("t_Mu_EffTRIG_MC",&mu_trig_eff_MC_vec);
+    tree_input->SetBranchStatus("t_Mu_EffTRIG_MC_up", 1);
+    tree_input->SetBranchAddress("t_Mu_EffTRIG_MC_up", &mu_trig_eff_MC_up_vec);
+    tree_input->SetBranchStatus("t_Mu_EffTRIG_MC_down", 1);
+    tree_input->SetBranchAddress("t_Mu_EffTRIG_MC_down", &mu_trig_eff_MC_down_vec);
+
+
     tree_input->SetBranchStatus("t_Mu_EffSF_ID", 1);
     tree_input->SetBranchAddress("t_Mu_EffSF_ID", &mu_ID_eff_SF_vec);
-    tree_input->SetBranchStatus("t_Mu_EffSF_ID_stat", 1);
-    tree_input->SetBranchAddress("t_Mu_EffSF_ID_stat", &mu_ID_eff_SF_stat_vec);
-    tree_input->SetBranchStatus("t_Mu_EffSF_ID_syst", 1);
-    tree_input->SetBranchAddress("t_Mu_EffSF_ID_syst", &mu_ID_eff_SF_syst_vec);
+    tree_input->SetBranchStatus("t_Mu_EffSF_ID_up", 1);
+    tree_input->SetBranchAddress("t_Mu_EffSF_ID_up", &mu_ID_eff_SF_up_vec);
+    tree_input->SetBranchStatus("t_Mu_EffSF_ID_down", 1);
+    tree_input->SetBranchAddress("t_Mu_EffSF_ID_down", &mu_ID_eff_SF_down_vec);
     tree_input->SetBranchStatus("t_Mu_EffSF_ISO", 1);
     tree_input->SetBranchAddress("t_Mu_EffSF_ISO", &mu_ISO_eff_SF_vec);
-    tree_input->SetBranchStatus("t_Mu_EffSF_ISO_stat", 1);
-    tree_input->SetBranchAddress("t_Mu_EffSF_ISO_stat",
-                                 &mu_ISO_eff_SF_stat_vec);
-    tree_input->SetBranchStatus("t_Mu_EffSF_ISO_syst", 1);
-    tree_input->SetBranchAddress("t_Mu_EffSF_ISO_syst",
-                                 &mu_ISO_eff_SF_syst_vec);
+    tree_input->SetBranchStatus("t_Mu_EffSF_ISO_up", 1);
+    tree_input->SetBranchAddress("t_Mu_EffSF_ISO_up", &mu_ISO_eff_SF_up_vec);
+    tree_input->SetBranchStatus("t_Mu_EffSF_ISO_down", 1);
+    tree_input->SetBranchAddress("t_Mu_EffSF_ISO_down", &mu_ISO_eff_SF_down_vec);
 
     tree_input->SetBranchStatus("t_Rho", 1);
     tree_input->SetBranchAddress("t_Rho", &rho);
@@ -533,6 +630,9 @@ void CreateTuple::setBranchesAddressesInput() {
     tree_input->SetBranchAddress("t_Mu_pt", &mu_pt);
     tree_input->SetBranchStatus("t_Mu_bsConstrainedPt", 1);
     tree_input->SetBranchAddress("t_Mu_bsConstrainedPt", &mu_bsConstrainedPt);
+    tree_input->SetBranchStatus("t_Mu_bsConstrainedPt_nanoAOD", 1);
+    tree_input->SetBranchAddress("t_Mu_bsConstrainedPt_nanoAOD",
+                                 &mu_bsConstrainedPt_nanoAOD);
     tree_input->SetBranchStatus("t_Mu_ptErr", 1);
     tree_input->SetBranchAddress("t_Mu_ptErr", &mu_ptErr);
     tree_input->SetBranchStatus("t_Mu_bsConstrainedPtErr", 1);
@@ -558,15 +658,30 @@ void CreateTuple::setBranchesAddressesInput() {
     tree_input->SetBranchAddress("t_nbJet_Loose", &n_bjet_Loose);
     tree_input->SetBranchStatus("t_nJet", 1);
     tree_input->SetBranchAddress("t_nJet", &n_jet);
-    tree_input->SetBranchStatus("t_Jet_mass", 1);
-    tree_input->SetBranchAddress("t_Jet_mass", &jet_mass);
-    tree_input->SetBranchStatus("t_Jet_pt", 1);
-    tree_input->SetBranchAddress("t_Jet_pt", &jet_pt);
+    if (!tree_input->GetBranch(jet_pt_branch_name.c_str())) {
+        throw std::runtime_error("Jet pT branch not found: " + jet_pt_branch_name);
+    }
+    tree_input->SetBranchStatus(jet_pt_branch_name.c_str(), 1);
+    tree_input->SetBranchAddress(jet_pt_branch_name.c_str(), &jet_pt);
+
+    if (!tree_input->GetBranch(jet_mass_branch_name.c_str())) {
+        throw std::runtime_error("Jet Mass branch not found: " + jet_mass_branch_name);
+    }
+    tree_input->SetBranchStatus(jet_mass_branch_name.c_str(), 1);
+    tree_input->SetBranchAddress(jet_mass_branch_name.c_str(), &jet_mass);
     tree_input->SetBranchStatus("t_Jet_phi", 1);
     tree_input->SetBranchAddress("t_Jet_phi", &jet_phi);
     tree_input->SetBranchStatus("t_Jet_eta", 1);
     tree_input->SetBranchAddress("t_Jet_eta", &jet_eta);
+    tree_input->SetBranchStatus("t_Jet_btagPNetB", 1);
     tree_input->SetBranchAddress("t_Jet_btagPNetB", &jet_btagPNetB);
+    if (jet_syst_name.empty()) {
+        if (!tree_input->GetBranch("t_Jet_pt_nanoAOD")) {
+            throw std::runtime_error("Jet nanoAOD pT branch not found: t_Jet_pt_nanoAOD");
+        }
+        tree_input->SetBranchStatus("t_Jet_pt_nanoAOD", 1);
+        tree_input->SetBranchAddress("t_Jet_pt_nanoAOD", &jet_pt_nanoAOD);
+    }
 
     // DiJet variables
     tree_input->SetBranchStatus("t_diJet_mass", 1);
@@ -592,6 +707,8 @@ void CreateTuple::fillOutputTree() {
     TLorentzVector mu2_vector;
     TLorentzVector mu1BSC_vector;
     TLorentzVector mu2BSC_vector;
+    TLorentzVector mu1BSC_nanoAOD_vector;
+    TLorentzVector mu2BSC_nanoAOD_vector;
     std::pair<float, float> angles_CS;
     std::cout << include_Z << std::endl;
     std::cout << include_H << std::endl;
@@ -617,63 +734,104 @@ void CreateTuple::fillOutputTree() {
 
         h_nInFinalMassRange->Fill(0.5);
 
+        if ((*mu_bsConstrainedPt)[mu1_index] < (*mu_bsConstrainedPt)[mu2_index]) {
+            std::swap(mu1_index, mu2_index);
+        }
+
+
         if (!is_data) {
 
-            float mu_ID_eff_SF_error_1 =
-                std::sqrt(std::pow((*mu_ID_eff_SF_stat_vec)[mu1_index], 2) +
-                          std::pow((*mu_ID_eff_SF_syst_vec)[mu1_index], 2));
-            float mu_ID_eff_SF_error_2 =
-                std::sqrt(std::pow((*mu_ID_eff_SF_stat_vec)[mu2_index], 2) +
-                          std::pow((*mu_ID_eff_SF_syst_vec)[mu2_index], 2));
+            //mu_trig_eff_SF = (*mu_trig_eff_SF_vec)[mu1_index] *
+                             //(*mu_trig_eff_SF_vec)[mu2_index];
+            //mu_trig_eff_SF_down = (*mu_trig_eff_SF_down_vec)[mu1_index] *
+                                  //(*mu_trig_eff_SF_down_vec)[mu2_index];
+            //mu_trig_eff_SF_up = (*mu_trig_eff_SF_up_vec)[mu1_index] *
+                                //(*mu_trig_eff_SF_up_vec)[mu2_index];
+            
+            // Trigger efficiency: DATA
+            const float trig_eff_data_mu1 = (*mu_trig_eff_DATA_vec)[mu1_index];
+            const float trig_eff_data_mu2 = (*mu_trig_eff_DATA_vec)[mu2_index];
+
+            const float trig_eff_data_event = 1.0 -
+                (1.0 - trig_eff_data_mu1) * (1.0 - trig_eff_data_mu2);
 
 
-            float mu_ISO_eff_SF_error_1 =
-                std::sqrt(std::pow((*mu_ISO_eff_SF_stat_vec)[mu1_index], 2) +
-                          std::pow((*mu_ISO_eff_SF_syst_vec)[mu1_index], 2));
-            float mu_ISO_eff_SF_error_2 =
-                std::sqrt(std::pow((*mu_ISO_eff_SF_stat_vec)[mu2_index], 2) +
-                          std::pow((*mu_ISO_eff_SF_syst_vec)[mu2_index], 2));
+            // Trigger efficiency: MC
+            const float trig_eff_mc_mu1 = (*mu_trig_eff_MC_vec)[mu1_index];
+
+            const float trig_eff_mc_mu2 = (*mu_trig_eff_MC_vec)[mu2_index];
+
+            const float trig_eff_mc_event = 1.0 -
+                (1.0 - trig_eff_mc_mu1) * (1.0 - trig_eff_mc_mu2);
 
 
-            mu_trig_eff_SF = (*mu_trig_eff_SF_vec)[mu1_index] *
-                             (*mu_trig_eff_SF_vec)[mu2_index];
+            // Final event trigger SF
+            if (trig_eff_mc_event > 0.0) {
+                mu_trig_eff_SF = trig_eff_data_event / trig_eff_mc_event;
+            } else {
+                mu_trig_eff_SF = 1.0;
+            }
 
-            mu_trig_eff_SF_down = ((*mu_trig_eff_SF_vec)[mu1_index] -
-                                   (*mu_trig_eff_SF_error_vec)[mu1_index]) *
-                                  ((*mu_trig_eff_SF_vec)[mu2_index] -
-                                   (*mu_trig_eff_SF_error_vec)[mu2_index]);
-            mu_trig_eff_SF_up = ((*mu_trig_eff_SF_vec)[mu1_index] +
-                                   (*mu_trig_eff_SF_error_vec)[mu1_index]) *
-                                  ((*mu_trig_eff_SF_vec)[mu2_index] +
-                                   (*mu_trig_eff_SF_error_vec)[mu2_index]);
+
+            // Trigger systematic UP
+            const float trig_eff_data_mu1_up = (*mu_trig_eff_DATA_up_vec)[mu1_index];
+            const float trig_eff_data_mu2_up = (*mu_trig_eff_DATA_up_vec)[mu2_index];
+            const float trig_eff_data_event_up = 1.0 -
+                (1.0 - trig_eff_data_mu1_up) * (1.0 - trig_eff_data_mu2_up);
+
+            const float trig_eff_mc_mu1_up = (*mu_trig_eff_MC_up_vec)[mu1_index];
+            const float trig_eff_mc_mu2_up = (*mu_trig_eff_MC_up_vec)[mu2_index];
+            const float trig_eff_mc_event_up = 1.0 -
+                (1.0 - trig_eff_mc_mu1_up) * (1.0 - trig_eff_mc_mu2_up);
+
+
+            if (trig_eff_mc_event_up > 0.0) {
+                mu_trig_eff_SF_up = trig_eff_data_event_up / trig_eff_mc_event_up;
+            } else {
+                mu_trig_eff_SF_up = 1.0;
+            }
+
+
+            // Trigger systematic DOWN
+            const float trig_eff_data_mu1_down = (*mu_trig_eff_DATA_down_vec)[mu1_index];
+            const float trig_eff_data_mu2_down = (*mu_trig_eff_DATA_down_vec)[mu2_index];
+            const float trig_eff_data_event_down = 1.0 -
+                (1.0f - trig_eff_data_mu1_down) * (1.0 - trig_eff_data_mu2_down);
+
+            const float trig_eff_mc_mu1_down = (*mu_trig_eff_MC_down_vec)[mu1_index];
+            const float trig_eff_mc_mu2_down = (*mu_trig_eff_MC_down_vec)[mu2_index];
+            const float trig_eff_mc_event_down = 1.0 -
+                (1.0f - trig_eff_mc_mu1_down) * (1.0 - trig_eff_mc_mu2_down);
+
+
+            if (trig_eff_mc_event_down > 0.0) {
+                mu_trig_eff_SF_down = trig_eff_data_event_down / trig_eff_mc_event_down;
+            } else {
+                mu_trig_eff_SF_down = 1.0;
+            }
+
+
 
             mu_ISO_eff_SF = (*mu_ISO_eff_SF_vec)[mu1_index] *
-                             (*mu_ISO_eff_SF_vec)[mu2_index];
+                            (*mu_ISO_eff_SF_vec)[mu2_index];
+            mu_ISO_eff_SF_down = (*mu_ISO_eff_SF_down_vec)[mu1_index] *
+                                 (*mu_ISO_eff_SF_down_vec)[mu2_index];
+            mu_ISO_eff_SF_up = (*mu_ISO_eff_SF_up_vec)[mu1_index] *
+                               (*mu_ISO_eff_SF_up_vec)[mu2_index];
 
-            mu_ISO_eff_SF_down = ((*mu_ISO_eff_SF_vec)[mu1_index] -
-                                   mu_ISO_eff_SF_error_1)*
-                                  ((*mu_ISO_eff_SF_vec)[mu2_index] -
-                                   mu_ISO_eff_SF_error_2);
-            mu_ISO_eff_SF_up = ((*mu_ISO_eff_SF_vec)[mu1_index] +
-                                   mu_ISO_eff_SF_error_1)*
-                                  ((*mu_ISO_eff_SF_vec)[mu2_index] +
-                                   mu_ISO_eff_SF_error_2);
-            
             mu_ID_eff_SF = (*mu_ID_eff_SF_vec)[mu1_index] *
-                             (*mu_ID_eff_SF_vec)[mu2_index];
-
-            mu_ID_eff_SF_down = ((*mu_ID_eff_SF_vec)[mu1_index] -
-                                   mu_ID_eff_SF_error_1)*
-                                  ((*mu_ID_eff_SF_vec)[mu2_index] -
-                                   mu_ID_eff_SF_error_2);
-            mu_ID_eff_SF_up = ((*mu_ID_eff_SF_vec)[mu1_index] +
-                                   mu_ID_eff_SF_error_1)*
-                                  ((*mu_ID_eff_SF_vec)[mu2_index] +
-                                   mu_ID_eff_SF_error_2);
+                           (*mu_ID_eff_SF_vec)[mu2_index];
+            mu_ID_eff_SF_down = (*mu_ID_eff_SF_down_vec)[mu1_index] *
+                                (*mu_ID_eff_SF_down_vec)[mu2_index];
+            mu_ID_eff_SF_up = (*mu_ID_eff_SF_up_vec)[mu1_index] *
+                              (*mu_ID_eff_SF_up_vec)[mu2_index];
 
             weight =
                 GetEventWeight(gen_weight, pileup_weight, scale_factor,
                                mu_trig_eff_SF, mu_ID_eff_SF, mu_ISO_eff_SF);
+            weight_no_eff_sf =
+                GetEventWeight(gen_weight, pileup_weight, scale_factor,
+                               1, 1, 1);
             weight_no_lumi = weight / luminosity;
 
         } else {
@@ -690,12 +848,10 @@ void CreateTuple::fillOutputTree() {
             
             weight = 1;
             weight_no_lumi = 1;
+            weight_no_eff_sf= 1;
         
         }
         
-        // DiMuon variables
-        diMuon_rapidity = (mu1_vector + mu2_vector).Rapidity();
-
         // Muon variables
         mu1_vector.SetPtEtaPhiM((*mu_pt)[mu1_index], (*mu_eta)[mu1_index],
                                 (*mu_phi)[mu1_index], MUON_MASS);
@@ -708,8 +864,19 @@ void CreateTuple::fillOutputTree() {
                                    (*mu_eta)[mu2_index], (*mu_phi)[mu2_index],
                                    MUON_MASS);
 
+        diMuon_rapidity = (mu1BSC_vector + mu2BSC_vector).Rapidity();
+
         mu1_pt = (*mu_pt)[mu1_index];
         mu2_pt = (*mu_pt)[mu2_index];
+        mu1_bsConstrainedPt_nanoAOD = (*mu_bsConstrainedPt_nanoAOD)[mu1_index];
+        mu2_bsConstrainedPt_nanoAOD = (*mu_bsConstrainedPt_nanoAOD)[mu2_index];
+        mu1BSC_nanoAOD_vector.SetPtEtaPhiM(mu1_bsConstrainedPt_nanoAOD,
+                                           (*mu_eta)[mu1_index], (*mu_phi)[mu1_index],
+                                           MUON_MASS);
+        mu2BSC_nanoAOD_vector.SetPtEtaPhiM(mu2_bsConstrainedPt_nanoAOD,
+                                           (*mu_eta)[mu2_index], (*mu_phi)[mu2_index],
+                                           MUON_MASS);
+        diMuon_bsConstrainedMass_nanoAOD = (mu1BSC_nanoAOD_vector + mu2BSC_nanoAOD_vector).M();
         mu1_bsConstrainedPt = (*mu_bsConstrainedPt)[mu1_index];
         mu2_bsConstrainedPt = (*mu_bsConstrainedPt)[mu2_index];
         mu1_ptErr = (*mu_ptErr)[mu1_index];
@@ -726,7 +893,7 @@ void CreateTuple::fillOutputTree() {
             std::pow(mu1_bsConstrainedPtErr / mu1_bsConstrainedPt, 2) +
             std::pow(mu2_bsConstrainedPtErr / mu2_bsConstrainedPt, 2));
 
-        angles_CS = CSAngles(mu1_vector, mu2_vector, (*mu_charge)[mu1_index]);
+        angles_CS = CSAngles(mu1BSC_vector, mu2BSC_vector, (*mu_charge)[mu1_index]);
 
         mu1_pt_mass_ratio = (*mu_pt)[mu1_index] / diMuon_mass;
         mu2_pt_mass_ratio = (*mu_pt)[mu2_index] / diMuon_mass;
@@ -739,56 +906,167 @@ void CreateTuple::fillOutputTree() {
         phi_CS = angles_CS.second;
         cos_theta_CS = angles_CS.first;
 
-        if (n_jet == 0) {
-            leading_jet_pt = 0;
-            leading_jet_eta = 0;
-            leading_jet_btagPNetB = 0;
-            diJet_mass = 0;
-            subleading_jet_pt = 0;
-            subleading_jet_eta = 0;
-            delta_eta_diJet = 0;
-            delta_phi_diJet = -1;
-            z_zeppenfeld = 0;
-            pt_balance = -1;
-            pt_centrality = -1;
-            min_delta_eta_diMuon_jet = 0;
-            min_delta_phi_diMuon_jet = 0;
-        } else if (n_jet == 1) {
-            leading_jet_pt = jet_pt->at(0);
-            leading_jet_eta = jet_eta->at(0);
-            leading_jet_btagPNetB = jet_btagPNetB->at(0);
-            diJet_mass = 0;
-            subleading_jet_pt = 0;
-            subleading_jet_eta = 0;
-            subleading_jet_btagPNetB = 0;
-            delta_eta_diJet = 0;
-            delta_phi_diJet = -1;
-            z_zeppenfeld = 0;
-            pt_balance = -1;
-            pt_centrality = -1;
-            min_delta_eta_diMuon_jet = DeltaEta(diMuon_eta, jet_eta->at(0));
-            min_delta_phi_diMuon_jet = DeltaPhi(diMuon_phi, jet_phi->at(0));
-        } else {
-            leading_jet_pt = jet_pt->at(0);
-            leading_jet_eta = jet_eta->at(0);
-            leading_jet_btagPNetB = jet_btagPNetB->at(0);
-            subleading_jet_pt = jet_pt->at(1);
-            subleading_jet_eta = jet_eta->at(1);
-            subleading_jet_btagPNetB = jet_btagPNetB->at(1);
-            delta_eta_diJet = DeltaEta(jet_eta->at(0), jet_eta->at(1));
-            delta_phi_diJet = DeltaPhi(jet_phi->at(0), jet_phi->at(1));
-            z_zeppenfeld = GetZZeppenfeldVariable(diMuon_rapidity, jet_pt,
-                                                  jet_phi, jet_eta, jet_mass);
-            pt_balance = GetPtBalanceVariable(mu1_vector + mu2_vector, jet_pt,
-                                              jet_phi, jet_eta, jet_mass);
-            pt_centrality = GetPtCentralityVariable(diMuon_pt, jet_pt, jet_phi,
-                                                    jet_eta, jet_mass);
+        int leading_jet_index = -1;
+        int subleading_jet_index = -1;
+        n_jet = 0;
+        n_bjet = 0;
+        n_bjet_Loose = 0;
+
+        float btag_loose_cut = 0.;
+        float btag_medium_cut = 0.;
+        switch (mc_campaign) {
+        case 1:
+            btag_loose_cut = 0.047;
+            btag_medium_cut = 0.245;
+            break;
+        case 2:
+            btag_loose_cut = 0.0499;
+            btag_medium_cut = 0.2605;
+            break;
+        case 3:
+            btag_loose_cut = 0.0358;
+            btag_medium_cut = 0.1917;
+            break;
+        case 4:
+            btag_loose_cut = 0.0359;
+            btag_medium_cut = 0.1919;
+            break;
+        case 5:
+            btag_loose_cut = 0.0365;
+            btag_medium_cut = 0.1990;
+            break;
+        case 6:
+            btag_loose_cut = 0.0365;
+            btag_medium_cut = 0.1990;
+            break;
+        default:
+            throw std::runtime_error("Unsupported MC campaign for b-tag cuts");
+        }
+
+        const size_t jet_count = jet_pt->size();
+
+        for (size_t jet_index = 0; jet_index < jet_count; ++jet_index) {
+            
+            if (!passesJetPtSelection(jet_index)) {
+                continue;
+            }
+
+            ++n_jet;
+
+            if (jet_btagPNetB->at(jet_index) > btag_loose_cut) {
+                ++n_bjet_Loose;
+            }
+            if (jet_btagPNetB->at(jet_index) > btag_medium_cut) {
+                ++n_bjet;
+            }
+
+            if (leading_jet_index < 0 ||
+                jet_pt->at(jet_index) > jet_pt->at(leading_jet_index)) {
+                subleading_jet_index = leading_jet_index;
+                leading_jet_index = static_cast<int>(jet_index);
+            } else if (subleading_jet_index < 0 ||
+                       jet_pt->at(jet_index) > jet_pt->at(subleading_jet_index)) {
+                subleading_jet_index = static_cast<int>(jet_index);
+            }
+        }
+
+        if (n_bjet_Loose > 1 || n_bjet > 0) {
+            continue;
+        }
+
+        h_nBjetRejection->Fill(0.5);
+
+        leading_jet_pt = 0;
+        leading_jet_pt_nanoAOD = 0;
+        leading_jet_eta = 0;
+        leading_jet_btagPNetB = 0;
+        subleading_jet_pt = 0;
+        subleading_jet_pt_nanoAOD = 0;
+        subleading_jet_eta = 0;
+        subleading_jet_btagPNetB = 0;
+        diJet_pt = 0;
+        diJet_eta = 0;
+        diJet_phi = 0;
+        diJet_mass = 0;
+        delta_eta_diJet = 0;
+        delta_phi_diJet = -1;
+        z_zeppenfeld = 0;
+        pt_balance = -1;
+        pt_centrality = -1;
+        min_delta_eta_diMuon_jet = 0;
+        min_delta_phi_diMuon_jet = 0;
+
+        if (leading_jet_index >= 0) {
+            leading_jet_pt = jet_pt->at(leading_jet_index);
+            if (jet_syst_name.empty()) {
+                leading_jet_pt_nanoAOD = jet_pt_nanoAOD->at(leading_jet_index);
+            }
+            leading_jet_eta = jet_eta->at(leading_jet_index);
+            leading_jet_btagPNetB = jet_btagPNetB->at(leading_jet_index);
+            min_delta_eta_diMuon_jet = DeltaEta(diMuon_eta, jet_eta->at(leading_jet_index));
+            min_delta_phi_diMuon_jet = DeltaPhi(diMuon_phi, jet_phi->at(leading_jet_index));
+        }
+
+        if (leading_jet_index >= 0 && subleading_jet_index >= 0) {
+            subleading_jet_pt = jet_pt->at(subleading_jet_index);
+            if (jet_syst_name.empty()) {
+                subleading_jet_pt_nanoAOD = jet_pt_nanoAOD->at(subleading_jet_index);
+            }
+            subleading_jet_eta = jet_eta->at(subleading_jet_index);
+            subleading_jet_btagPNetB = jet_btagPNetB->at(subleading_jet_index);
+
+            TLorentzVector leading_jet_vector;
+            TLorentzVector subleading_jet_vector;
+            leading_jet_vector.SetPtEtaPhiM(jet_pt->at(leading_jet_index),
+                                            jet_eta->at(leading_jet_index),
+                                            jet_phi->at(leading_jet_index),
+                                            jet_mass->at(leading_jet_index));
+            subleading_jet_vector.SetPtEtaPhiM(jet_pt->at(subleading_jet_index),
+                                               jet_eta->at(subleading_jet_index),
+                                               jet_phi->at(subleading_jet_index),
+                                               jet_mass->at(subleading_jet_index));
+            TLorentzVector dijet_vector = leading_jet_vector + subleading_jet_vector;
+
+            diJet_pt = dijet_vector.Pt();
+            diJet_eta = dijet_vector.Eta();
+            diJet_phi = dijet_vector.Phi();
+            diJet_mass = dijet_vector.M();
+            delta_eta_diJet = DeltaEta(jet_eta->at(leading_jet_index),
+                                       jet_eta->at(subleading_jet_index));
+            delta_phi_diJet = DeltaPhi(jet_phi->at(leading_jet_index),
+                                       jet_phi->at(subleading_jet_index));
+
+            std::vector<float> ordered_jet_pt = {jet_pt->at(leading_jet_index),
+                                                jet_pt->at(subleading_jet_index)};
+            std::vector<float> ordered_jet_phi = {jet_phi->at(leading_jet_index),
+                                                 jet_phi->at(subleading_jet_index)};
+            std::vector<float> ordered_jet_eta = {jet_eta->at(leading_jet_index),
+                                                 jet_eta->at(subleading_jet_index)};
+            std::vector<float> ordered_jet_mass = {jet_mass->at(leading_jet_index),
+                                                  jet_mass->at(subleading_jet_index)};
+
+            z_zeppenfeld = GetZZeppenfeldVariable(diMuon_rapidity,
+                                                  &ordered_jet_pt,
+                                                  &ordered_jet_phi,
+                                                  &ordered_jet_eta,
+                                                  &ordered_jet_mass);
+            pt_balance = GetPtBalanceVariable(mu1BSC_vector + mu2BSC_vector,
+                                              &ordered_jet_pt,
+                                              &ordered_jet_phi,
+                                              &ordered_jet_eta,
+                                              &ordered_jet_mass);
+            pt_centrality = GetPtCentralityVariable(diMuon_pt,
+                                                    &ordered_jet_pt,
+                                                    &ordered_jet_phi,
+                                                    &ordered_jet_eta,
+                                                    &ordered_jet_mass);
+
             min_delta_eta_diMuon_jet =
-                TMath::Min(DeltaEta(diMuon_eta, jet_eta->at(0)),
-                           DeltaEta(diMuon_eta, jet_eta->at(1)));
+                TMath::Min(DeltaEta(diMuon_eta, jet_eta->at(leading_jet_index)),
+                           DeltaEta(diMuon_eta, jet_eta->at(subleading_jet_index)));
             min_delta_phi_diMuon_jet =
-                TMath::Min(TMath::Abs(DeltaPhi(diMuon_phi, jet_phi->at(0))),
-                           TMath::Abs(DeltaPhi(diMuon_phi, jet_phi->at(1))));
+                TMath::Min(TMath::Abs(DeltaPhi(diMuon_phi, jet_phi->at(leading_jet_index))),
+                           TMath::Abs(DeltaPhi(diMuon_phi, jet_phi->at(subleading_jet_index))));
         }
 
         // Choose category
@@ -806,6 +1084,7 @@ void CreateTuple::fillOutputTree() {
 
 void CreateTuple::saveTree() {
 
+    gSystem->mkdir(output_directory, true);
     output_file = new TFile(output_directory + output_name, "RECREATE");
     output_file->cd();
 
@@ -839,10 +1118,10 @@ void CreateTuple::saveTree() {
 
 int CreateTuple::isggHCategory() {
 
-    if ((n_bjet == 0) && (mu_pt->size() < 3) && (elec_pt->size() == 0)) {
+    if ((n_bjet == 0) && (elec_pt->size() == 0)) {
         if (n_jet >= 2) {
             if ((diJet_mass < 400) ||
-                (DeltaEta(jet_eta->at(0), jet_eta->at(1)) < 2.5) || (leading_jet_pt < 35)) {
+                (delta_eta_diJet < 2.5) || (leading_jet_pt < 35)) {
                 h_nggHEtaSeperated->Fill(0.5);
                 h_nggHCat->Fill(0.5);
                 is_ggH_category = 1;
@@ -862,10 +1141,10 @@ int CreateTuple::isggHCategory() {
 }
 
 int CreateTuple::isVBFCategory() {
-    if((n_bjet == 0) && (n_bjet_Loose < 2) && n_jet >= 2 && (mu_pt->size() < 3)){
+    if((n_bjet == 0) && (n_bjet_Loose < 2) && (n_jet >= 2)){
         h_n2Jets->Fill(0.5);
         h_nBothVBFJets->Fill(0.5);
-        if(DeltaEta(jet_eta->at(0), jet_eta->at(1)) > 2.5){
+        if(delta_eta_diJet > 2.5){
             h_nVBFEtaSeperated->Fill(0.5);
             if(leading_jet_pt > 35){
                 h_nVBFPtPass->Fill(0.5);
@@ -876,9 +1155,9 @@ int CreateTuple::isVBFCategory() {
         }
     }
 
-    if ((n_bjet == 0) && (n_bjet_Loose < 2) && (mu_pt->size() < 3) &&
+    if ((n_bjet == 0) && (n_bjet_Loose < 2) &&
         (elec_pt->size() == 0) && (n_jet >= 2) && leading_jet_pt > 35 &&
-        (diJet_mass >= 400) && (DeltaEta(jet_eta->at(0), jet_eta->at(1)) > 2.5)) {
+        (diJet_mass >= 400) && (delta_eta_diJet > 2.5)) {
         h_nVBFCat->Fill(0.5);
         is_VBF_category = 1;
         return 1;
@@ -887,6 +1166,55 @@ int CreateTuple::isVBFCategory() {
         return 2;
     }
 }
+
+bool CreateTuple::passesJetPtSelection(size_t index) const {
+
+    const float pt = jet_pt->at(index);
+    const float abs_eta = std::fabs(jet_eta->at(index));
+
+    // Base jet pT cut already used in the old code
+    if (pt <= 25.) {
+        return false;
+    }
+    // 2022, 2022EE, 2023, 2023BPix
+    if (mc_campaign == 1 || mc_campaign == 2 ||
+        mc_campaign == 3 || mc_campaign == 4) {
+
+        if (abs_eta < 2.5) {
+            return true;
+        } else if (abs_eta < 5.0) {
+            return pt > 50.;
+        } else {
+            return false;
+        }
+    }
+
+    // 2024
+    else if (mc_campaign == 5) {
+
+        if (abs_eta < 2.5) {
+            return true;
+        } else if (abs_eta < 3.0) {
+            return pt > 50.;
+        } else {
+            return true;
+        }
+    }
+
+    // 2025
+    else if (mc_campaign == 6) {
+        return true;
+    }
+
+    else {
+        std::cerr << "Jet pT era not found. mc_campaign = "
+                  << mc_campaign << std::endl;
+        return false;
+    }
+}
+
+
+
 /*
 bool CreateTuple::isJMEJet() {
     if(mc_campaign == 1 || mc_campaign == 2 || mc_campaign == 3 || mc_campaign == 4){
