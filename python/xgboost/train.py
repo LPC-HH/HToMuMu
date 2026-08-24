@@ -49,139 +49,135 @@ USE_WEIGHT = False
 USE_WEIGHT_MASS_RES = True
 APPEND_VARIABLES = True
 USE_BSCONSTRAIN = True 
-PLOT_LOSS = False
+PLOT_LOSS = True
 SEED = 7
 TEST_SIZE = 0.4
 SAMPLE_SIZE = 1.0
 SIGNAL_REGION = (121, 129)
 
-if not ifRetrain:
-    DO_STANDARDIZATION = False
-    mean_map = {}
-    std_map = {}
-
 variables = xgb_utils.get_variables(channel_US, USE_BSCONSTRAIN)
 print("number of variables", len(variables) - 3)
 
-if ifRetrain:
-    test_name = f"{channel_US}_{era}_B{background_subset}_S{signal_subset}"
-    plot_path = f"../../plots/xgboost/{channel_US}/B{background_subset}_S{signal_subset}/"
-    data_directory = f"../../root_io/skim/{channel_US}/"
-    signal_file_name = f"{data_directory}signal_{era}_skim_{signal_subset}.root"
-    bkg_file_name = f"{data_directory}background_{era}_skim_{background_subset}.root"
-    
-    os.makedirs(plot_path, exist_ok=True)
-    for subdir in ["training", "results", "scores", "variables"]:
-        os.makedirs(os.path.join(plot_path, subdir), exist_ok=True)
-        shutil.copy("../index.php", os.path.join(plot_path, subdir))
-    os.makedirs("models", exist_ok=True)
-    os.makedirs("roc", exist_ok=True)
-    
-    ##Getting ROOT files into pandas
-    print("[INFO]: Creating data frames")
-    with uproot.open(signal_file_name) as file:
-        df_signal = pd.DataFrame(
-            file["tree_output"].arrays([var[0] for var in variables], library="np"),
-        )
-    with uproot.open(bkg_file_name) as file:
-        df_bkg = pd.DataFrame(
-            file["tree_output"].arrays([var[0] for var in variables], library="np"),
-        )
-    print("[INFO]: Data frames created successfully")
-    
-    if USE_BSCONSTRAIN:
-        mass_var_name = "diMuon_bsConstrainedMass"
-    else:
-        mass_var_name = "diMuon_mass"
-    
-    bkg_events = df_bkg["weight"][
-        (df_bkg[mass_var_name] > SIGNAL_REGION[0])
-        & (df_bkg[mass_var_name] < SIGNAL_REGION[1])
-    ].sum()
-    signal_events = df_signal["weight"][
-        (df_signal[mass_var_name] > SIGNAL_REGION[0])
-        & (df_signal[mass_var_name] < SIGNAL_REGION[1])
-    ].sum()
-    
-    ####  weight Normalization
-    signal_weight_sum = df_signal["weight"].sum()
-    bkg_weight_sum = df_bkg["weight"].sum()
-    df_signal["weight"] = df_signal["weight"] * (bkg_weight_sum / signal_weight_sum)
-    
-    s_over_sqrt_b = signal_events / math.sqrt(bkg_events)
-    print(
-        f"[INFO]: S = {signal_events:.3f}; B = {bkg_events:.3f}; S/sqrt(B) = {s_over_sqrt_b:.3f}"
+
+test_name = f"{channel_US}_{era}_B{background_subset}_S{signal_subset}"
+plot_path = f"../../plots/xgboost/{channel_US}/B{background_subset}_S{signal_subset}/"
+data_directory = f"../../root_io/skim/{channel_US}/"
+signal_file_name = f"{data_directory}signal_{era}_skim_{signal_subset}.root"
+bkg_file_name = f"{data_directory}background_{era}_skim_{background_subset}.root"
+
+os.makedirs(plot_path, exist_ok=True)
+for subdir in ["training", "results", "scores", "variables"]:
+    os.makedirs(os.path.join(plot_path, subdir), exist_ok=True)
+    shutil.copy("../index.php", os.path.join(plot_path, subdir))
+os.makedirs("models", exist_ok=True)
+os.makedirs("roc", exist_ok=True)
+
+##Getting ROOT files into pandas
+print("[INFO]: Creating data frames")
+with uproot.open(signal_file_name) as file:
+    df_signal = pd.DataFrame(
+        file["tree_output"].arrays([var[0] for var in variables], library="np"),
     )
-    print(f"[INFO]: Signal sample size: {len(df_signal.values)}")
-    print(f"[INFO]: Bkg sample size: {len(df_bkg.values)}")
-    
-    x = np.concatenate([df_bkg.values, df_signal.values])
-    y = np.concatenate([np.zeros(len(df_bkg)), np.ones(len(df_signal))])
-    
-    ### Apply dimuon mass cut
-    print("len y pred cut:", len(y))
-    y = y[(x[:, -3] > 115) & (x[:, -3] < 135)]
-    x = x[(x[:, -3] > 115) & (x[:, -3] < 135)]
-    print("len y post cut:", len(y))
-    
-    if DRAW_CORRELATIONS:
-        xgb_utils.draw_correlation_matrix(
-            signal_file_name, bkg_file_name, variables[:-2], plot_path, test_name
-        )
-    
-    # split data into train and test sets
-    SEED = 7
-    TEST_SIZE = 0.4
-    SAMPLE_SIZE = 1.0
-    x_train_p, x_test_p, y_train, y_test = train_test_split(
-        x,
-        y,
-        train_size=SAMPLE_SIZE * (1 - TEST_SIZE),
-        test_size=SAMPLE_SIZE * TEST_SIZE,
-        random_state=SEED,
+with uproot.open(bkg_file_name) as file:
+    df_bkg = pd.DataFrame(
+        file["tree_output"].arrays([var[0] for var in variables], library="np"),
     )
-    
-    x_train = x_train_p[:, :-3]
-    x_test = x_test_p[:, :-3]
-    sample_weights_train = x_train_p[:, -1]
-    sample_weights_test = x_test_p[:, -1]
-    
-    print("-inf position (by index):", np.isneginf(x_train)[np.isneginf(x_train)])
-    print("inf position (by index):", np.isinf(x_train)[np.isinf(x_train)])
-    print("nan position (by index):", np.isnan(x_train)[np.isnan(x_train)])
-    x_train[np.isneginf(x_train)] = np.nan
-    x_train[np.isinf(x_train)] = np.nan
-    x_train[np.isnan(x_train)] = 0.0
-    
-    print("x_train:", x_train)
-    mean_map = {}
-    std_map = {}
-    if DO_STANDARDIZATION:
-        for i, var in enumerate(variables[:-3]):
-            print("standarizing : ", var[0])
-            print("Iterator : ", i)
-            null_value = 0
-            if var[0] in ["delta_phi_diJet", "pt_balance"]:
-                null_value = -1
-    
-            mask_train = x_train[:, i] != null_value
-            mask_test = x_test[:, i] != null_value
-            mean_map[var[0]] = x_train[mask_train, i].mean()
-            std_map[var[0]] = x_train[mask_train, i].std()
-            print("[Info]: Train Sample Mean: ", mean_map[var[0]])
-            print("[Info]: Train Sample std: ", std_map[var[0]])
-            x_train[mask_train, i] = (x_train[mask_train, i] - mean_map[var[0]]) / std_map[
-                var[0]
-            ]
-            x_test[mask_test, i] = (x_test[mask_test, i] - mean_map[var[0]]) / std_map[
-                var[0]
-            ]
-    
-    print("x_train standaried:", x_train)
-    
-    w_train = np.absolute(sample_weights_train) / np.array(x_train_p[:, -2])
-    w_test = np.absolute(sample_weights_test) / np.array(x_test_p[:, -2])
-    
+print("[INFO]: Data frames created successfully")
+
+if USE_BSCONSTRAIN:
+    mass_var_name = "diMuon_bsConstrainedMass"
+else:
+    mass_var_name = "diMuon_mass"
+
+bkg_events = df_bkg["weight"][
+    (df_bkg[mass_var_name] > SIGNAL_REGION[0])
+    & (df_bkg[mass_var_name] < SIGNAL_REGION[1])
+].sum()
+signal_events = df_signal["weight"][
+    (df_signal[mass_var_name] > SIGNAL_REGION[0])
+    & (df_signal[mass_var_name] < SIGNAL_REGION[1])
+].sum()
+
+####  weight Normalization
+signal_weight_sum = df_signal["weight"].sum()
+bkg_weight_sum = df_bkg["weight"].sum()
+df_signal["weight"] = df_signal["weight"] * (bkg_weight_sum / signal_weight_sum)
+
+s_over_sqrt_b = signal_events / math.sqrt(bkg_events)
+print(
+    f"[INFO]: S = {signal_events:.3f}; B = {bkg_events:.3f}; S/sqrt(B) = {s_over_sqrt_b:.3f}"
+)
+print(f"[INFO]: Signal sample size: {len(df_signal.values)}")
+print(f"[INFO]: Bkg sample size: {len(df_bkg.values)}")
+
+x = np.concatenate([df_bkg.values, df_signal.values])
+y = np.concatenate([np.zeros(len(df_bkg)), np.ones(len(df_signal))])
+
+### Apply dimuon mass cut
+print("len y pred cut:", len(y))
+y = y[(x[:, -3] > 115) & (x[:, -3] < 135)]
+x = x[(x[:, -3] > 115) & (x[:, -3] < 135)]
+print("len y post cut:", len(y))
+
+if DRAW_CORRELATIONS:
+    xgb_utils.draw_correlation_matrix(
+        signal_file_name, bkg_file_name, variables[:-2], plot_path, test_name
+    )
+
+# split data into train and test sets
+SEED = 7
+TEST_SIZE = 0.4
+SAMPLE_SIZE = 1.0
+x_train_p, x_test_p, y_train, y_test = train_test_split(
+    x,
+    y,
+    train_size=SAMPLE_SIZE * (1 - TEST_SIZE),
+    test_size=SAMPLE_SIZE * TEST_SIZE,
+    random_state=SEED,
+)
+
+x_train = x_train_p[:, :-3]
+x_test = x_test_p[:, :-3]
+sample_weights_train = x_train_p[:, -1]
+sample_weights_test = x_test_p[:, -1]
+
+print("-inf position (by index):", np.isneginf(x_train)[np.isneginf(x_train)])
+print("inf position (by index):", np.isinf(x_train)[np.isinf(x_train)])
+print("nan position (by index):", np.isnan(x_train)[np.isnan(x_train)])
+x_train[np.isneginf(x_train)] = np.nan
+x_train[np.isinf(x_train)] = np.nan
+x_train[np.isnan(x_train)] = 0.0
+
+print("x_train:", x_train)
+mean_map = {}
+std_map = {}
+if DO_STANDARDIZATION:
+    for i, var in enumerate(variables[:-3]):
+        print("standarizing : ", var[0])
+        print("Iterator : ", i)
+        null_value = 0
+        if var[0] in ["delta_phi_diJet", "pt_balance"]:
+            null_value = -1
+
+        mask_train = x_train[:, i] != null_value
+        mask_test = x_test[:, i] != null_value
+        mean_map[var[0]] = x_train[mask_train, i].mean()
+        std_map[var[0]] = x_train[mask_train, i].std()
+        print("[Info]: Train Sample Mean: ", mean_map[var[0]])
+        print("[Info]: Train Sample std: ", std_map[var[0]])
+        x_train[mask_train, i] = (x_train[mask_train, i] - mean_map[var[0]]) / std_map[
+            var[0]
+        ]
+        x_test[mask_test, i] = (x_test[mask_test, i] - mean_map[var[0]]) / std_map[
+            var[0]
+        ]
+
+print("x_train standaried:", x_train)
+
+w_train = np.absolute(sample_weights_train) / np.array(x_train_p[:, -2])
+w_test = np.absolute(sample_weights_test) / np.array(x_test_p[:, -2])
+
+if ifRetrain:    
     def objective(trial):
     
         params = {
@@ -487,7 +483,7 @@ else:
             DO_STANDARDIZATION,
             USE_BSCONSTRAIN,
         )
-        xgb_utils.append_BDT_score(
+        '''xgb_utils.append_BDT_score(
             file_type,
             channel_US,
             "2024",
@@ -500,7 +496,7 @@ else:
             DO_STANDARDIZATION,
             USE_BSCONSTRAIN,
             )
-        '''
+        
         xgb_utils.append_BDT_score(
             file_type,
             channel_US,

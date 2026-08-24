@@ -103,9 +103,9 @@ def append_BDT_score(
     file = root.TFile(file_name, "update")
     tree = file.Get("tree_output")
 
-    model_file = f"./models/model_{channel_US}_{model_era}_{subset_title}.pkl" ###SHOULD WE SWITCH TO ERA NOT MODEL ERA
+    model_file = f"./modelsMatias/model_{channel_US}_{model_era}_{subset_title}.pkl" ###SHOULD WE SWITCH TO ERA NOT MODEL ERA
     if use_bsConstrain:
-        model_file = f"./models/model_{channel_US}_{model_era}_{subset_title}_bsC.pkl"
+        model_file = f"./modelsMatias/model_{channel_US}_{model_era}_{subset_title}_bsC.pkl"
         
 
     x_test = df.values
@@ -1009,4 +1009,4 @@ if __name__ == "__main__":
         std_map,
         DO_STANDARDIZATION,
         USE_BSCONSTRAIN,
-    )'''
+    )
