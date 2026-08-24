@@ -3,10 +3,12 @@ This code is based in the Run2 Analysis https://github.com/irenedutta23/HmmAna
 ## Setup
 
 ```
-cmsrel CMSSW_14_0_14
-cd CMSSW_14_0_14/src
+cmsrel CMSSW_15_0_19
+cd CMSSW_15_0_19/src
 cmsenv
 git clone git@github.com:LPC-HH/HToMuMu.git
+scram b clean
+scram b -j 8
 cd HToMuMu
 make -j4
 ```
