@@ -30,6 +30,8 @@ skip_dataset = [
     "DoubleMuon_2022C",
     "Muon0_2023B",
     "Muon1_2023B",
+    #"TTtoLNu2Q_Summer24",
+    #"WZto2L2Q_Summer24",
 ]
 skip_pattern = [
     # "Summer22",

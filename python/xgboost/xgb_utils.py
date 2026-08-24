@@ -12,7 +12,7 @@ import pandas as pd
 import math
 import pickle as pickle
 import ROOT as root
-import uproot as uproot
+import uproot
 import xgboost as xgb
 
 root.gROOT.Reset()
@@ -601,7 +601,7 @@ def get_variables(channel_US, use_bsConstrain):
         ]
     if channel_US == "VBF":
         channel_vars += [
-            # VBF sspecific vchannel_vars
+            # VBF specific vchannel_vars
             ["pt_balance", "pt_balance", r"$R(p_T)$"],
             ["pt_centrality", "pt_centrality", r"$p_{T}-centrality$"],
             ["n_SoftJet_pt2", "n_SoftJet_pt2", r"$N_{2}^{soft}$"],
@@ -753,16 +753,27 @@ def draw_correlation_matrix(
             tree_bkg.Draw(
                 f"{correlation_vars[idx1][0]}:{correlation_vars[idx2][0]}>>temp_bkg"
             )
-            sig_hist = root.gDirectory.Get("temp_sig")
+            
+            sig_hist = root.gROOT.FindObject("temp_sig")
+            bkg_hist = root.gROOT.FindObject("temp_bkg")
+                
+            if not sig_hist:
+                print("Could not find temp_sig")
+                continue
+            
+            if not bkg_hist:
+                print("Could not find temp_bkg")
+                continue
+                
             h2_corr_sig.SetBinContent(
                 idx1 + 1, idx2 + 1, sig_hist.GetCorrelationFactor()
             )
-            bkg_hist = root.gDirectory.Get("temp_bkg")
+            
             h2_corr_bkg.SetBinContent(
                 idx1 + 1, idx2 + 1, bkg_hist.GetCorrelationFactor()
             )
-            root.gDirectory.Delete("temp_sig")
-            root.gDirectory.Delete("temp_bkg")
+            sig_hist.Delete()
+            bkg_hist.Delete()
             h2_corr_sig.GetZaxis().SetRangeUser(-1.0, 1.0)
             h2_corr_bkg.GetZaxis().SetRangeUser(-1.0, 1.0)
             for idx in range(n_corr):
@@ -921,7 +932,57 @@ def plot_loss(test_loss, train_loss, test_name, plot_path, era):
     plt.savefig(f"{plot_path}training/loss_{test_name}.pdf")
     plt.savefig(f"{plot_path}training/loss_{test_name}.png")
 
-'''
+def plot_BDT_sculpting(
+    y_pred, 
+    y_pred_train,
+    y_test,
+    y_train,
+    x_test_p,
+    x_train_p,
+    channel_US,
+    era,
+    plot_path,
+    bdt_divisions=10):
+    
+    mass_low = 115
+    mass_high = 135
+    hep.style.use("CMS")
+    fig, ax = plt.subplots()
+    
+    hep.cms.label(
+        data="False",
+        label="",
+        year=era,
+        com="13.6",
+        lumi=str(luminosity[era]),
+    )
+    ax.set_xlabel('$M_{\mu\mu}$')
+    ax.set_ylabel('Normalized Events')
+    ax.set_title("BDT Sculpting " + channel_US, y=-0.15)
+
+    diMuon_mass_BSC = np.concatenate((x_test_p[:, -3][y_test == 0],x_train_p[:, -3][y_train == 0]))
+    total_weights = np.concatenate((x_test_p[:, -1][y_test == 0],x_train_p[:, -1][y_train == 0]))
+    bdt_score = np.concatenate((y_pred[y_test == 0],y_pred_train[y_train == 0]))
+
+    for bdt_cut in np.linspace(0,1-1/bdt_divisions,bdt_divisions):
+        bdt_spacing = 1/bdt_divisions
+        bdt_low = bdt_cut
+        bdt_high = bdt_low + bdt_spacing
+        
+        mask = (bdt_score > bdt_low) & (diMuon_mass_BSC > mass_low) & (diMuon_mass_BSC < mass_high)
+        hep.style.use("CMS")
+    
+        counts, bins = np.histogram(diMuon_mass_BSC[mask], bins=20, weights=total_weights[mask])
+        counts = counts / counts.sum()
+    
+        hep.histplot(counts, bins=bins, ax=ax, label=f"BDT > {bdt_low:.2f}")
+        
+    ax.legend(bbox_to_anchor=(1.02, 1), loc='upper left')
+    os.makedirs(f"{plot_path}training/", exist_ok=True)
+    plt.savefig(f"{plot_path}training/BDTsculpting_{channel_US}_{era}.pdf", bbox_inches="tight")
+    plt.savefig(f"{plot_path}training/BDTsculpting_{channel_US}_{era}.png", bbox_inches="tight")
+    
+
 if __name__ == "__main__":
     import sys
     HIGGS_CHANNEL = sys.argv[1]

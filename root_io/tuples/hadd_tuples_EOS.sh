@@ -1,7 +1,15 @@
 ANALYZER_VERSION="v2.0"
 TUPLES_VERSION="v2.0.0"
 EOS_PATH="/eos/uscms/store/group/lpchmumu/$USER/analyzer_HiggsMuMu_$ANALYZER_VERSION/tuples_$TUPLES_VERSION/"
-inEOS_PATH="/store/group/lpchmumu/$USER/analyzer_HiggsMuMu_$ANALYZER_VERSION/tuples_$TUPLES_VERSION/"
+#EOS_PATH="/eos/uscms/store/group/lpchmumu/mbarrial/analyzer_HiggsMuMu_$ANALYZER_VERSION/tuples_$TUPLES_VERSION/"
+#inEOS_PATH="/store/group/lpchmumu/$USER/analyzer_HiggsMuMu_$ANALYZER_VERSION/tuples_$TUPLES_VERSION/"
+
+COPY_TO_EOS=false
+while getopts "c" opt; do
+    case $opt in
+        c) COPY_TO_EOS=true ;;
+    esac
+done
 
 ##############  2022  ##############
 hadd -f Data_2022_tuples.root ${EOS_PATH}Muon_2022{C..D}/*.root ${EOS_PATH}SingleMuon_2022C/*.root
@@ -81,8 +89,10 @@ hadd -f VBF_2025_tuples.root ${EOS_PATH}VBF_*25/*.root
 
 
 ###Copy back to LPC
-echo ${inEOS_PATH}
-echo eosmkdir ${inEOS_PATH}haddTuples/
-eosmkdir ${inEOS_PATH}haddTuples/
-echo eos cp *.root root://cmseos.fnal.gov//${inEOS_PATH}haddTuples/
-eos cp *.root root://cmseos.fnal.gov//${inEOS_PATH}haddTuples/
+if $COPY_TO_EOS; then
+    echo ${inEOS_PATH}
+    echo eosmkdir ${inEOS_PATH}haddTuples/
+    eosmkdir ${inEOS_PATH}haddTuples/
+    echo eos cp *.root root://cmseos.fnal.gov//${inEOS_PATH}haddTuples/
+    eos cp *.root root://cmseos.fnal.gov//${inEOS_PATH}haddTuples/
+fi

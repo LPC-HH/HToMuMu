@@ -4,9 +4,13 @@ import numpy as np
 import math
 import matplotlib.pyplot as plt
 import sys
+from pathlib import Path
 
 from utils.labels import luminosity, x_range, n_bins, x_labels
 from utils.helper import get_canvas, save_figure, get_histograms_ratio
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "python"))
+from bdt_categories_io import save_bdt_category
 
 if len(sys.argv) < 3:
     print(
@@ -594,6 +598,7 @@ def draw_bdt_categories(era):
     bdt_categories.append(1.0)
     bdt_categories.append(0.0)
     bdt_categories.sort()
+    save_bdt_category(channel_US, era, subset_title, diMuon_mass_name, bdt_categories)
     log_y = False
 
     print("Era: ", era)

@@ -1,5 +1,9 @@
 from utils.sim_vs_data import draw_data_and_simul_and_ratio
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "python"))
+from bdt_categories_io import load_bdt_categories, get_bdt_cuts
 
 production_channel = ""
 bdt_subset = ""
@@ -39,15 +43,8 @@ signal_sources = [
     "VBF",
     #"ttH",
 ]
-bdt_selections = {
-    "ggH": {
-        "BFull_SNottH": [0.0, 0.4400000000000002, 0.6100000000000003, 0.8100000000000005, 0.9200000000000006, 1.0],
-    },
-    "VBF": {
-        "BFull_SNottH":[0.0, 0.646666666666667, 0.8800000000000018, 0.9466666666666689, 0.9733333333333357, 1.0],
-    },
-    "": {"":""},
-}
+bdt_categories_info = load_bdt_categories()
+bdt_mass_variable = "diMuon_bsConstrainedMass"
 
 bdt_selections = {
     "ggH": {
@@ -141,6 +138,13 @@ eras = ["Combined"]
 #eras = ["2025"]
 
 for era in eras:
+    if production_channel == "":
+        bdt_cuts = []
+    else:
+        bdt_cuts = get_bdt_cuts(
+            bdt_categories_info, production_channel, era, bdt_subset, bdt_mass_variable
+        )
+
     for variable in variables:
         draw_data_and_simul_and_ratio(
             variable,

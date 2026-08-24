@@ -2,6 +2,13 @@ ANALYZER_VERSION="v2.0"
 TUPLES_VERSION="v2.0.0"
 inEOS_PATH="/store/group/lpchmumu/$USER/analyzer_HiggsMuMu_$ANALYZER_VERSION/tuples_$TUPLES_VERSION/"
 
+COPY_TO_EOS=false
+while getopts "c" opt; do
+    case $opt in
+        c) COPY_TO_EOS=true ;;
+    esac
+done
+
 ############  2022Combined  ###########
 hadd -f Data_2022Combined_tuples.root Data_2022_tuples.root Data_2022EE_tuples.root
 hadd -f DY_2022Combined_tuples.root DY_2022_tuples.root DY_2022EE_tuples.root
@@ -39,11 +46,9 @@ hadd -f ggH_Combined_tuples.root ggH_2022_tuples.root ggH_2022EE_tuples.root ggH
 hadd -f VBF_Combined_tuples.root VBF_2022_tuples.root VBF_2022EE_tuples.root VBF_2023_tuples.root VBF_2023BPix_tuples.root VBF_2024_tuples.root VBF_2025_tuples.root
 hadd -f ttH_Combined_tuples.root ttH_2022_tuples.root ttH_2022EE_tuples.root ttH_2023_tuples.root ttH_2023BPix_tuples.root ttH_2024_tuples.root ttH_2025_tuples.root
 
-#hadd -f ggH_Combined_tuples.root ggH_2022_tuples.root ggH_2022EE_tuples.root ggH_2023_tuples.root ggH_2023BPix_tuples.root ggH_2024_tuples.root 
-#hadd -f VBF_Combined_tuples.root VBF_2022_tuples.root VBF_2022EE_tuples.root VBF_2023_tuples.root VBF_2023BPix_tuples.root VBF_2024_tuples.root
-#hadd -f ttH_Combined_tuples.root ttH_2022_tuples.root ttH_2022EE_tuples.root ttH_2023_tuples.root ttH_2023BPix_tuples.root ttH_2024_tuples.root
-
-echo eosmkdir ${inEOS_PATH}haddTuples/
-eosmkdir -p ${inEOS_PATH}haddTuples/
-echo eos cp *_Combined_*.root root://cmseos.fnal.gov//${inEOS_PATH}haddTuples/
-eos cp *_Combined_*.root root://cmseos.fnal.gov//${inEOS_PATH}haddTuples/
+if $COPY_TO_EOS; then
+    echo eosmkdir ${inEOS_PATH}haddTuples/Combined/
+    eosmkdir ${inEOS_PATH}haddTuples/Combined/
+    echo eos cp *_Combined_*.root root://cmseos.fnal.gov//${inEOS_PATH}haddTuples/Combined/
+    eos cp *_Combined_*.root root://cmseos.fnal.gov//${inEOS_PATH}haddTuples/Combined/
+fi

@@ -146,11 +146,8 @@ The tuples with the BDT score added are saved in root_io/tuples/BDT_score/(ggH/V
 Again, we need to hadd these tuples. To do this, do 
 
 ```
-bash scripts/hadd_bdt.sh
+bash scripts/hadd_bdt.sh (ggH/VBF)
 ```
-
-
-<span style="color:Orange"> Here is a hardcoded path to VBF, the variable is called `path`. Change where it says VBF to ggH if you want that channel. It would be good to add an argument instead of changing the variable name.
 
 This will copy the hadd_template.sh file in the directories where the tuples are, so the next time you can just do.
 
@@ -173,7 +170,7 @@ This will generate a plot showing the BDT output and the categories (plots/(ggH/
 
 Categories:  [0.0, 0.19184615384615372, 0.44615384615384546, 1.0]
 
-Once you have this list, you need to manually copy these numbers in the dictionary call bdt_selections in the file ./plot_macros/plot_sim_vs_data.py and into the dictionary call bdt_cuts in the file ./scripts/split_tuples.py. <span style="color:Orange"> Would be nice if this list is saved in some file, so there is no need to manually copy the numbers.
+Once you have this list, it is automatically saved to a json file in root_io and read by the tuple splitting code and plot_sim_vs_data
 
 Inside the code, there is a variable called use_bsConstrain. If you train the BDT model using bsConstrain variable, set it to True, if you don't want to use bsConstrain variables set it to False. <span style="color:Orange"> Would be nice to add this as an input parameter.
 

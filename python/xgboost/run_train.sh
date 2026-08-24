@@ -19,9 +19,9 @@ declare -a eras=("Combined")
 #declare -a tuples=("Data" "DY" "DY120to200" "EWK" "TT" "Top" "DiBoson" "TriBoson" "ggH" "VBF" "ttH" "VH")
 
 #standard
-#declare -a tuples=("Data" "DY" "EWK" "TT" "DiBoson" "ggH" "VBF" "ttH")
+declare -a tuples=("Data" "DY" "EWK" "TT" "DiBoson" "ggH" "VBF")
 
-declare -a tuples=("Data")
+#declare -a tuples=("ggH" "VBF")
 
 ifRetrain="T"
 ifOptimize="F"

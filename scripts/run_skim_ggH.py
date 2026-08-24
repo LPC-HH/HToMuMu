@@ -41,7 +41,7 @@ background_datasets = [
 signal_datasets = [
      "ggH",
      "VBF",
-     "ttH",
+     #"ttH",
 ]
 
 # List of input arguments
