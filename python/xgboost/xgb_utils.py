@@ -186,77 +186,90 @@ def append_BDT_score_to_sys(
     ]
 
     jet_jes_syst_names = [
-    "CMS_scale_j_FlavorQCD",
-    "CMS_scale_j_RelativeBal",
-    # "CMS_scale_j_HF",
-    # "CMS_scale_j_BBEC1",
-    # "CMS_scale_j_EC2",
-    # "CMS_scale_j_Absolute",
-
-    # "CMS_scale_j_BBEC1_2022",
-    # "CMS_scale_j_RelativeSample_2022",
-    # "CMS_scale_j_EC2_2022",
-    # "CMS_scale_j_HF_2022",
-    # "CMS_scale_j_Absolute_2022",
-
-    # "CMS_scale_j_BBEC1_2022EE",
-    # "CMS_scale_j_RelativeSample_2022EE",
-    # "CMS_scale_j_EC2_2022EE",
-    # "CMS_scale_j_HF_2022EE",
-    # "CMS_scale_j_Absolute_2022EE",
-
-    # "CMS_scale_j_BBEC1_2023",
-    # "CMS_scale_j_RelativeSample_2023",
-    # "CMS_scale_j_EC2_2023",
-    # "CMS_scale_j_HF_2023",
-    # "CMS_scale_j_Absolute_2023",
-
-    # "CMS_scale_j_BBEC1_2023BPix",
-    # "CMS_scale_j_RelativeSample_2023BPix",
-    # "CMS_scale_j_EC2_2023BPix",
-    # "CMS_scale_j_HF_2023BPix",
-    # "CMS_scale_j_Absolute_2023BPix",
-
-    "CMS_scale_j_BBEC1_2024",
-    "CMS_scale_j_RelativeSample_2024",
-    # "CMS_scale_j_EC2_2024",
-    # "CMS_scale_j_HF_2024",
-    # "CMS_scale_j_Absolute_2024",
-
-    # "CMS_res_j_eta0to1p93_pt0toInf_2022",
-    # "CMS_res_j_eta1p93to2p5_pt0toInf_2022",
-    # "CMS_res_j_eta2p5to3p0_pt0to50_2022",
-    # "CMS_res_j_eta2p5to3p0_pt50toInf_2022",
-    # "CMS_res_j_eta3to5_pt0to50_2022",
-    # "CMS_res_j_eta3to5_pt50toInf_2022",
-
-    # "CMS_res_j_eta0to1p93_pt0toInf_2022EE",
-    # "CMS_res_j_eta1p93to2p5_pt0toInf_2022EE",
-    # "CMS_res_j_eta2p5to3p0_pt0to50_2022EE",
-    # "CMS_res_j_eta2p5to3p0_pt50toInf_2022EE",
-    # "CMS_res_j_eta3to5_pt0to50_2022EE",
-    # "CMS_res_j_eta3to5_pt50toInf_2022EE",
-
-    # "CMS_res_j_eta0to1p93_pt0toInf_2023",
-    # "CMS_res_j_eta1p93to2p5_pt0toInf_2023",
-    # "CMS_res_j_eta2p5to3p0_pt0to50_2023",
-    # "CMS_res_j_eta2p5to3p0_pt50toInf_2023",
-    # "CMS_res_j_eta3to5_pt0to50_2023",
-    # "CMS_res_j_eta3to5_pt50toInf_2023",
-
-    # "CMS_res_j_eta0to1p93_pt0toInf_2023BPix",
-    # "CMS_res_j_eta1p93to2p5_pt0toInf_2023BPix",
-    # "CMS_res_j_eta2p5to3p0_pt0to50_2023BPix",
-    # "CMS_res_j_eta2p5to3p0_pt50toInf_2023BPix",
-    # "CMS_res_j_eta3to5_pt0to50_2023BPix",
-    # "CMS_res_j_eta3to5_pt50toInf_2023BPix",
-
-    "CMS_res_j_eta0to1p93_pt0toInf_2024",
-    "CMS_res_j_eta1p93to2p5_pt0toInf_2024",
-    # "CMS_res_j_eta2p5to3p0_pt0to50_2024",
-    # "CMS_res_j_eta2p5to3p0_pt50toInf_2024",
-    # "CMS_res_j_eta3to5_pt0to50_2024",
-    # "CMS_res_j_eta3to5_pt50toInf_2024",
+        "CMS_scale_j_FlavorQCD",
+        "CMS_scale_j_RelativeBal",
+        "CMS_scale_j_HF",
+        "CMS_scale_j_BBEC1",
+        "CMS_scale_j_EC2",
+        "CMS_scale_j_Absolute",
+        
+        "CMS_scale_j_BBEC1_2022",
+        "CMS_scale_j_RelativeSample_2022",
+        "CMS_scale_j_EC2_2022",
+        "CMS_scale_j_HF_2022",
+        "CMS_scale_j_Absolute_2022",
+        
+        "CMS_scale_j_BBEC1_2022EE",
+        "CMS_scale_j_RelativeSample_2022EE",
+        "CMS_scale_j_EC2_2022EE",
+        "CMS_scale_j_HF_2022EE",
+        "CMS_scale_j_Absolute_2022EE",
+        
+        "CMS_scale_j_BBEC1_2023",
+        "CMS_scale_j_RelativeSample_2023",
+        "CMS_scale_j_EC2_2023",
+        "CMS_scale_j_HF_2023",
+        "CMS_scale_j_Absolute_2023",
+       
+        "CMS_scale_j_BBEC1_2023BPix",
+        "CMS_scale_j_RelativeSample_2023BPix",
+        "CMS_scale_j_EC2_2023BPix",
+        "CMS_scale_j_HF_2023BPix",
+        "CMS_scale_j_Absolute_2023BPix",
+        
+        "CMS_scale_j_BBEC1_2024",
+        "CMS_scale_j_RelativeSample_2024",
+        "CMS_scale_j_EC2_2024",
+        "CMS_scale_j_HF_2024",
+        "CMS_scale_j_Absolute_2024",
+       
+        "CMS_scale_j_BBEC1_2025",
+        "CMS_scale_j_RelativeSample_2025",
+        "CMS_scale_j_EC2_2025",
+        "CMS_scale_j_HF_2025",
+        "CMS_scale_j_Absolute_2025",
+        
+        "CMS_res_j_eta0to1p93_pt0toInf_2022",
+        "CMS_res_j_eta1p93to2p5_pt0toInf_2022",
+        "CMS_res_j_eta2p5to3p0_pt0to50_2022",
+        "CMS_res_j_eta2p5to3p0_pt50toInf_2022",
+        "CMS_res_j_eta3to5_pt0to50_2022",
+        "CMS_res_j_eta3to5_pt50toInf_2022",
+        
+        "CMS_res_j_eta0to1p93_pt0toInf_2022EE",
+        "CMS_res_j_eta1p93to2p5_pt0toInf_2022EE",
+        "CMS_res_j_eta2p5to3p0_pt0to50_2022EE",
+        "CMS_res_j_eta2p5to3p0_pt50toInf_2022EE",
+        "CMS_res_j_eta3to5_pt0to50_2022EE",
+        "CMS_res_j_eta3to5_pt50toInf_2022EE",
+        
+        "CMS_res_j_eta0to1p93_pt0toInf_2023",
+        "CMS_res_j_eta1p93to2p5_pt0toInf_2023",
+        "CMS_res_j_eta2p5to3p0_pt0to50_2023",
+        "CMS_res_j_eta2p5to3p0_pt50toInf_2023",
+        "CMS_res_j_eta3to5_pt0to50_2023",
+        "CMS_res_j_eta3to5_pt50toInf_2023",
+        
+        "CMS_res_j_eta0to1p93_pt0toInf_2023BPix",
+        "CMS_res_j_eta1p93to2p5_pt0toInf_2023BPix",
+        "CMS_res_j_eta2p5to3p0_pt0to50_2023BPix",
+        "CMS_res_j_eta2p5to3p0_pt50toInf_2023BPix",
+        "CMS_res_j_eta3to5_pt0to50_2023BPix",
+        "CMS_res_j_eta3to5_pt50toInf_2023BPix",
+        
+        "CMS_res_j_eta0to1p93_pt0toInf_2024",
+        "CMS_res_j_eta1p93to2p5_pt0toInf_2024",
+        "CMS_res_j_eta2p5to3p0_pt0to50_2024",
+        "CMS_res_j_eta2p5to3p0_pt50toInf_2024",
+        "CMS_res_j_eta3to5_pt0to50_2024",
+        "CMS_res_j_eta3to5_pt50toInf_2024",
+        
+        "CMS_res_j_eta0to1p93_pt0toInf_2025",
+        "CMS_res_j_eta1p93to2p5_pt0toInf_2025",
+        "CMS_res_j_eta2p5to3p0_pt0to50_2025",
+        "CMS_res_j_eta2p5to3p0_pt50toInf_2025",
+        "CMS_res_j_eta3to5_pt0to50_2025",
+        "CMS_res_j_eta3to5_pt50toInf_2025",
     ]
 
     for syst_name in jet_jes_syst_names:
@@ -269,7 +282,7 @@ def append_BDT_score_to_sys(
 
     tuple_path = (
         "/eos/uscms/store/user/lpchmumu/mbarrial/"
-        "analyzer_HiggsMuMu_v1.6/tuples_v1.6.1/systematics/"
+        "analyzer_HiggsMuMu_v2.0/tuples_v2.0.0/systematics/"
     )
 
     BDT_path = (

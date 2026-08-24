@@ -124,8 +124,17 @@ class CreateTuple {
     /** Read event variables */
     float gen_weight, pileup_weight, pileup_weight_up, pileup_weight_down;
 
-    std::vector<float> *mu_trig_eff_SF_vec, *mu_trig_eff_SF_up_vec,
-        *mu_trig_eff_SF_down_vec;
+    //std::vector<float> *mu_trig_eff_SF_vec, *mu_trig_eff_SF_up_vec,
+        //*mu_trig_eff_SF_down_vec;
+    
+    std::vector<float> *mu_trig_eff_DATA_vec;
+    std::vector<float> *mu_trig_eff_DATA_up_vec;
+    std::vector<float> *mu_trig_eff_DATA_down_vec;
+
+    std::vector<float> *mu_trig_eff_MC_vec;
+    std::vector<float> *mu_trig_eff_MC_up_vec;
+    std::vector<float> *mu_trig_eff_MC_down_vec;
+
     std::vector<float> *mu_ID_eff_SF_vec, *mu_ID_eff_SF_up_vec,
         *mu_ID_eff_SF_down_vec;
     std::vector<float> *mu_ISO_eff_SF_vec, *mu_ISO_eff_SF_up_vec,
@@ -161,7 +170,7 @@ class CreateTuple {
 
     /** New Event variables */
     double scale_factor; // luminosity * cross_section / gen_weight_sum
-    Double_t weight;
+    Double_t weight, weight_no_eff_sf;
     double weight_no_lumi;
     float mu_trig_eff_SF, mu_trig_eff_SF_down, mu_trig_eff_SF_up;
     float mu_ID_eff_SF, mu_ID_eff_SF_down, mu_ID_eff_SF_up;
@@ -263,13 +272,14 @@ CreateTuple::CreateTuple(TString input, TString weightFile, TString output, TStr
               << ", cross section: " << cross_section << std::endl;
     if (!is_data) {
         gen_weight_sum = GetGenWeightSum(weight_name);
-        if(era == "2024"){
-            scale_factor = GetScaleFactor(luminosity + LUMINOSITY.at("2025"), cross_section, gen_weight_sum);
-        }
-        else{
-            scale_factor = GetScaleFactor(luminosity, cross_section, gen_weight_sum);
-        }
+        //if(era == "2024"){
+            //scale_factor = GetScaleFactor(luminosity + LUMINOSITY.at("2025"), cross_section, gen_weight_sum);
+        //}
+        //else{
+            //scale_factor = GetScaleFactor(luminosity, cross_section, gen_weight_sum);
+        //}
         // is_data_int = 0;
+        scale_factor = GetScaleFactor(luminosity, cross_section, gen_weight_sum);
         // if (is_signal_) {
         // is_signal_int = 1;
         //} else {
@@ -300,9 +310,18 @@ CreateTuple::CreateTuple(TString input, TString weightFile, TString output, TStr
     jet_mass = nullptr;
     jet_btagPNetB = nullptr;
 
-    mu_trig_eff_SF_vec = nullptr;
-    mu_trig_eff_SF_up_vec = nullptr;
-    mu_trig_eff_SF_down_vec = nullptr;
+    //mu_trig_eff_SF_vec = nullptr;
+    //mu_trig_eff_SF_up_vec = nullptr;
+    //mu_trig_eff_SF_down_vec = nullptr;
+    
+    mu_trig_eff_DATA_vec = nullptr;
+    mu_trig_eff_DATA_up_vec = nullptr;
+    mu_trig_eff_DATA_down_vec = nullptr;
+
+    mu_trig_eff_MC_vec = nullptr;
+    mu_trig_eff_MC_up_vec = nullptr;
+    mu_trig_eff_MC_down_vec = nullptr;
+
     mu_ID_eff_SF_vec = nullptr;
     mu_ID_eff_SF_up_vec = nullptr;
     mu_ID_eff_SF_down_vec = nullptr;
@@ -364,6 +383,7 @@ void CreateTuple::setBranchesAddressesOutput() {
                         "pileup_weight_down/f");
     tree_output->Branch("scale_factor", &scale_factor, "scale_factor/d");
     tree_output->Branch("weight", &weight, "weight/D");
+    tree_output->Branch("weight_no_eff_sf", &weight_no_eff_sf, "weight_no_eff_sf/D");
     tree_output->Branch("weight_no_lumi", &weight_no_lumi, "weight_no_lumi/d");
     // tree_output->Branch("is_data", &is_data_int, "is_data/i");
     // tree_output->Branch("is_signal", &is_signal_int, "signal/i");
@@ -520,12 +540,26 @@ void CreateTuple::setBranchesAddressesInput() {
     tree_input->SetBranchAddress("t_puWeightDown", &pileup_weight_down);
     tree_input->SetBranchStatus("t_genWeight", 1);
     tree_input->SetBranchAddress("t_genWeight", &gen_weight);
-    tree_input->SetBranchStatus("t_Mu_EffSF_TRIG", 1);
-    tree_input->SetBranchAddress("t_Mu_EffSF_TRIG", &mu_trig_eff_SF_vec);
-    tree_input->SetBranchStatus("t_Mu_EffSF_TRIG_up", 1);
-    tree_input->SetBranchAddress("t_Mu_EffSF_TRIG_up", &mu_trig_eff_SF_up_vec);
-    tree_input->SetBranchStatus("t_Mu_EffSF_TRIG_down", 1);
-    tree_input->SetBranchAddress("t_Mu_EffSF_TRIG_down", &mu_trig_eff_SF_down_vec);
+    //tree_input->SetBranchStatus("t_Mu_EffSF_TRIG", 1);
+    //tree_input->SetBranchAddress("t_Mu_EffSF_TRIG", &mu_trig_eff_SF_vec);
+    //tree_input->SetBranchStatus("t_Mu_EffSF_TRIG_up", 1);
+    //tree_input->SetBranchAddress("t_Mu_EffSF_TRIG_up", &mu_trig_eff_SF_up_vec);
+    //tree_input->SetBranchStatus("t_Mu_EffSF_TRIG_down", 1);
+    //tree_input->SetBranchAddress("t_Mu_EffSF_TRIG_down", &mu_trig_eff_SF_down_vec);
+    tree_input->SetBranchStatus("t_Mu_EffTRIG_DATA", 1);
+    tree_input->SetBranchAddress("t_Mu_EffTRIG_DATA", &mu_trig_eff_DATA_vec);
+    tree_input->SetBranchStatus("t_Mu_EffTRIG_DATA_up", 1);
+    tree_input->SetBranchAddress("t_Mu_EffTRIG_DATA_up", &mu_trig_eff_DATA_up_vec);
+    tree_input->SetBranchStatus("t_Mu_EffTRIG_DATA_down", 1);
+    tree_input->SetBranchAddress("t_Mu_EffTRIG_DATA_down",&mu_trig_eff_DATA_down_vec);
+    tree_input->SetBranchStatus("t_Mu_EffTRIG_MC", 1);
+    tree_input->SetBranchAddress("t_Mu_EffTRIG_MC",&mu_trig_eff_MC_vec);
+    tree_input->SetBranchStatus("t_Mu_EffTRIG_MC_up", 1);
+    tree_input->SetBranchAddress("t_Mu_EffTRIG_MC_up", &mu_trig_eff_MC_up_vec);
+    tree_input->SetBranchStatus("t_Mu_EffTRIG_MC_down", 1);
+    tree_input->SetBranchAddress("t_Mu_EffTRIG_MC_down", &mu_trig_eff_MC_down_vec);
+
+
     tree_input->SetBranchStatus("t_Mu_EffSF_ID", 1);
     tree_input->SetBranchAddress("t_Mu_EffSF_ID", &mu_ID_eff_SF_vec);
     tree_input->SetBranchStatus("t_Mu_EffSF_ID_up", 1);
@@ -707,12 +741,76 @@ void CreateTuple::fillOutputTree() {
 
         if (!is_data) {
 
-            mu_trig_eff_SF = (*mu_trig_eff_SF_vec)[mu1_index] *
-                             (*mu_trig_eff_SF_vec)[mu2_index];
-            mu_trig_eff_SF_down = (*mu_trig_eff_SF_down_vec)[mu1_index] *
-                                  (*mu_trig_eff_SF_down_vec)[mu2_index];
-            mu_trig_eff_SF_up = (*mu_trig_eff_SF_up_vec)[mu1_index] *
-                                (*mu_trig_eff_SF_up_vec)[mu2_index];
+            //mu_trig_eff_SF = (*mu_trig_eff_SF_vec)[mu1_index] *
+                             //(*mu_trig_eff_SF_vec)[mu2_index];
+            //mu_trig_eff_SF_down = (*mu_trig_eff_SF_down_vec)[mu1_index] *
+                                  //(*mu_trig_eff_SF_down_vec)[mu2_index];
+            //mu_trig_eff_SF_up = (*mu_trig_eff_SF_up_vec)[mu1_index] *
+                                //(*mu_trig_eff_SF_up_vec)[mu2_index];
+            
+            // Trigger efficiency: DATA
+            const float trig_eff_data_mu1 = (*mu_trig_eff_DATA_vec)[mu1_index];
+            const float trig_eff_data_mu2 = (*mu_trig_eff_DATA_vec)[mu2_index];
+
+            const float trig_eff_data_event = 1.0 -
+                (1.0 - trig_eff_data_mu1) * (1.0 - trig_eff_data_mu2);
+
+
+            // Trigger efficiency: MC
+            const float trig_eff_mc_mu1 = (*mu_trig_eff_MC_vec)[mu1_index];
+
+            const float trig_eff_mc_mu2 = (*mu_trig_eff_MC_vec)[mu2_index];
+
+            const float trig_eff_mc_event = 1.0 -
+                (1.0 - trig_eff_mc_mu1) * (1.0 - trig_eff_mc_mu2);
+
+
+            // Final event trigger SF
+            if (trig_eff_mc_event > 0.0) {
+                mu_trig_eff_SF = trig_eff_data_event / trig_eff_mc_event;
+            } else {
+                mu_trig_eff_SF = 1.0;
+            }
+
+
+            // Trigger systematic UP
+            const float trig_eff_data_mu1_up = (*mu_trig_eff_DATA_up_vec)[mu1_index];
+            const float trig_eff_data_mu2_up = (*mu_trig_eff_DATA_up_vec)[mu2_index];
+            const float trig_eff_data_event_up = 1.0 -
+                (1.0 - trig_eff_data_mu1_up) * (1.0 - trig_eff_data_mu2_up);
+
+            const float trig_eff_mc_mu1_up = (*mu_trig_eff_MC_up_vec)[mu1_index];
+            const float trig_eff_mc_mu2_up = (*mu_trig_eff_MC_up_vec)[mu2_index];
+            const float trig_eff_mc_event_up = 1.0 -
+                (1.0 - trig_eff_mc_mu1_up) * (1.0 - trig_eff_mc_mu2_up);
+
+
+            if (trig_eff_mc_event_up > 0.0) {
+                mu_trig_eff_SF_up = trig_eff_data_event_up / trig_eff_mc_event_up;
+            } else {
+                mu_trig_eff_SF_up = 1.0;
+            }
+
+
+            // Trigger systematic DOWN
+            const float trig_eff_data_mu1_down = (*mu_trig_eff_DATA_down_vec)[mu1_index];
+            const float trig_eff_data_mu2_down = (*mu_trig_eff_DATA_down_vec)[mu2_index];
+            const float trig_eff_data_event_down = 1.0 -
+                (1.0f - trig_eff_data_mu1_down) * (1.0 - trig_eff_data_mu2_down);
+
+            const float trig_eff_mc_mu1_down = (*mu_trig_eff_MC_down_vec)[mu1_index];
+            const float trig_eff_mc_mu2_down = (*mu_trig_eff_MC_down_vec)[mu2_index];
+            const float trig_eff_mc_event_down = 1.0 -
+                (1.0f - trig_eff_mc_mu1_down) * (1.0 - trig_eff_mc_mu2_down);
+
+
+            if (trig_eff_mc_event_down > 0.0) {
+                mu_trig_eff_SF_down = trig_eff_data_event_down / trig_eff_mc_event_down;
+            } else {
+                mu_trig_eff_SF_down = 1.0;
+            }
+
+
 
             mu_ISO_eff_SF = (*mu_ISO_eff_SF_vec)[mu1_index] *
                             (*mu_ISO_eff_SF_vec)[mu2_index];
@@ -731,6 +829,9 @@ void CreateTuple::fillOutputTree() {
             weight =
                 GetEventWeight(gen_weight, pileup_weight, scale_factor,
                                mu_trig_eff_SF, mu_ID_eff_SF, mu_ISO_eff_SF);
+            weight_no_eff_sf =
+                GetEventWeight(gen_weight, pileup_weight, scale_factor,
+                               1, 1, 1);
             weight_no_lumi = weight / luminosity;
 
         } else {
@@ -747,6 +848,7 @@ void CreateTuple::fillOutputTree() {
             
             weight = 1;
             weight_no_lumi = 1;
+            weight_no_eff_sf= 1;
         
         }
         
@@ -1016,7 +1118,7 @@ void CreateTuple::saveTree() {
 
 int CreateTuple::isggHCategory() {
 
-    if ((n_bjet == 0) && (mu_pt->size() < 3) && (elec_pt->size() == 0)) {
+    if ((n_bjet == 0) && (elec_pt->size() == 0)) {
         if (n_jet >= 2) {
             if ((diJet_mass < 400) ||
                 (delta_eta_diJet < 2.5) || (leading_jet_pt < 35)) {
@@ -1039,7 +1141,7 @@ int CreateTuple::isggHCategory() {
 }
 
 int CreateTuple::isVBFCategory() {
-    if((n_bjet == 0) && (n_bjet_Loose < 2) && n_jet >= 2 && (mu_pt->size() < 3)){
+    if((n_bjet == 0) && (n_bjet_Loose < 2) && (n_jet >= 2)){
         h_n2Jets->Fill(0.5);
         h_nBothVBFJets->Fill(0.5);
         if(delta_eta_diJet > 2.5){
@@ -1053,7 +1155,7 @@ int CreateTuple::isVBFCategory() {
         }
     }
 
-    if ((n_bjet == 0) && (n_bjet_Loose < 2) && (mu_pt->size() < 3) &&
+    if ((n_bjet == 0) && (n_bjet_Loose < 2) &&
         (elec_pt->size() == 0) && (n_jet >= 2) && leading_jet_pt > 35 &&
         (diJet_mass >= 400) && (delta_eta_diJet > 2.5)) {
         h_nVBFCat->Fill(0.5);

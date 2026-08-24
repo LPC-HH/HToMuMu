@@ -48,6 +48,7 @@ x_labels = {
     ## Jet variables
     "n_jet": r"$N_{jets}$",
     "leading_jet_pt": r"$p_T^{j1}$ [GeV]",
+    "jet_pt": r"$p_T$ [GeV]",
     "subleading_jet_pt": r"$p_T^{j2}$ [GeV]",
     "leading_jet_eta": r"$\eta_{j1}$ ",
     "subleading_jet_eta": r"$\eta_{j2}$ ",
@@ -128,6 +129,7 @@ n_bins = {
     ## Jet variables
     "n_jet": 8,
     "leading_jet_pt": 50,
+    "jet_pt": 80,
     "subleading_jet_pt": 50,
     "leading_jet_eta": 50,
     "subleading_jet_eta": 50,
@@ -211,6 +213,7 @@ x_range = {
     ## Jet variables
     "n_jet": (0, 8),
     "leading_jet_pt": (25, 400),
+    "jet_pt": (0, 400),
     "subleading_jet_pt": (25, 200),
     "leading_jet_eta": (-5, 5),
     "subleading_jet_eta": (-5, 5),
@@ -227,7 +230,7 @@ x_range = {
     "diJet_mass_mo": (0, 800),
     "diJet_DeltaEta": (-12, 12),
     "delta_eta_diJet": (0, 8.0),
-    "delta_eta_diJet_ggH": (0, 5.5),
+    "delta_eta_diJet_ggH": (0, 8.0),
     "delta_eta_diJet_VBF": (2.0, 8.0),
     "delta_phi_diJet": (0, 3.14),
     "z_zeppenfeld": (-7, 7),

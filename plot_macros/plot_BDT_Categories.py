@@ -52,19 +52,30 @@ print("Signal subset: ", signal_subset)
 
 subset_title = "B" + background_subset + "_S" + signal_subset
 BDT_var = "BDT_" + channel_US
+# BDT_score_path = "/eos/uscms/store/user/lpchmumu/esledge/analyzer_HiggsMuMu_v1.5/tuples_v1.5.0/BDT_score/" + channel_US + "/" + subset_title + "/"
 BDT_score_path = "../root_io/tuples/BDT_score/" + channel_US + "/" + subset_title + "/"
 #N_max_iterations = 4 if channel_US == "ggH" else 4
-#N_max_iterations = 2 if channel_US == "ggH" else 2
 use_bsConstrain = True
-#signal_region = (122.5 , 127.5)
-signal_region = (121 , 129)
-draw_data = False
+signal_region = (122.5 , 127.5)
+# signal_region = (121 , 129)
+draw_data = True
 
 if use_bsConstrain:
     diMuon_mass_name = "diMuon_bsConstrainedMass"
 else:
     diMuon_mass_name = "diMuon_mass"
 print("diMuon mass variable name: ", diMuon_mass_name)
+
+def asimov_significance(signal, background):
+    if background <= 0 or signal <= 0:
+        return 0.0
+
+    return math.sqrt(
+        2.0 * (
+            (signal + background) * math.log(1.0 + signal / background)
+            - signal
+        )
+    )
 
 #def create_bool_list(bkg_branches, signal_branches, bdt_min, bdt_max)
 
@@ -107,7 +118,8 @@ def get_expected_significance(bkg_branches, signal_branches, bdt_categories):
         if(bkg_events <= 0):
             Z = 0
         else:
-            Z = signal_events / math.sqrt(bkg_events)
+            # Z = signal_events / math.sqrt(bkg_events)
+            Z = asimov_significance(signal_events, bkg_events)
         #print(f'Significance in cat {i+1} of {len(bdt_categories) + 1}: {Z}')
         Z_by_cat.append(Z)
 
@@ -116,7 +128,15 @@ def get_expected_significance(bkg_branches, signal_branches, bdt_categories):
     return Z_by_cat, Z_tot
 
 def find_bdt_categories(era, bdt_categories, bdt_cut_max=1, iteration=0):
-    print(f'BDT Categories interation {iteration}: {bdt_categories}')
+    print(f"BDT Categories iteration {iteration}: {bdt_categories}")
+
+    max_categories = 8
+
+    # Number of categories = number of cuts + 1
+    if len(bdt_categories) >= max_categories - 1:
+        print(f"Reached maximum number of categories: {max_categories}")
+        print(f"Final BDT Categories: {bdt_categories}")
+        return
     #print("Iteration:", iteration)
     plt.style.use(hep.style.CMS)
     with ur.open(
@@ -163,7 +183,7 @@ def find_bdt_categories(era, bdt_categories, bdt_cut_max=1, iteration=0):
     bdt_cut_min = 0
     bdt_cut_max = 1
     current_bdt_cut = bdt_cut_min
-    N_max_iterations = 4 if channel_US == "ggH" else 4
+    N_max_iterations = 8 if channel_US == "ggH" else 8
     cut_step = 1/100 if channel_US == "ggH" else 1/150
     
     #if(bdt_cut_min == 0):
@@ -767,57 +787,6 @@ def draw_bdt_categories(era):
     output_directory = "../plots/" + channel_US + "_category/BDT_categories/"
     save_name = "BDT_output_" + era + "_" + subset_title
     save_figure(fig, output_directory, save_name)
-'''
-    fig, ax = get_canvas()
-
-    #signal = np.array(signal)
-    #bkg_sqrt = np.array(bkg_sqrt)
-    #sig = np.divide(signal_hist, bkg_hist)
-    print(signal_hist)
-    print(bkg_hist)
-    ax.errorbar(
-        signal,
-        sig,
-        #ey,
-        marker="o",
-        linestyle="",
-        markerfacecolor="black",
-        color="black",
-        markersize=5,
-        # label=labelList[j],
-    )
-
-    # hep.cms.label(
-    # data="True", label="", year=era, com="13.6", lumi=luminosity[era], ax=ax
-    # )
-    hep.cms.label(data="True", ax=ax, com="13.6")
-
-    for category in range(len(bdt_categories) - 1):
-        if category != 0:
-            ax.axvline(
-                x=bdt_categories[category],
-                # ymin=0.001,
-                color="red",
-                linestyle="--",
-                alpha=0.5,
-            )
-
-    # print("BDT > ", best_cut)
-    # ax.set_yscale("log")
-    # ax.set_ylim(
-    # 0.001,
-    # 10 * max_height,
-    # )
-    ax.set_ylim(0.0, 1.3 * max(sig))
-    ax.set_xlim(signal_bins[0], signal_bins[-1])
-    #ax.set_xlim(0.75, 1.01)
-    ax.set_ylabel(r"S/$\sqrt{B}$", loc="center")
-    # ax.legend(frameon=False, loc="upper right")
-    ax.set_xlabel("BTD Cut")
-
-    output_directory = "../plots/" + channel_US + "_category/BDT_categories/"
-    save_name = "BDT_cuts_" + era
-    save_figure(fig, output_directory, save_name)'''
 
 
 for era in eras:

@@ -75,8 +75,7 @@ int main(int argc, char *argv[]) {
                       "RECREATE");
     TTree *tree_output = tree_input->CloneTree(0); // Clone the structure only
 
-    //tree_output = tree_input->CopyTree("(is_ggH_category == 1) && (diMuon_mass > 115. && diMuon_mass < 135.)");
-    tree_output = tree_input->CopyTree("(is_ggH_category == 1) && (diMuon_bsConstrainedMass > 115. && diMuon_bsConstrainedMass < 135.) && (abs(leading_jet_eta) < 2.5 || abs(leading_jet_eta) > 3) && (abs(subleading_jet_eta) < 2.5 || abs(subleading_jet_eta) > 3)");
+    tree_output = tree_input->CopyTree("(is_ggH_category == 1) && (diMuon_bsConstrainedMass >= 115. && diMuon_bsConstrainedMass <= 135.)");
 
     // Write the selected tree to the output file
 

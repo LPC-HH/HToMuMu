@@ -12,8 +12,8 @@ from listDatasets_Run3 import datasets_info
 # Define the path to your C++ executable.
 cpp_executable = str(REPO_DIR / "bin" / "CreateTuple")
 
-base_input_directory = "/eos/uscms/store/user/lpchmumu/mbarrial/analyzer_HiggsMuMu_v1.6/"
-output_directory = "/eos/uscms/store/user/lpchmumu/mbarrial/analyzer_HiggsMuMu_v1.6/tuples_v1.6.test/"
+base_input_directory = "/eos/uscms/store/user/lpchmumu/mbarrial/analyzer_HiggsMuMu_v2.0/"
+output_directory = "/eos/uscms/store/user/lpchmumu/mbarrial/analyzer_HiggsMuMu_v2.0/tuples_v2.0.test/"
 os.makedirs(output_directory, exist_ok=True)
 
 # eras = ["2022", "2022EE"]
@@ -25,12 +25,13 @@ eras = ["2023BPix"]
 include_Z = "F"
 include_H = "T"
 jet_syst = os.getenv("JET_SYST", "nominal")
+jet_syst = "CMS_scale_j_FlavorQCD_up"
 jet_syst = "nominal"
 
 # t_Jet_pt_CMS_scale_j_FlavorQCD_up
 # t_Jet_pt_CMS_scale_j_FlavorQCD_up
 analyzer_file_name = os.getenv(
-    "ANALYZER_FILE_NAME", "HiggsMuMu_v1.6_1.root".format(version.ANALYZER_VERSION_NUMBER)
+    "ANALYZER_FILE_NAME", "HiggsMuMu_v2.0_4.root".format(version.ANALYZER_VERSION_NUMBER)
 )
 weight_file_name = os.getenv("WEIGHT_FILE_NAME", "SumGenWeight.root")
 
@@ -38,7 +39,7 @@ weight_file_name = os.getenv("WEIGHT_FILE_NAME", "SumGenWeight.root")
 data_datasets = [
     ## 2022
     # "DoubleMuon_2022C",
-    "Muon_2022C",
+    #"Muon_2022C",
     # "Muon_2022D",
     ## 2023E
     # "Muon_2022E",
@@ -65,8 +66,8 @@ data_datasets = [
 background_datasets = [
     # "TTto2L2Nu",
     # "TTtoLNu2Q",
-    "DY50to120",
-    "DY120to200",
+    #""DY50to120",
+    #"DY120to200",
     # "WWto2L2Nu",
     # "WZto2L2Q",
     # "WZto3LNu",
@@ -78,8 +79,8 @@ background_datasets = [
     # "DYto2L-2Jets",
 ]
 signal_datasets = [
-    # "ggH",
-    # "VBF",
+     "ggH",
+     "VBF",
     # "ttH",
 ]
 

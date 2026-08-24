@@ -111,7 +111,7 @@ def split_tuples_by_category(
             else:
                 # print("we here right")
                 branches["CMS_hgg_mass"] = branches["diMuon_mass"]
-            for category in range(len(bdt_cuts[channel]) - 1):
+            for category in range(len(bdt_cuts[sample]) - 1):
 
                 cuts = []
                 selected_events = {}
@@ -169,20 +169,13 @@ def split_tuples_by_category(
                     np.count_nonzero(bdt_selection & (mass_bs == 110)),
                 )
 
-                eta_horn_cuts = (
-                    (abs(branches["leading_jet_eta"]) > 2.5)
-                    & (abs(branches["leading_jet_eta"]) < 3)
-                    & (abs(branches["subleading_jet_eta"]) > 2.5)
-                    & (abs(branches["subleading_jet_eta"]) < 3)
-                )
 
-                ## print(f"[Info] Initial events in horn: {len(branches['diMuon_mass'][eta_horn_cuts])}")
 
                 cuts = (
                     (branches["BDT_" + sample] > bdt_cuts[sample][category])
                     & (branches["BDT_" + sample] < bdt_cuts[sample][category + 1])
                     & (branches["is_" + sample + "_category"] == 1)
-                    & (branches["CMS_hgg_mass"] < 150)
+                    & (branches["CMS_hgg_mass"] <= 150)
                     & (branches["CMS_hgg_mass"] >= 110)
                 )
 
@@ -190,17 +183,9 @@ def split_tuples_by_category(
                     name: array[cuts] for name, array in branches.items()
                 }
 
-                eta_horn_selected = (
-                    (abs(selected_events["leading_jet_eta"]) > 2.5)
-                    & (abs(selected_events["leading_jet_eta"]) < 3)
-                    & (abs(selected_events["subleading_jet_eta"]) > 2.5)
-                    & (abs(selected_events["subleading_jet_eta"]) < 3)
-                )
+                print(f"[Info] Final events: {len(branches['diMuon_mass'][cuts])}")
+                print(f"[Info] Final selected events: {len(selected_events['diMuon_mass'])}")
 
-                # print(f"[Info] Final events: {len(branches['diMuon_mass'][cuts])}")
-                # print(f"[Info] Final selected events: {len(selected_events['diMuon_mass'])}")
-
-                # print(f"[Info] Final selected events in horn: {len(selected_events['diMuon_mass'][eta_horn_selected])}")
 
                 category_name = (
                     sample + "cat" + str(len(bdt_cuts[sample]) - category - 1)
@@ -245,45 +230,37 @@ if __name__ == "__main__":
         # bdt_cuts = {
         # bdt_cuts = {"ggH" : [0.0, 0.46000000000000024, 0.6100000000000003, 0.7400000000000004, 0.8300000000000005, 0.9000000000000006, 1.0],
         #            "VBF": [0.0, 0.6200000000000001, 0.7933333333333346, 0.8933333333333352, 0.9266666666666687, 0.9600000000000023, 1.0]
-        bdt_cuts = {
-             "ggH": [
-             0.0,
-             0.4400000000000002,
-             0.6100000000000003,
-             0.8100000000000005,
-             0.9200000000000006,
-             1.0,
-             ],
-             "VBF": [
-             0.0,
-             0.646666666666667,
-             0.8800000000000018,
-             0.9466666666666689,
-             0.9733333333333357,
-             1.0,
-             ],
-            ## old model new cuts
-            # "ggH": [
-                # 0.0,
-                # 0.4400000000000002,
-                # 0.6100000000000003,
-                # 0.8200000000000005,
-                # 0.9300000000000006,
-                # 1.0,
-            # ],
-            # "VBF": [
-                # 0.0,
-                # 0.6400000000000002,
-                # 0.8866666666666685,
-                # 0.9533333333333356,
-                # 0.9733333333333357,
-                # 1.0,
-            # ],
-            ## jec new BDT 
-            #"ggH": [0.0, 0.48000000000000026, 0.6600000000000004, 0.8500000000000005, 0.9400000000000006, 1.0],
-            #"VBF": [0.0, 0.6733333333333338, 0.8666666666666684, 0.9533333333333356, 0.9866666666666691, 1.0], 
+        # bdt_cuts = {
+             # "ggH": [
+             # 0.0,
+             # 0.4400000000000002,
+             # 0.6100000000000003,
+             # 0.8100000000000005,
+             # 0.9200000000000006,
+             # 1.0,
+             # ],
+             # "VBF": [
+             # 0.0,
+             # 0.646666666666667,
+             # 0.8800000000000018,
+             # 0.9466666666666689,
+             # 0.9733333333333357,
+             # 1.0,
+             # ],
 
-}
+        bdt_cuts = {
+            "ggH": [0.0, 0.45, 0.62, 0.8, 0.91, 1.0],
+            "VBF": [
+                0.0,
+                0.6400000000000002,
+                0.7800000000000011,
+                0.8600000000000017,
+                0.920000000000002,
+                0.9533333333333356,
+                0.966666666666669,
+                1.0,
+            ],
+        }
     else:
         bdt_cuts = {
             "ggH": [0.0, 0.19730769230769193, 0.4384615384615378, 1.0],

@@ -12,18 +12,23 @@ ROOT.gROOT.SetBatch(True)
 hep.style.use("CMS")
 X_TICK_FONT_SIZE = 8
 POINT_LABEL_FONT_SIZE = 14
-year = "2024"
-sample = "ttH"
+year = "Combined"
+sample = "Data"
 
 files = {
+ #    "pre-corr": (
+ #        "/eos/uscms/store/user/lpchmumu/esledge/"
+ #        "analyzer_HiggsMuMu_v1.5/tuples_v1.5.0/"
+ #       f"haddTuples/{sample}_{year}_tuples.root"
+ #    ),
     "pre-corr": (
-        "/eos/uscms/store/user/lpchmumu/esledge/"
-        "analyzer_HiggsMuMu_v1.5/tuples_v1.5.0/"
+        "/eos/uscms/store/user/lpchmumu/mbarrial/"
+        "analyzer_HiggsMuMu_v1.7/tuples_v1.7.0/"
         f"haddTuples/{sample}_{year}_tuples.root"
     ),
     "post-corr": (
         "/eos/uscms/store/user/lpchmumu/mbarrial/"
-        "analyzer_HiggsMuMu_v1.6/tuples_v1.6.1/"
+        "analyzer_HiggsMuMu_v1.10/tuples_v1.10.0/"
         f"haddTuples/{sample}_{year}_tuples.root"
     ),
 }

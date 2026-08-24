@@ -123,6 +123,13 @@ inline const std::vector<std::string> jet_jes_syst_names = {
     "CMS_scale_j_EC2_2024",
     "CMS_scale_j_HF_2024",
     "CMS_scale_j_Absolute_2024",
+
+    "CMS_scale_j_BBEC1_2025",
+    "CMS_scale_j_RelativeSample_2025",
+    "CMS_scale_j_EC2_2025",
+    "CMS_scale_j_HF_2025",
+    "CMS_scale_j_Absolute_2025",
+
 };
 
 inline const std::vector<std::string> jes_directions = {
@@ -165,6 +172,13 @@ inline const std::vector<std::string> jet_jer_syst_names = {
     "CMS_res_j_eta2p5to3p0_pt50toInf_2024",
     "CMS_res_j_eta3to5_pt0to50_2024",
     "CMS_res_j_eta3to5_pt50toInf_2024",
+
+    "CMS_res_j_eta0to1p93_pt0toInf_2025",
+    "CMS_res_j_eta1p93to2p5_pt0toInf_2025",
+    "CMS_res_j_eta2p5to3p0_pt0to50_2025",
+    "CMS_res_j_eta2p5to3p0_pt50toInf_2025",
+    "CMS_res_j_eta3to5_pt0to50_2025",
+    "CMS_res_j_eta3to5_pt50toInf_2025",
 
 };
 
@@ -391,9 +405,16 @@ class HmmAnalyzer : public MainEvent {
     std::vector<int> *t_Mu_genPartIdx;
     std::vector<UChar_t> *t_Mu_genPartFlav;
     std::vector<int> *t_Mu_charge;
-    std::vector<float> *t_Mu_EffSF_TRIG;
-    std::vector<float> *t_Mu_EffSF_TRIG_up;
-    std::vector<float> *t_Mu_EffSF_TRIG_down;
+    //std::vector<float> *t_Mu_EffSF_TRIG;
+    //std::vector<float> *t_Mu_EffSF_TRIG_up;
+    //std::vector<float> *t_Mu_EffSF_TRIG_down;
+    std::vector<float> *t_Mu_EffTRIG_DATA;
+    std::vector<float> *t_Mu_EffTRIG_DATA_up;
+    std::vector<float> *t_Mu_EffTRIG_DATA_down;
+    std::vector<float> *t_Mu_EffTRIG_MC;
+    std::vector<float> *t_Mu_EffTRIG_MC_up;
+    std::vector<float> *t_Mu_EffTRIG_MC_down;
+
     std::vector<float> *t_Mu_EffSF_ID;
     std::vector<float> *t_Mu_EffSF_ID_up;
     std::vector<float> *t_Mu_EffSF_ID_down;
@@ -955,9 +976,17 @@ void HmmAnalyzer::clearTreeVectors() {
     t_Mu_genPartIdx->clear();
     t_Mu_genPartFlav->clear();
     t_Mu_charge->clear();
-    t_Mu_EffSF_TRIG->clear();
-    t_Mu_EffSF_TRIG_up->clear();
-    t_Mu_EffSF_TRIG_down->clear();
+    //t_Mu_EffSF_TRIG->clear();
+    //t_Mu_EffSF_TRIG_up->clear();
+    //t_Mu_EffSF_TRIG_down->clear();
+    
+    t_Mu_EffTRIG_DATA->clear();
+    t_Mu_EffTRIG_DATA_up->clear();
+    t_Mu_EffTRIG_DATA_down->clear();
+    t_Mu_EffTRIG_MC->clear();
+    t_Mu_EffTRIG_MC_up->clear();
+    t_Mu_EffTRIG_MC_down->clear();
+
     t_Mu_EffSF_ID->clear();
     t_Mu_EffSF_ID_up->clear();
     t_Mu_EffSF_ID_down->clear();
@@ -1230,9 +1259,17 @@ void HmmAnalyzer::BookTreeBranches() {
     t_Mu_genPartIdx = new std::vector<int>();
     t_Mu_genPartFlav = new std::vector<UChar_t>();
     t_Mu_charge = new std::vector<int>();
-    t_Mu_EffSF_TRIG = new std::vector<float>();
-    t_Mu_EffSF_TRIG_up = new std::vector<float>();
-    t_Mu_EffSF_TRIG_down = new std::vector<float>();
+    //t_Mu_EffSF_TRIG = new std::vector<float>();
+    //t_Mu_EffSF_TRIG_up = new std::vector<float>();
+    //t_Mu_EffSF_TRIG_down = new std::vector<float>();
+  
+    t_Mu_EffTRIG_DATA = new std::vector<float>();
+    t_Mu_EffTRIG_DATA_up = new std::vector<float>();
+    t_Mu_EffTRIG_DATA_down = new std::vector<float>();
+    t_Mu_EffTRIG_MC = new std::vector<float>();
+    t_Mu_EffTRIG_MC_up = new std::vector<float>();
+    t_Mu_EffTRIG_MC_down = new std::vector<float>();
+
     t_Mu_EffSF_ID = new std::vector<float>();
     t_Mu_EffSF_ID_up = new std::vector<float>();
     t_Mu_EffSF_ID_down = new std::vector<float>();
@@ -1272,9 +1309,17 @@ void HmmAnalyzer::BookTreeBranches() {
     tree->Branch("t_Mu_genPartIdx", "vector<int>", &t_Mu_genPartIdx);
     tree->Branch("t_Mu_genPartFlav", "vector<UChar_t>", &t_Mu_genPartFlav);
     tree->Branch("t_Mu_charge", "vector<int>", &t_Mu_charge);
-    tree->Branch("t_Mu_EffSF_TRIG", "vector<float>", &t_Mu_EffSF_TRIG);
-    tree->Branch("t_Mu_EffSF_TRIG_up", "vector<float>", &t_Mu_EffSF_TRIG_up);
-    tree->Branch("t_Mu_EffSF_TRIG_down", "vector<float>", &t_Mu_EffSF_TRIG_down);
+    //tree->Branch("t_Mu_EffSF_TRIG", "vector<float>", &t_Mu_EffSF_TRIG);
+    //tree->Branch("t_Mu_EffSF_TRIG_up", "vector<float>", &t_Mu_EffSF_TRIG_up);
+    //tree->Branch("t_Mu_EffSF_TRIG_down", "vector<float>", &t_Mu_EffSF_TRIG_down);
+   
+    tree->Branch("t_Mu_EffTRIG_DATA", "vector<float>", &t_Mu_EffTRIG_DATA);
+    tree->Branch("t_Mu_EffTRIG_DATA_up", "vector<float>", &t_Mu_EffTRIG_DATA_up);
+    tree->Branch("t_Mu_EffTRIG_DATA_down", "vector<float>", &t_Mu_EffTRIG_DATA_down);
+    tree->Branch("t_Mu_EffTRIG_MC", "vector<float>", &t_Mu_EffTRIG_MC);
+    tree->Branch("t_Mu_EffTRIG_MC_up", "vector<float>", &t_Mu_EffTRIG_MC_up);
+    tree->Branch("t_Mu_EffTRIG_MC_down", "vector<float>", &t_Mu_EffTRIG_MC_down);
+
     tree->Branch("t_Mu_EffSF_ID", "vector<float>", &t_Mu_EffSF_ID);
     tree->Branch("t_Mu_EffSF_ID_up", "vector<float>", &t_Mu_EffSF_ID_up);
     tree->Branch("t_Mu_EffSF_ID_down", "vector<float>", &t_Mu_EffSF_ID_down);

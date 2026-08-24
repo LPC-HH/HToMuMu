@@ -69,9 +69,7 @@ mkdir -p ${cmssw_version}/src/RazorCommon/data/
 mkdir -p ${cmssw_version}/src/RazorCommon/bin/
 mkdir -p ${cmssw_version}/src/RazorCommon/python/
 cp muon_scalesmearing.json.gz ${DATA_FOLDER}/leptonSF/${year}/
-if [ "$year" != "2025" ]; then
-    cp muon_Z.json.gz ${DATA_FOLDER}/leptonSF/${year}/
-fi
+cp muon_Z.json.gz ${DATA_FOLDER}/leptonSF/${year}/
 
 cp FWLiteGoodLumi ${cmssw_version}/src/RazorCommon/bin/
 cp Cert* ${cmssw_version}/src/RazorCommon/data/
@@ -102,9 +100,7 @@ cp data/jetCorrections/jer_smear.json.gz ${DATA_FOLDER}/jetCorrections
 cp data/jetCorrections/JvmConfig.json ${DATA_FOLDER}/jetCorrections
 
 cp data/leptonSF/${year}/muon_scalesmearing.json.gz ${DATA_FOLDER}/leptonSF/${year}/
-if [ "$year" != "2025" ]; then
-    cp data/leptonSF/${year}/muon_Z.json.gz ${DATA_FOLDER}/leptonSF/${year}/
-fi
+cp data/leptonSF/${year}/muon_Z.json.gz ${DATA_FOLDER}/leptonSF/${year}/
 cp data/pileup/*.root ${DATA_FOLDER}/pileup/
 
 ###########################

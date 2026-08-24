@@ -47,7 +47,7 @@ DRAW_CORRELATIONS = False
 DO_STANDARDIZATION = True
 USE_WEIGHT = False
 USE_WEIGHT_MASS_RES = True
-APPEND_VARIABLES = True
+APPEND_VARIABLES = False
 USE_BSCONSTRAIN = True 
 PLOT_LOSS = False
 SEED = 7
@@ -170,6 +170,25 @@ if DO_STANDARDIZATION:
         x_test[mask_test, i] = (x_test[mask_test, i] - mean_map[var[0]]) / std_map[
             var[0]
         ]
+    
+    preprocessing_file = f"models/preprocessing_{test_name}"
+
+    if USE_BSCONSTRAIN:
+        preprocessing_file += "_bsC"
+
+    preprocessing_file += ".pkl"
+
+    preprocessing_info = {
+        "mean_map": mean_map,
+        "std_map": std_map,
+        "variables": [var[0] for var in variables[:-3]],
+    }
+
+    with open(preprocessing_file, "wb") as f:
+        pickle.dump(preprocessing_info, f)
+
+    print(f"[INFO] Saved preprocessing information to {preprocessing_file}") 
+
 
 print("x_train standaried:", x_train)
 
@@ -435,10 +454,8 @@ if not APPEND_VARIABLES:
     print("[INFO]: BDT score was not added to the trees")
 else: 
     print("[INFO]: Adding BDT score to the nominal tuples")
-    tuples = ["Data", "DY", "EWK", "TT", "DiBoson", "ggH", "VBF", "ttH"]
+    tuples = ["Data", "DY", "EWK", "TT", "DiBoson", "ggH", "VBF"]
     # tuples = ["Data","ggH", "VBF"]
-    if(era == "2025"):
-       tuples = ["Data"]
     for file_type in tuples:
         xgb_utils.append_BDT_score(
             file_type,
@@ -453,6 +470,19 @@ else:
             DO_STANDARDIZATION,
             USE_BSCONSTRAIN,
         )
+        xgb_utils.append_BDT_score(
+            file_type,
+            channel_US,
+            "2024",
+            "Combined",
+            signal_subset,
+            background_subset,
+            variables[:-3],
+            mean_map,
+            std_map,
+            DO_STANDARDIZATION,
+            USE_BSCONSTRAIN,
+            )
         '''
         xgb_utils.append_BDT_score(
             file_type,

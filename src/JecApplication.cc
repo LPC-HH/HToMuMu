@@ -9,6 +9,35 @@ static inline void dbg(bool on, const std::string& msg) {
     if (on) std::cout << "     " << msg << '\n';
 }
 
+static inline bool useGenMatchedOnlyJer(const std::string& year,
+                                        double eta) {
+    const double absEta = std::fabs(eta);
+
+    const bool affectedYear = (year != "2025");
+
+    return affectedYear &&
+           absEta > 2.5 &&
+           absEta < 3.0;
+}
+
+static inline double residualEvaluationPt(const std::string& year,
+                                          double eta,
+                                          double pt) {
+    const double absEta = std::fabs(eta);
+
+    // 2024 recommendation:
+    // For MC-truth-corrected pT < 30 GeV in 2.0 < |eta| < 2.5,
+    // evaluate the L2L3Residual at pT = 30 GeV.
+    if (year == "2024" &&
+        absEta > 2.0 &&
+        absEta < 2.5 &&
+        pt < 30.0) {
+        return 30.0;
+    }
+
+    return pt;
+}
+
 // ---------------- Context builders ----------------
 JecContext Applier::makeContextData(JecConfigReader::JecConfig& cfg,
                                     const std::string& year,
@@ -103,12 +132,15 @@ double Applier::jesFactorNominal(const JesInputs& j) const {
     if (ctx_.isData) {
         if (!ctx_.jes.l2l3Residual.has_value())
             throw std::runtime_error("Data path requires L2L3Residual handle");
+       
+        const double ptForResidual = residualEvaluationPt(ctx_.year, j.eta, ptAfter);
+
         double cRes = 1.0;
         if (requiresRunBasedResidual(ctx_.year)) {
             const double run = ctx_.runNumber.value_or(0.0);
-            cRes = (*ctx_.jes.l2l3Residual)->evaluate({ run, j.eta, ptAfter });
+            cRes = (*ctx_.jes.l2l3Residual)->evaluate({ run, j.eta, ptForResidual});
         } else {
-            cRes = (*ctx_.jes.l2l3Residual)->evaluate({ j.eta, ptAfter });
+            cRes = (*ctx_.jes.l2l3Residual)->evaluate({ j.eta, ptForResidual});
         }
         ptAfter *= cRes;
         dbg(ctx_.isDebug, "JES Residuals: cRes=" + std::to_string(cRes) +
@@ -199,6 +231,16 @@ double Applier::jerFactor(const JesInputs& jAfterJes,
     } else {
         dbg(ctx_.isDebug, "JER match: hasGen=0");
     }
+   
+    // 2022/2023/2024 eta horn recommendation:
+    // in 2.5 < |eta| < 3.0 apply JER only to genuinely gen-matched jets.
+    // Do NOT use stochastic smearing for unmatched jets in this region.
+    if (useGenMatchedOnlyJer(ctx_.year, jAfterJes.eta) && !matched) {
+        dbg(ctx_.isDebug,
+            "HE special JER treatment: unmatched jet -> JER factor = 1");
+        return 1.0;
+    }
+
 
     std::vector<correction::Variable::Type> vals;
     vals.reserve(7);

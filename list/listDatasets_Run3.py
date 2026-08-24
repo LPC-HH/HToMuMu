@@ -614,6 +614,56 @@ datasets_info = {
     #"WWW_4F_Summer24": ["F", 2, "2024", "MC_background",
     #        ""],
 
+
+    ####################################################################################################
+    # 2025 Simulations Backgrounds
+    ####################################################################################################
+    # No MC for 2025 using 2024
+   
+    #Drell-Yan Backgrounds
+    "DY50to120_Summer25": ["F", 2, "2025", "MC_background",
+            "/DYto2Mu_Bin-MLL-50to120_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v2/NANOAODSIM"],
+    "DY120to200_Summer25": ["F", 2, "2025", "MC_background",
+            "/DYto2Mu_Bin-MLL-120to200_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v2/NANOAODSIM"],
+
+    # EWK Backgrounds
+    "EWK_2L2J_Summer25": ["F", 2, "2025", "MC_background",
+            "/EWK-2L2J_Bin-MLL-50-MJJ-120_TuneCH3_13p6TeV_madgraph-herwig7/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v2/NANOAODSIM"],
+
+    # Top Backgrounds
+    "TTto2L2Nu_Summer25": ["F", 2, "2025", "MC_background",
+            "/TTto2L2Nu_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v3/NANOAODSIM"],
+    "TTtoLNu2Q_Summer25": ["F", 1, "2025", "MC_background",
+            "/TTtoLNu2Q_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v2/NANOAODSIM"],
+    
+    "TbarWplusto2L2Nu_Summer25": ["F", 2, "2025", "MC_background",
+            "/TbarWplusto2L2Nu_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v2/NANOAODSIM"],
+    "TbarWplusto4Q_Summer25": ["F", 2, "2025", "MC_background",
+            "/TbarWplusto4Q_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v2/NANOAODSIM"],
+
+    # DiBoson Backgrounds
+    "WZto2L2Q_Summer25": ["F", 2, "2025", "MC_background",
+            "/WZto2L2Q_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v2/NANOAODSIM"],
+    "WZto3LNu_Summer25": ["F", 2, "2025", "MC_background",
+            "/WZto3LNu_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v2/NANOAODSIM"],
+    "WZtoLNu2Q_Summer25": ["F", 1, "2025", "MC_background",
+            "/WZtoLNu2Q_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v2/NANOAODSIM"],
+    "ZZto2L2Nu_Summer25": ["F", 2, "2025", "MC_background",
+            "/ZZto2L2Nu_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v2/NANOAODSIM"],
+    "ZZto2L2Q_Summer25": ["F", 2, "2025", "MC_background",
+            "/ZZto2L2Q_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v2/NANOAODSIM"],
+    # "ZZto2Nu2Q_Summer24": ["F", 2, "20234", "MC_background", ""],
+    "ZZto4L_Summer25": ["F", 2, "2025", "MC_background",
+            "/ZZto4L_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v2/NANOAODSIM"],
+    "WWto2L2Nu_Summer25": ["F", 2, "2025", "MC_background",
+            "/WWto2L2Nu_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v2/NANOAODSIM"],
+    # "WWto4Q_Summer24": ["F", 2, "2024", "MC_background", ""],
+    "WWtoLNu2Q_Summer25": ["F", 2, "2025", "MC_background",
+            "/WWtoLNu2Q_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v2/NANOAODSIM"],
+
+
+
+
     ####################################################################################################
     # 2022 Simulations Signal
     ####################################################################################################
@@ -690,5 +740,21 @@ datasets_info = {
     "WminusH_Summer24": ["F", 2, "2024", "MC_signal",
             "/WminusH-Hto2Mu_Par-M-125_TuneCP5_13p6TeV_powhegMINLO-pythia8/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v3/NANOAODSIM"],
     "ZH_Summer24": ["F", 2, "2024", "MC_signal",
+            "/ZH-Hto2Mu_Par-M-125_TuneCP5_13p6TeV_powhegMINLO-pythia8/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v3/NANOAODSIM"],
+    ####################################################################################################
+    # 2025 Simulations Signal
+    ####################################################################################################
+    # No MC for 2025 using 2024
+    "ggH_Summer25": ["F", 2, "2025", "MC_signal",
+            "/GluGluH-Hto2Mu_Par-M-125_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v2/NANOAODSIM"],
+    "VBF_Summer25": ["F", 2, "2025", "MC_signal",
+            "/VBFH-Hto2Mu_Par-M-125_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v2/NANOAODSIM"],
+    "ttH_Summer25": ["F", 2, "2025", "MC_signal",
+            "/TTH-Hto2Mu_Par-M-125_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v2/NANOAODSIM"],
+    "WplusH_Summer25": ["F", 2, "2025", "MC_signal",
+            "/WplusH-Hto2Mu_Par-M-125_TuneCP5_13p6TeV_powhegMINLO-pythia8/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v3/NANOAODSIM"],
+    "WminusH_Summer25": ["F", 2, "2025", "MC_signal",
+            "/WminusH-Hto2Mu_Par-M-125_TuneCP5_13p6TeV_powhegMINLO-pythia8/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v3/NANOAODSIM"],
+    "ZH_Summer25": ["F", 2, "2025", "MC_signal",
             "/ZH-Hto2Mu_Par-M-125_TuneCP5_13p6TeV_powhegMINLO-pythia8/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v3/NANOAODSIM"],
 }

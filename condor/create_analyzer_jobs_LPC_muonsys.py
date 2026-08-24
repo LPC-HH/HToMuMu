@@ -63,20 +63,20 @@ list_datasets = [
 ]
 
 # # Use in case you want to run over a specific list of datasets!
-# list_datasets = [
+list_datasets = [
 # "VBF_Summer22",
 # "WZZ_Summer23BPix",
-# "VBF_Summer22",
+ "VBF_Summer25",
 # "VBF_Summer22EE",
 # "VBF_Summer23",
 # "VBF_Summer23BPix",
-# "VBF_Summer24",
+ "ggH_Summer25",
 # "ggH_Summer22",
 # "ggH_Summer22EE",
 # "ggH_Summer23",
 # "ggH_Summer23BPix",
 #    "ggH_Summer24",
-# ]
+]
 
 
 include_Z = "F"
@@ -299,13 +299,12 @@ for systematic in run_muon_sys:
             + " "
             + "%s/leptonSF/%s/" % (Job_Data_DIR, year)
         )
-        if year != "2025":
-            os.system(
-                "cp "
-                + "%s/leptonSF/%s/muon_Z.json.gz" % (Analyzer_Data_DIR, year)
-                + " "
-                + "%s/leptonSF/%s/" % (Job_Data_DIR, year)
-            )
+        os.system(
+            "cp "
+            + "%s/leptonSF/%s/muon_Z.json.gz" % (Analyzer_Data_DIR, year)
+            + " "
+            + "%s/leptonSF/%s/" % (Job_Data_DIR, year)
+        )
         os.system("mkdir -p " + Job_Data_DIR + "pileup")
         pileup_file = "PileupReweight_Summer%s" % (year[2:])
         if not os.path.exists(Analyzer_Data_DIR + "/pileup/%s.root" % (pileup_file)):
@@ -384,8 +383,8 @@ for systematic in run_muon_sys:
         transfer_files += (
             Job_Data_DIR + "/leptonSF/" + year + "/muon_scalesmearing.json.gz, "
         )
-        if year != "2025":
-            transfer_files += Job_Data_DIR + "/leptonSF/" + year + "/muon_Z.json.gz, "
+        # if year != "2025":
+        transfer_files += Job_Data_DIR + "/leptonSF/" + year + "/muon_Z.json.gz, "
         if isData == "T":
             transfer_files += Job_DIR + "/RazorCommon/bin/FWLiteGoodLumi, "
             transfer_files += (

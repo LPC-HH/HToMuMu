@@ -50,8 +50,6 @@ int main(int argc, char *argv[]) {
     const bool include_H = *argv[7] == 'T';
     const std::string muon_pt_syst = NormalizeMuonPtSyst(argv[8]);
 
-    //read run3 muon efficiency json files
-
     //std::cout << year_num.Data() << std::endl;
 
     HmmAnalyzer Hmm(inputFileList, outFileName, data, is_data_input, year_num,
@@ -191,6 +189,14 @@ void HmmAnalyzer::EventLoop() {
         nb = fChain->GetEntry(jentry);
         nbytes += nb;
 
+
+        if (!is_data && yearst == "2024" && event % 2 == 0) {
+            continue;
+        }
+        if (!is_data && yearst == "2025" && event % 2 != 0) {
+            continue;
+        }
+
         h_nEntries->Fill(0.5);
        
         //std::cout << "-------------- Entry " << jentry << " --------------" << std::endl;
@@ -310,34 +316,48 @@ void HmmAnalyzer::EventLoop() {
             continue;
         }
 
+        float best_pair_pt_sum = -1.0;
+
         for (int muon_index_1 = 0; muon_index_1 < nMuon; muon_index_1++) {
+
             if (!(Muon_isGlobal[muon_index_1] &&
                   mu_pt_corr[muon_index_1] > muon_pt_cut.at(yearst) &&
                   Muon_mediumId[muon_index_1] &&
                   fabs(Muon_eta[muon_index_1]) < 2.4 &&
-                  Muon_pfRelIso04_all[muon_index_1] < 0.25)) {
+                  Muon_pfRelIso04_all[muon_index_1] < 0.25))
                 continue;
-            }
 
-            for (int muon_index_2 = muon_index_1 + 1; muon_index_2 < nMuon;
+            for (int muon_index_2 = muon_index_1 + 1;
+                 muon_index_2 < nMuon;
                  muon_index_2++) {
-                if (Muon_isGlobal[muon_index_2] &&
-                    Muon_charge[muon_index_1] * Muon_charge[muon_index_2] ==
-                        -1 &&
-                    mu_pt_corr[muon_index_2] > 20. &&
-                    Muon_mediumId[muon_index_2] &&
-                    fabs(Muon_eta[muon_index_2]) < 2.4 &&
-                    Muon_pfRelIso04_all[muon_index_2] < 0.25) {
+
+                if (!(Muon_isGlobal[muon_index_2] &&
+                      Muon_charge[muon_index_1] * Muon_charge[muon_index_2] == -1 &&
+                      mu_pt_corr[muon_index_2] > 20. &&
+                      Muon_mediumId[muon_index_2] &&
+                      fabs(Muon_eta[muon_index_2]) < 2.4 &&
+                      Muon_pfRelIso04_all[muon_index_2] < 0.25))
+                    continue;
+
+                float pair_pt_sum =
+                    mu_pt_corr[muon_index_1] + mu_pt_corr[muon_index_2];
+
+                if (pair_pt_sum > best_pair_pt_sum) {
+                    best_pair_pt_sum = pair_pt_sum;
+
+                    // Store the higher-pT muon as mu1
+                    if (mu_pt_corr[muon_index_1] >= mu_pt_corr[muon_index_2]) {
+                        index_mu1 = muon_index_1;
+                        index_mu2 = muon_index_2;
+                    } else {
+                        index_mu1 = muon_index_2;
+                        index_mu2 = muon_index_1;
+                    }
+
                     two_valid_muons = true;
-                    index_mu1 = muon_index_1;
-                    index_mu2 = muon_index_2;
-                    break;
                 }
             }
-            if (two_valid_muons)
-                break;
         }
-
         //std::cout << "Checking 2 valid muons" << std::endl; 
         if(!two_valid_muons){
             //std::cout << "No valid muons" << std::endl; 
@@ -467,29 +487,6 @@ void HmmAnalyzer::EventLoop() {
                 this_muon_trig_matched = trig_match_mu2;
             }
 
-            if (!is_data) {
-                if(year == "2025"){
-                    t_Mu_EffSF_TRIG->push_back(1.0);
-                    t_Mu_EffSF_TRIG_up->push_back(1.0);
-                    t_Mu_EffSF_TRIG_down->push_back(1.0);
-                } else {
-                    if (this_muon_trig_matched) {
-                    t_Mu_EffSF_TRIG->push_back(corrector.give_eff(
-                        "Muon_eff_SF_TRIG", mu_pt_corr[i], Muon_eta[i]));
-
-                    t_Mu_EffSF_TRIG_up->push_back(corrector.give_eff(
-                        "Muon_eff_SF_TRIG_up", mu_pt_corr[i], Muon_eta[i]));
-                    t_Mu_EffSF_TRIG_down->push_back(corrector.give_eff(
-                        "Muon_eff_SF_TRIG_down", mu_pt_corr[i], Muon_eta[i]));
-                    } else {
-                        t_Mu_EffSF_TRIG->push_back(1.0);
-                        t_Mu_EffSF_TRIG_up->push_back(1.0);
-                        t_Mu_EffSF_TRIG_down->push_back(1.0);
-                    }
-                }
-            }
-
-
             t_Mu_charge->push_back(Muon_charge[i]);
             t_Mu_pt->push_back(Muon_pt[i]);
             t_Mu_ptErr->push_back(Muon_ptErr[i]);
@@ -526,10 +523,39 @@ void HmmAnalyzer::EventLoop() {
                 continue;
             }
 
+            
+            t_Mu_EffTRIG_DATA->push_back(corrector.give_eff(
+                "Muon_eff_DATAeff_TRIG",
+                mu_pt_corr[i], Muon_eta[i]));
+
+            t_Mu_EffTRIG_DATA_up->push_back(corrector.give_eff(
+                "Muon_eff_DATAeff_TRIG_up",
+                mu_pt_corr[i], Muon_eta[i]));
+
+            t_Mu_EffTRIG_DATA_down->push_back(corrector.give_eff(
+                "Muon_eff_DATAeff_TRIG_down",
+                mu_pt_corr[i], Muon_eta[i]));
+
+
+            t_Mu_EffTRIG_MC->push_back(corrector.give_eff(
+                "Muon_eff_MCeff_TRIG",
+                mu_pt_corr[i], Muon_eta[i]));
+
+            t_Mu_EffTRIG_MC_up->push_back(corrector.give_eff(
+                "Muon_eff_MCeff_TRIG_up",
+                mu_pt_corr[i], Muon_eta[i]));
+
+            t_Mu_EffTRIG_MC_down->push_back(corrector.give_eff(
+                "Muon_eff_MCeff_TRIG_down",
+                mu_pt_corr[i], Muon_eta[i]));
+
+
+
             t_Mu_EffSF_ID->push_back(corrector.give_eff("Muon_eff_SF_ID", mu_pt_corr[i], Muon_eta[i]));
             t_Mu_EffSF_ID_up->push_back(corrector.give_eff("Muon_eff_SF_ID_up", mu_pt_corr[i], Muon_eta[i]));
             t_Mu_EffSF_ID_down->push_back(corrector.give_eff("Muon_eff_SF_ID_down", mu_pt_corr[i], Muon_eta[i]));
 
+            
             t_Mu_EffSF_ISO->push_back(corrector.give_eff("Muon_eff_SF_ISO", mu_pt_corr[i], Muon_eta[i]));
             t_Mu_EffSF_ISO_up->push_back(corrector.give_eff("Muon_eff_SF_ISO_up", mu_pt_corr[i], Muon_eta[i]));
             t_Mu_EffSF_ISO_down->push_back(corrector.give_eff("Muon_eff_SF_ISO_down", mu_pt_corr[i], Muon_eta[i]));
@@ -633,7 +659,6 @@ void HmmAnalyzer::EventLoop() {
             h_nJets->Fill(0.5);
             //std::cout << "looking at jet " << j << std::endl;
 
-
             JecApplication::JesInputs jesIn{Jet_pt[j],
                                             Jet_eta[j],
                                             Jet_phi[j],
@@ -649,6 +674,7 @@ void HmmAnalyzer::EventLoop() {
             std::map<std::string, double> shifted_jer_pts;
             std::map<std::string, double> shifted_jes_masses;
             std::map<std::string, double> shifted_jer_masses;
+
 
             for (const auto &syst_name : jet_jer_syst_names) {
                 for (const auto &direction : jer_directions) {
@@ -690,6 +716,7 @@ void HmmAnalyzer::EventLoop() {
                     false);
             };
 
+
             for (const auto &syst_name : jet_jes_syst_names) {
                 for (const auto &direction : jes_directions) {
                     const std::string branch_name =
@@ -707,6 +734,8 @@ void HmmAnalyzer::EventLoop() {
             }
         
             if (!is_data) {
+
+
                 JecApplication::JerInputs jer_inputs{};
                 jer_inputs.event = event;
                 jer_inputs.rho = Rho_fixedGridRhoFastjetAll;
@@ -757,6 +786,7 @@ void HmmAnalyzer::EventLoop() {
 
                 const double nominal_pt_after_jer =
                     corrected_jet_pt_after_jes * jer_correction;
+
 
                 for (const auto &syst_name : jet_jer_syst_names) {
                     for (const auto &direction : jer_directions) {

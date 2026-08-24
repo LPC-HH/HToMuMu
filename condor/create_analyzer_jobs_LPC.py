@@ -219,8 +219,7 @@ for dataset_name in list_datasets:
     
     os.system("mkdir -p " + Job_Data_DIR + "leptonSF/%s/"%(year))
     os.system("cp " + "%s/leptonSF/%s/muon_scalesmearing.json.gz"%(Analyzer_Data_DIR, year) + " " + "%s/leptonSF/%s/"%(Job_Data_DIR, year))
-    if(year != "2025"):
-        os.system("cp " + "%s/leptonSF/%s/muon_Z.json.gz"%(Analyzer_Data_DIR, year) + " " + "%s/leptonSF/%s/"%(Job_Data_DIR, year))
+    os.system("cp " + "%s/leptonSF/%s/muon_Z.json.gz"%(Analyzer_Data_DIR, year) + " " + "%s/leptonSF/%s/"%(Job_Data_DIR, year))
     os.system("mkdir -p " + Job_Data_DIR + "pileup")
     pileup_file = "PileupReweight_Summer%s"%(year[2:])
     if not os.path.exists(Analyzer_Data_DIR + "/pileup/%s.root"%(pileup_file)):
@@ -262,8 +261,7 @@ for dataset_name in list_datasets:
     transfer_files += Job_Data_DIR + "/jetCorrections/JvmConfig.json, "
 
     transfer_files += Job_Data_DIR + "/leptonSF/" + year + "/muon_scalesmearing.json.gz, "
-    if(year != "2025"):
-        transfer_files += Job_Data_DIR + "/leptonSF/" + year + "/muon_Z.json.gz, "
+    transfer_files += Job_Data_DIR + "/leptonSF/" + year + "/muon_Z.json.gz, "
     if(isData=="T"):
         transfer_files += Job_DIR + "/RazorCommon/bin/FWLiteGoodLumi, "
         transfer_files += Job_DIR + "/RazorCommon/data/Run3/" + golden_json[year] + ", "
