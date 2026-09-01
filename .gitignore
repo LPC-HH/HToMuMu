@@ -10,3 +10,4 @@ scripts/makeDataPileupHist.sh
 *.png
 *.pdf
 *.jpeg
+*.txt

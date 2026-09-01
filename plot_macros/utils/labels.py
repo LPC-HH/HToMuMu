@@ -77,6 +77,7 @@ x_labels = {
     "HT_pt2": r"$H_{T}^{2}(soft)$",
     "HT_pt5": r"$H_{T}^{5}(soft)$",
     "HT_pt10": r"$H_{T}^{10}(soft)$",
+    "HT_extra": r"$H_{T} - leading jet(soft)$",
     ## BDT_ggh
     "BDT_ggH": "BDT Output",
     "BDT_VBF": "BDT Output",
@@ -141,7 +142,7 @@ n_bins = {
     "diJet_pt": 50,
     "diJet_eta": 50,
     "diJet_phi": 50,
-    "diJet_mass": 50,
+    "diJet_mass": 250,
     "diJet_mass_VBF": 50,
     "diJet_mass_mo": 50,
     "diJet_DeltaEta": 50,
@@ -162,6 +163,7 @@ n_bins = {
     "HT_pt2": 20,
     "HT_pt5": 20,
     "HT_pt10": 20,
+    "HT_extra": 20,
     ## BDT_ggh
     "BDT_ggH": 100,
     "BDT_VBF": 100,
@@ -225,7 +227,7 @@ x_range = {
     "diJet_pt": (0, 800),
     "diJet_eta": (-10, 10),
     "diJet_phi": (-3.1415, 3.1415),
-    "diJet_mass": (0, 500),
+    "diJet_mass": (0, 2500),
     "diJet_mass_VBF": (300, 900),
     "diJet_mass_mo": (0, 800),
     "diJet_DeltaEta": (-12, 12),
@@ -242,10 +244,11 @@ x_range = {
     "n_SoftJet_pt2": (0, 40),
     "n_SoftJet_pt5": (0, 40),
     "n_SoftJet_pt10": (0, 40),
-    "HT": (0, 60),
-    "HT_pt2": (0, 60),
-    "HT_pt5": (0, 60),
-    "HT_pt10": (0, 60),
+    "HT": (0, 400),
+    "HT_pt2": (0, 400),
+    "HT_pt5": (0, 400),
+    "HT_pt10": (0, 400),
+    "HT_extra": (0, 400),
     ## BDT_ggh
     "BDT_ggH": (0, 1),
     "BDT_VBF": (0, 1),
@@ -319,6 +322,7 @@ variables_type = {
         "HT_pt2",
         "HT_pt5",
         "HT_pt10",
+        "HT_extra",
     ],
     ## DiMuon variables
     "diMuon": [

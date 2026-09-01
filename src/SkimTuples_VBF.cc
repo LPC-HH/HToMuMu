@@ -73,7 +73,7 @@ int main(int argc, char *argv[]) {
         "HT_pt10",
         //"weight_no_lumi",
         "weight",
-        "is_VBF_category",
+        "is_VBF_categoryBDT",
 	    "relative_diMuon_mass_error",
         "relative_diMuon_bsConstrainedMass_error",
     };
@@ -86,7 +86,7 @@ int main(int argc, char *argv[]) {
                       "RECREATE");
     TTree *tree_output = tree_input->CloneTree(0); // Clone the structure only
 
-    tree_output = tree_input->CopyTree("(is_VBF_category == 1) && (diMuon_bsConstrainedMass >= 115. && diMuon_bsConstrainedMass <= 135.)");
+    tree_output = tree_input->CopyTree("(is_VBF_categoryBDT == 1) && (diMuon_bsConstrainedMass >= 115. && diMuon_bsConstrainedMass <= 135.)");
     // Write the selected tree to the output file
     output_file.cd();
     tree_output->Write();

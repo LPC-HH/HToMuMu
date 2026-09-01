@@ -312,13 +312,24 @@ if ifRetrain:
             early_stopping_rounds=50
         )'''
 
-        model = xgb.XGBClassifier(
+        '''model = xgb.XGBClassifier(
             max_depth=3,
             learning_rate=0.1,
             n_estimators=400,
             verbosity=2,
             n_jobs=4,
             reg_lambda=1.0,
+            device='cuda',
+        )'''
+
+        model = xgb.XGBClassifier(
+            max_depth=4,
+            learning_rate=0.1,
+            n_estimators=1000,
+            verbosity=2,
+            n_jobs=4,
+            reg_lambda=1.0,
+            eval_metric=["logloss", "auc"],
             device='cuda',
         )
 

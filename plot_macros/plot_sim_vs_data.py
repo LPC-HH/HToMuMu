@@ -70,6 +70,47 @@ if use_categories:
 else:
     bdt_cuts = []
 
+variablesBDT = [
+    ## DiMuon variables
+    #"diMuon_mass",
+    # "diMuon_mass_full_range",
+     "diMuon_bsConstrainedMass",
+    "diMuon_rapidity",
+    "diMuon_eta",
+    "diMuon_bsConstrainedPt",
+    "diMuon_phi",
+    #"relative_diMuon_mass_error",
+    "relative_diMuon_bsConstrainedMass_error",
+    ## Muon variables
+    #"mu1_pt_mass_ratio",
+    #"mu2_pt_mass_ratio",
+    "mu1_bsConstrainedPt_mass_ratio",
+    "mu2_bsConstrainedPt_mass_ratio",
+    "mu1_eta",
+    "mu2_eta",
+    "phi_CS",
+    "cos_theta_CS",
+    "mu1_bsConstrainedPt",
+    "mu2_bsConstrainedPt",
+    ## Jet variables
+    "n_jet",
+    "leading_jet_pt",
+    "subleading_jet_pt",
+    "leading_jet_eta",
+    ## diJet variables
+    "diJet_mass",
+    "delta_eta_diJet",
+    "delta_phi_diJet",
+    "z_zeppenfeld",
+    "min_delta_eta_diMuon_jet",
+    "min_delta_phi_diMuon_jet",
+    ## VBF required
+    "pt_balance",
+    "pt_centrality",
+    "n_SoftJet_pt2",
+    "HT",
+]
+
 variables = [
     ## DiMuon variables
     #"diMuon_mass",
@@ -126,7 +167,8 @@ variables = [
 ]
 
 # variables = ["leading_jet_eta", "subleading_jet_eta", "diMuon_bsConstrainedMass"]
-variables = ["diMuon_bsConstrainedMass"]
+#variables = ["diMuon_bsConstrainedMass"]
+variables = variablesBDT
 
 # eras = ["2022EE", "2022", "2023", "2023BPix", "2024"]#, "2025"]
 # eras = ["2022", "2022EE", "2023", "2023BPix", "2024", "2025", "Combined"]
@@ -140,7 +182,7 @@ eras = ["Combined"]
 for era in eras:
     if production_channel == "":
         bdt_cuts = []
-    else:
+    elif use_categories:
         bdt_cuts = get_bdt_cuts(
             bdt_categories_info, production_channel, era, bdt_subset, bdt_mass_variable
         )

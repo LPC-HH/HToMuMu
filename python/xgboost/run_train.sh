@@ -23,7 +23,7 @@ declare -a tuples=("Data" "DY" "EWK" "TT" "DiBoson" "ggH" "VBF")
 
 #declare -a tuples=("ggH" "VBF")
 
-ifRetrain="F"
+ifRetrain="T"
 ifOptimize="F"
 doSystematics="F"
 

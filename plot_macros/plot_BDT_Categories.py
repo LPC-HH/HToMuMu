@@ -101,14 +101,14 @@ def get_expected_significance(bkg_branches, signal_branches, bdt_categories):
             & (bkg_branches[diMuon_mass_name] < signal_region[1])
             & (bkg_branches[BDT_var] > bdt_cut_min)
             & (bkg_branches[BDT_var] < bdt_cut_max)
-            & (bkg_branches["is_" + channel_US + "_category"] == 1)
+            & (bkg_branches["is_" + channel_US + "_categoryBDT"] == 1)
         )
         signal_bool_list = (
             (signal_branches[diMuon_mass_name] > signal_region[0])
             & (signal_branches[diMuon_mass_name] < signal_region[1])
             & (signal_branches[BDT_var] > bdt_cut_min)
             & (signal_branches[BDT_var] < bdt_cut_max)
-            & (signal_branches["is_" + channel_US + "_category"] == 1)
+            & (signal_branches["is_" + channel_US + "_categoryBDT"] == 1)
         )
         signal_events = np.sum(
             signal_branches["weight"][signal_bool_list]
@@ -147,13 +147,13 @@ def find_bdt_categories(era, bdt_categories, bdt_cut_max=1, iteration=0):
         BDT_score_path + "background_" + era + ".root:tree_output"
     ) as file:
         bkg_branches = file.arrays(
-            [BDT_var, "weight", diMuon_mass_name, "is_" + channel_US + "_category"], library="np"
+            [BDT_var, "weight", diMuon_mass_name, "is_" + channel_US + "_categoryBDT"], library="np"
         )
     with ur.open(
         BDT_score_path + "signal_" + era + ".root:tree_output"
     ) as file:
         signal_branches = file.arrays(
-            [BDT_var, "weight", diMuon_mass_name, "is_" + channel_US + "_category"], library="np"
+            [BDT_var, "weight", diMuon_mass_name, "is_" + channel_US + "_categoryBDT"], library="np"
         )
 
     Z_by_cat, Z_tot = get_expected_significance(bkg_branches, signal_branches, bdt_categories)
@@ -608,12 +608,12 @@ def draw_bdt_categories(era):
         BDT_score_path + "background_" + era + ".root:tree_output"
     ) as file:
         bkg_branches = file.arrays(
-            [BDT_var, "weight", diMuon_mass_name, "is_" + channel_US + "_category"], library="np"
+            [BDT_var, "weight", diMuon_mass_name, "is_" + channel_US + "_categoryBDT"], library="np"
         )
         bkg_bool_list = (
             (bkg_branches[diMuon_mass_name] > 110)
             & (bkg_branches[diMuon_mass_name] < 150)
-            & (bkg_branches["is_" + channel_US + "_category"] == 1)
+            & (bkg_branches["is_" + channel_US + "_categoryBDT"] == 1)
         )
         print(f'Max BDTtrans value {np.max(np.arctanh(bkg_branches[BDT_var][bkg_bool_list]))}')
         bkg_hist, bkg_bins = np.histogram(
@@ -630,14 +630,14 @@ def draw_bdt_categories(era):
             BDT_score_path + "data_" + era + ".root:tree_output"
         ) as file:
             data_branches = file.arrays(
-                [BDT_var, diMuon_mass_name, "is_" + channel_US + "_category"], library="np"
+                [BDT_var, diMuon_mass_name, "is_" + channel_US + "_categoryBDT"], library="np"
             )
             data_bool_list = (
                 (data_branches[diMuon_mass_name] > 110)
                 & (data_branches[diMuon_mass_name] < 150)
                 & ((data_branches[diMuon_mass_name] < 120)
                 | (data_branches[diMuon_mass_name] > 130))
-                & (data_branches["is_" + channel_US + "_category"] == 1)
+                & (data_branches["is_" + channel_US + "_categoryBDT"] == 1)
             )
             data_hist, data_bins = np.histogram(
                 #np.arctanh(data_branches[BDT_var][data_bool_list]),
@@ -652,12 +652,12 @@ def draw_bdt_categories(era):
         BDT_score_path + "signal_" + era + ".root:tree_output"
     ) as file:
         signal_branches = file.arrays(
-            [BDT_var, "weight", diMuon_mass_name,"is_" + channel_US + "_category"], library="np"
+            [BDT_var, "weight", diMuon_mass_name,"is_" + channel_US + "_categoryBDT"], library="np"
         )
         signal_bool_list = (
             (signal_branches[diMuon_mass_name] > 110)
             & (signal_branches[diMuon_mass_name] < 150)
-            & (signal_branches["is_" + channel_US + "_category"] == 1)
+            & (signal_branches["is_" + channel_US + "_categoryBDT"] == 1)
         )
         signal_hist, signal_bins = np.histogram(
             #np.arctanh(signal_branches[BDT_var][signal_bool_list]),
@@ -748,14 +748,14 @@ def draw_bdt_categories(era):
             & (bkg_branches[diMuon_mass_name] < signal_region[1])
             & (bkg_branches[BDT_var] > bdt_categories[category])
             & (bkg_branches[BDT_var] < bdt_categories[category + 1])
-            & (bkg_branches["is_" + channel_US + "_category"] == 1)
+            & (bkg_branches["is_" + channel_US + "_categoryBDT"] == 1)
         )
         signal_bool_list = (
             (signal_branches[diMuon_mass_name] > signal_region[0])
             & (signal_branches[diMuon_mass_name] < signal_region[1])
             & (signal_branches[BDT_var] > bdt_categories[category])
             & (signal_branches[BDT_var] < bdt_categories[category + 1])
-            & (signal_branches["is_" + channel_US + "_category"] == 1)
+            & (signal_branches["is_" + channel_US + "_categoryBDT"] == 1)
         )
 
         signal_events = np.sum(

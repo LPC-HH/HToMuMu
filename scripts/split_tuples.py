@@ -59,7 +59,7 @@ def split_tuples_by_category(
                 "diMuon_mass",
                 "diMuon_bsConstrainedMass",
                 f"BDT_{sample}",
-                f"is_{sample}_category",
+                f"is_{sample}_categoryBDT",
                 "weight_no_lumi",
                 "weight",
                 "leading_jet_eta",
@@ -123,7 +123,7 @@ def split_tuples_by_category(
                 mass_nominal = branches["diMuon_mass"]
                 mass_bs = branches["diMuon_bsConstrainedMass"]
                 score = branches[f"BDT_{sample}"]
-                is_category = branches[f"is_{sample}_category"] == 1
+                is_category = branches[f"is_{sample}_categoryBDT"] == 1
 
                 lower_bdt = bdt_cuts[sample][category]
                 upper_bdt = bdt_cuts[sample][category + 1]
@@ -176,7 +176,7 @@ def split_tuples_by_category(
                 cuts = (
                     (branches["BDT_" + sample] > bdt_cuts[sample][category])
                     & (branches["BDT_" + sample] < bdt_cuts[sample][category + 1])
-                    & (branches["is_" + sample + "_category"] == 1)
+                    & (branches["is_" + sample + "_categoryBDT"] == 1)
                     & (branches["CMS_hgg_mass"] <= 150)
                     & (branches["CMS_hgg_mass"] >= 110)
                 )

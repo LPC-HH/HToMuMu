@@ -25,6 +25,8 @@ from .colors import(
     get_color_list,
 )
 
+USE_CATEGORIZATION_BDT = True
+
 def get_background_label_list(background_sources):
     labels_list = []
     for source in background_sources:
@@ -83,12 +85,15 @@ def get_histograms_from_tuple(
         f"/eos/uscms/store/group/lpchmumu/{user}/"
         f"{analyzer_version}/{tuple_version}/haddTuples/"
     )
+    tuple_path = "../root_io/tuples/"
     if bdt_subset != "" or variables[0] == "BDT_" + production_channel:
         tuple_path = "../root_io/tuples/"
         tuple_path += "BDT_score/" + production_channel + "/" + bdt_subset + "/"
 
     for source in sources:
         file_name = source + "_" + era + "_tuples.root:tree_output"
+        if USE_CATEGORIZATION_BDT:
+            file_name = source + "_" + era + "_tuples_categorized.root:tree_output"
         if bdt_subset != "" or variables[0] == "BDT_" + production_channel:
             file_name = source + "_" + era + "_" + bdt_subset + ".root:tree_output"
 
@@ -194,6 +199,7 @@ def get_data_histograms_from_tuple(
         f"/eos/uscms/store/group/lpchmumu/{user}/"
         f"{analyzer_version}/{tuple_version}/haddTuples/"
     )
+    tuple_path = "../root_io/tuples/"
     file_name = "Data_" + era + "_tuples.root:tree_output"
     if bdt_subset != "" or variables[0] == "BDT_" + production_channel:
         tuple_path = "../root_io/tuples/"
@@ -286,10 +292,14 @@ def draw_data_and_simul_and_ratio(
 ):
     plt.style.use(hep.style.CMS)
     tuple_version = f"tuples_v{version}"
-    print("*" * len("****** PLOTTING " + variable + era + " *****"))
-    print("****** PLOTTING " + variable + " ERA " + era + " *****")
-    print("*" * len("****** PLOTTING " + variable + era + " *****"))
-
+    if USE_CATEGORIZATION_BDT:
+        print("*" * len("****** PLOTTING " + variable + era + " RECATEGORIZED *****"))
+        print("****** PLOTTING " + variable + " ERA " + era + " RECATEGORIZED *****")
+        print("*" * len("****** PLOTTING " + variable + era + " RECATEGORIZED *****"))
+    else:
+        print("*" * len("****** PLOTTING " + variable + era + " *****"))
+        print("****** PLOTTING " + variable + " ERA " + era + " *****")
+        print("*" * len("****** PLOTTING " + variable + era + " *****"))
     variables = [variable, "weight"] 
     if (("bsConstrained" in variable) and variable != "diMuon_bsConstrainedMass"):
         variables.append("diMuon_bsConstrainedMass")
@@ -467,7 +477,8 @@ def draw_data_and_simul_and_ratio(
             )
 
     output_directory = get_output_directory(variable, output_directory, variables_type)
-
+    if USE_CATEGORIZATION_BDT:
+        output_directory = output_directory[:-1] + "BDTSigCats/"
     save_figure(fig, output_directory, output_name + label + labelAdd)
 
     plt.close()

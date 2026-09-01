@@ -83,16 +83,16 @@ input_arguments = []
 # input_arguments.append([input_directory, "Data", era])
 
 for era in eras:
-    input = input_directory + "Data_" + era + "_tuples.root"
+    input = input_directory + "Data_" + era + "_tuples_categorized.root"
     input_arguments.append([input, output_directory, era, "Data", "T"])
     for dataset in signal_datasets:
-        input = input_directory + dataset + "_" + era + "_tuples.root"
+        input = input_directory + dataset + "_" + era + "_tuples_categorized.root"
         input_arguments.append([input, output_directory, era, dataset, "F"])
     for dataset in background_datasets:
-        input = input_directory + dataset + "_" + era + "_tuples.root"
+        input = input_directory + dataset + "_" + era + "_tuples_categorized.root"
         input_arguments.append([input, output_directory, era, dataset, "F"])
 
-input_arguments.append([input_directory + "Data_2025_tuples.root", output_directory, "2025", "Data", "T"])
+#input_arguments.append([input_directory + "Data_2025_tuples.root", output_directory, "2025", "Data", "T"])
 print(input_arguments)
 
 # Loop over each set of input arguments and execute the C++ program

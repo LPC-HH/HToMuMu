@@ -18,7 +18,7 @@ import xgboost as xgb
 root.gROOT.Reset()
 matplotlib.use("Agg")
 plt.style.use(hep.style.CMS)
-use_skim = False ###SHOULD THIS BE SET TO TRUE
+use_skim = False
 root.gROOT.SetBatch(True)
 root.gStyle.SetOptStat(0)
 root.gStyle.SetOptFit(111)
@@ -43,11 +43,11 @@ def copy_and_skim_tree(tuple_path, tuple_name, BDT_path, BDT_name, channel_US, u
     original_tree = original_file.Get("tree_output")
     if use_bsConstrain:
         cuts = (
-            "diMuon_bsConstrainedMass > 100 && diMuon_bsConstrainedMass < 180 && is_" + channel_US + "_category == 1"
+            "diMuon_bsConstrainedMass > 100 && diMuon_bsConstrainedMass < 180 && is_" + channel_US + "_categoryBDT == 1"
         )
     else:
         cuts = (
-            "diMuon_mass > 100 && diMuon_mass < 180 && is_" + channel_US + "_category == 1"
+            "diMuon_mass > 100 && diMuon_mass < 180 && is_" + channel_US + "_categoryBDT == 1"
         )
     skim_file = root.TFile.Open(BDT_path + BDT_name, "RECREATE")
     skim_tree = original_tree.CopyTree(cuts)
@@ -80,7 +80,7 @@ def append_BDT_score(
 
     if not use_skim:
         tuple_path = "../../root_io/tuples/"
-        tuple_name = f"{file_type}_{era}_tuples.root"
+        tuple_name = f"{file_type}_{era}_tuples_categorized.root"
         BDT_path = f"{tuple_path}BDT_score/{channel_US}/{subset_title}/"
         BDT_name = f"{file_type}_{era}_{subset_title}.root"
     else:
@@ -103,9 +103,9 @@ def append_BDT_score(
     file = root.TFile(file_name, "update")
     tree = file.Get("tree_output")
 
-    model_file = f"./modelsMatias/model_{channel_US}_{model_era}_{subset_title}.pkl" ###SHOULD WE SWITCH TO ERA NOT MODEL ERA
+    model_file = f"./models/model_{channel_US}_{model_era}_{subset_title}.pkl" ###SHOULD WE SWITCH TO ERA NOT MODEL ERA
     if use_bsConstrain:
-        model_file = f"./modelsMatias/model_{channel_US}_{model_era}_{subset_title}_bsC.pkl"
+        model_file = f"./models/model_{channel_US}_{model_era}_{subset_title}_bsC.pkl"
         
 
     x_test = df.values
