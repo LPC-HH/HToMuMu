@@ -1,6 +1,21 @@
 import subprocess
 import os
+import sys
 
+if len(sys.argv) < 2:
+    print("Arguments missing: categorization(bdt/kin)")
+    exit()
+
+category_var = sys.argv[1]
+if category_var == "bdt":
+    print("Using BDT recategorization")
+    root_append = "_categorized"
+elif category_var == "kin":
+    print("Using kinematic categorization")
+    root_append = ""
+else:
+    print("[Error] Choose a signal categorization method (bdt/kin)")
+    exit()
 
 # Define the path to your C++ executable
 cpp_executable = "./bin/SkimTuplesggH"
@@ -48,14 +63,14 @@ signal_datasets = [
 input_arguments = []
 
 for era in eras:
-    input = base_input_directory + "Data_" + era + "_tuples_categorized.root"
-    input_arguments.append([input, output_directory, era, "Data", "T"])
+    input = base_input_directory + "Data_" + era + f"_tuples{root_append}.root"
+    input_arguments.append([input, output_directory, era, "Data", "T", category_var])
     for dataset in signal_datasets:
-        input = base_input_directory + dataset + "_" + era + "_tuples_categorized.root"
-        input_arguments.append([input, output_directory, era, dataset, "F"])
+        input = base_input_directory + dataset + "_" + era + f"_tuples{root_append}.root"
+        input_arguments.append([input, output_directory, era, dataset, "F", category_var])
     for dataset in background_datasets:
-        input = base_input_directory + dataset + "_" + era + "_tuples_categorized.root"
-        input_arguments.append([input, output_directory, era, dataset, "F"])
+        input = base_input_directory + dataset + "_" + era + f"_tuples{root_append}.root"
+        input_arguments.append([input, output_directory, era, dataset, "F", category_var])
 
 #input_arguments.append([base_input_directory + "Data_2025_tuples.root", output_directory, "2025", "Data", "T"])
 print(input_arguments)

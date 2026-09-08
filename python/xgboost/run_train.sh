@@ -1,10 +1,11 @@
 #!/bin/bash
 
-if [[ $# -ne 1 ]]; then
-    echo "Use Channel Under Study as argument only!"
+if [[ $# -ne 2 ]]; then
+    echo "Use Channel Under Study and ifReCat as arguments only!"
     exit
 fi
 HIGGS_CHANNEL=$1
+useRecategorization=$2
 
 ## declare an array variable
 declare -a bkg_subset=("Full")
@@ -27,13 +28,20 @@ ifRetrain="T"
 ifOptimize="F"
 doSystematics="F"
 
+echo "Higgs Channel: ${HIGGS_CHANNEL}"
+echo "Eras: ${eras}"
+echo "Retrain? ${ifRetrain}"
+echo "Optimize? ${ifOptimize}"
+echo "Do Systematics? ${doSystematics}"
+echo "Use BDT ReCat? ${useRecategorization}"
+
 # now loop through the above array
 for bs in "${bkg_subset[@]}"; do
     for ss in "${sig_subset[@]}"; do
         echo "--------- B ${bs} - S ${ss} ---------"
         for era in "${eras[@]}"; do
-            #echo "python3 train.py ${HIGGS_CHANNEL} ${era} ${bs} ${ss}"
-            python3 train.py ${HIGGS_CHANNEL} ${era} $ifRetrain $ifOptimize $doSystematics ${bs} ${ss}
+            echo "python3 train.py ${HIGGS_CHANNEL} ${era} $ifRetrain $ifOptimize $doSystematics $useRecategorization ${bs} ${ss}"
+            python3 train.py ${HIGGS_CHANNEL} ${era} $ifRetrain $ifOptimize $doSystematics $useRecategorization ${bs} ${ss}
 
             #for type in "signal" "background" "data"; do
                 #echo "         --- ${era} Skim ${type} ---"

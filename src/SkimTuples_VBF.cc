@@ -8,8 +8,8 @@
 
 int main(int argc, char *argv[]) {
 
-    if (argc != 6) {
-        std::cerr << "Please give 5 arguments: input, output, channel, era, is_data?."
+    if (argc != 7) {
+        std::cerr << "Please give 5 arguments: input, output, channel, era, is_data(T/F), categorization(bdt/kin)"
                   << std::endl;
         return -1;
     }
@@ -19,11 +19,29 @@ int main(int argc, char *argv[]) {
     TString era(argv[3]);
     TString channel(argv[4]);
     const bool is_data = *argv[5] == 'T';
+    TString categorization(argv[6]);
     std::cout << "channel: " << channel << std::endl;
     std::cout << "era: " << era << std::endl;
 
     // Open the input ROOT file and get the TTree
     //TString input_name = input_path + channel + "_" + era + "_tuples.root";
+
+
+    TString category_var;
+    TString output_append;
+
+    if (categorization == "bdt") {
+        category_var = "categoryBDT";
+        output_append = "reCat";
+    } else if (categorization == "kin") {
+        category_var = "category";
+    } else {
+        std::cerr << "Invalid categorization: " << categorization
+                  << ". Must be 'bdt' or 'kin'." << std::endl;
+        return -1;
+    }
+
+    
     TFile inputFile(input_name, "READ");
     if (inputFile.IsZombie()) {
         std::cerr << "Error opening input file!" << std::endl;
@@ -73,20 +91,22 @@ int main(int argc, char *argv[]) {
         "HT_pt10",
         //"weight_no_lumi",
         "weight",
-        "is_VBF_categoryBDT",
 	    "relative_diMuon_mass_error",
         "relative_diMuon_bsConstrainedMass_error",
     };
     for (auto VBF_branch : branches)
         tree_input->SetBranchStatus(VBF_branch, 1);
+    TString VBF_category_branch = "is_VBF_" + category_var;
+    std::cout << "Category branch: " << VBF_category_branch << std::endl;
+    tree_input->SetBranchStatus(VBF_category_branch.Data(), 1);
 
     gROOT->cd();
     // Open the output ROOT file and create a new TTree
-    TFile output_file("./root_io/skim/VBF/" + channel + "_" + era + "_skim.root",
+    TFile output_file("./root_io/skim/VBF" + output_append + "/" + channel + "_" + era + "_skim.root",
                       "RECREATE");
     TTree *tree_output = tree_input->CloneTree(0); // Clone the structure only
 
-    tree_output = tree_input->CopyTree("(is_VBF_categoryBDT == 1) && (diMuon_bsConstrainedMass >= 115. && diMuon_bsConstrainedMass <= 135.)");
+    tree_output = tree_input->CopyTree("(" + VBF_category_branch + "== 1) && (diMuon_bsConstrainedMass >= 115. && diMuon_bsConstrainedMass <= 135.)");
     // Write the selected tree to the output file
     output_file.cd();
     tree_output->Write();

@@ -19,7 +19,7 @@ import mplhep as hep
 # import plotly.io as pio
 # from plotly.io import show
 
-if len(sys.argv) not in [6, 8]:
+if len(sys.argv) not in [7, 9]:
     print(
         "[ERROR] python3 train.py <Channel_under_study> <era> "
         "<ifRetrain T/F> <ifOptimize T/F> <doSystematics T/F> "
@@ -31,6 +31,7 @@ channel_US, era = sys.argv[1], sys.argv[2]
 ifRetrain = True if sys.argv[3] == "T" else False
 ifOptimize = True if sys.argv[4] == "T" else False
 doSystematics = True if sys.argv[5] == "T" else False
+useRecategorization = True if sys.argv[6] == "T" else False
 background_subset = sys.argv[6] if len(sys.argv) == 8 else "Full"
 signal_subset = sys.argv[7] if len(sys.argv) == 8 else "NottH"
 
@@ -38,9 +39,11 @@ signal_subset = sys.argv[7] if len(sys.argv) == 8 else "NottH"
 print("Channel under study: ", channel_US)
 print("Era: ", era)
 print("Retrain: ", ifRetrain)
-print("Do systematics: ", doSystematics)
+print("Optimize: ", ifOptimize)
+print("Do systematics: ",doSystematics)
 print("Background subset: ", background_subset)
 print("Signal subset: ", signal_subset)
+print("Using recatagorization? ", useRecategorization) 
 
 
 DRAW_CORRELATIONS = False
@@ -53,15 +56,29 @@ PLOT_LOSS = True
 SEED = 7
 TEST_SIZE = 0.4
 SAMPLE_SIZE = 1.0
-SIGNAL_REGION = (121, 129)
+SIGNAL_REGION = (121., 129.)
+TRAIN_REGION = (115.,135.)
 
 variables = xgb_utils.get_variables(channel_US, USE_BSCONSTRAIN)
 print("number of variables", len(variables) - 3)
 
 
-test_name = f"{channel_US}_{era}_B{background_subset}_S{signal_subset}"
-plot_path = f"../../plots/xgboost/{channel_US}/B{background_subset}_S{signal_subset}/"
-data_directory = f"../../root_io/skim/{channel_US}/"
+category_var = ""
+file_append = ""
+root_append = ""
+if useRecategorization:
+    plot_path = f"../../plots/xgboost/{channel_US}reCat/B{background_subset}_S{signal_subset}/"
+    data_directory = f"../../root_io/skim/{channel_US}reCat/"
+    category_var = "_categoryBDT"
+    file_append = "reCat"
+    root_append = "_categorized"
+else:
+    plot_path = f"../../plots/xgboost/{channel_US}/B{background_subset}_S{signal_subset}/"
+    data_directory = f"../../root_io/skim/{channel_US}/"
+    category_var = "_category"
+
+test_name = f"{channel_US}{file_append}_{era}_B{background_subset}_S{signal_subset}"
+
 signal_file_name = f"{data_directory}signal_{era}_skim_{signal_subset}.root"
 bkg_file_name = f"{data_directory}background_{era}_skim_{background_subset}.root"
 
@@ -74,6 +91,9 @@ os.makedirs("roc", exist_ok=True)
 
 ##Getting ROOT files into pandas
 print("[INFO]: Creating data frames")
+print(f"[INFO] Signal File Name: {signal_file_name}")
+print(f"[INFO] Background File Name: {bkg_file_name}")
+
 with uproot.open(signal_file_name) as file:
     df_signal = pd.DataFrame(
         file["tree_output"].arrays([var[0] for var in variables], library="np"),
@@ -82,6 +102,7 @@ with uproot.open(bkg_file_name) as file:
     df_bkg = pd.DataFrame(
         file["tree_output"].arrays([var[0] for var in variables], library="np"),
     )
+    
 print("[INFO]: Data frames created successfully")
 
 if USE_BSCONSTRAIN:
@@ -115,8 +136,8 @@ y = np.concatenate([np.zeros(len(df_bkg)), np.ones(len(df_signal))])
 
 ### Apply dimuon mass cut
 print("len y pred cut:", len(y))
-y = y[(x[:, -3] > 115) & (x[:, -3] < 135)]
-x = x[(x[:, -3] > 115) & (x[:, -3] < 135)]
+y = y[(x[:, -3] > TRAIN_REGION[0]) & (x[:, -3] < TRAIN_REGION[1])]
+x = x[(x[:, -3] > TRAIN_REGION[0]) & (x[:, -3] < TRAIN_REGION[1])]
 print("len y post cut:", len(y))
 
 if DRAW_CORRELATIONS:
@@ -171,7 +192,6 @@ if DO_STANDARDIZATION:
         x_test[mask_test, i] = (x_test[mask_test, i] - mean_map[var[0]]) / std_map[
             var[0]
         ]
-
 print("x_train standaried:", x_train)
 
 w_train = np.absolute(sample_weights_train) / np.array(x_train_p[:, -2])
@@ -323,9 +343,9 @@ if ifRetrain:
         )'''
 
         model = xgb.XGBClassifier(
-            max_depth=4,
+            max_depth=3,
             learning_rate=0.1,
-            n_estimators=1000,
+            n_estimators=400,
             verbosity=2,
             n_jobs=4,
             reg_lambda=1.0,
@@ -493,6 +513,7 @@ else:
             std_map,
             DO_STANDARDIZATION,
             USE_BSCONSTRAIN,
+            useRecategorization,
         )
         '''xgb_utils.append_BDT_score(
             file_type,

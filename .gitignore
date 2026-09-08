@@ -11,3 +11,4 @@ scripts/makeDataPileupHist.sh
 *.pdf
 *.jpeg
 *.txt
+yields/

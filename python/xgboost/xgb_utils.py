@@ -37,18 +37,21 @@ luminosity = {
 }
 
 
-def copy_and_skim_tree(tuple_path, tuple_name, BDT_path, BDT_name, channel_US, use_bsConstrain):
+def copy_and_skim_tree(tuple_path, tuple_name, BDT_path, BDT_name, channel_US, use_bsConstrain, category_var):
 
     original_file = root.TFile.Open(tuple_path + tuple_name)
     original_tree = original_file.Get("tree_output")
+    print(f"Original file name: {tuple_path + tuple_name}")
     if use_bsConstrain:
         cuts = (
-            "diMuon_bsConstrainedMass > 100 && diMuon_bsConstrainedMass < 180 && is_" + channel_US + "_categoryBDT == 1"
+            "diMuon_bsConstrainedMass > 100 && diMuon_bsConstrainedMass < 180 && is_" + channel_US + category_var + " == 1"
         )
     else:
         cuts = (
-            "diMuon_mass > 100 && diMuon_mass < 180 && is_" + channel_US + "_categoryBDT == 1"
+            "diMuon_mass > 100 && diMuon_mass < 180 && is_" + channel_US + category_var + " == 1"
         )
+    print("Cutflow: " + cuts)
+    print(f"New BDT file name {BDT_path + BDT_name}")
     skim_file = root.TFile.Open(BDT_path + BDT_name, "RECREATE")
     skim_tree = original_tree.CopyTree(cuts)
     skim_tree.Write("tree_output")
@@ -68,6 +71,7 @@ def append_BDT_score(
     std_map,
     do_standardization,
     use_bsConstrain,
+    use_reCategorization,
     use_skim=False,
 ):
 
@@ -78,23 +82,30 @@ def append_BDT_score(
     elif file_type == "signal":
         tuple_subset = signal_subset
 
+    file_append = ""
+    category_var = "_category"
+    root_append = ""
+    if use_reCategorization:
+        file_append = "reCat"
+        category_var = "_categoryBDT"
+        root_append = "_categorized"
     if not use_skim:
         tuple_path = "../../root_io/tuples/"
-        tuple_name = f"{file_type}_{era}_tuples_categorized.root"
-        BDT_path = f"{tuple_path}BDT_score/{channel_US}/{subset_title}/"
+        tuple_name = f"{file_type}_{era}_tuples{root_append}.root"
+        BDT_path = f"{tuple_path}BDT_score/{channel_US}{file_append}/{subset_title}/"
         BDT_name = f"{file_type}_{era}_{subset_title}.root"
     else:
-        tuple_path = f"../../root_io/skim/{channel_US}/"
-        tuple_name = f"{file_type}_{era}_skim_{tuple_subset}.root"
-        BDT_path = f"../../root_io/skim/BDT_score/{channel_US}/"
+        tuple_path = f"../../root_io/skim/{channel_US}{file_append}/"
+        tuple_name = f"{file_type}_{era}_skim_{tuple_subset}{root_append}.root"
+        BDT_path = f"../../root_io/skim/BDT_score/{channel_US}{file_append}/"
         BDT_name = f"{file_type}_{era}_skim_{subset_title}.root"
 
     os.makedirs(BDT_path, exist_ok=True)
     file_name = BDT_path + BDT_name
     print(f"[INFO] Creating BDT file: {file_name}")
 
-    copy_and_skim_tree(tuple_path, tuple_name, BDT_path, BDT_name, channel_US, use_bsConstrain)
-
+    copy_and_skim_tree(tuple_path, tuple_name, BDT_path, BDT_name, channel_US, use_bsConstrain, category_var)
+    
     with uproot.open(file_name) as file:
         df = pd.DataFrame(
             file["tree_output"].arrays([var[0] for var in variables], library="np"),
@@ -103,10 +114,11 @@ def append_BDT_score(
     file = root.TFile(file_name, "update")
     tree = file.Get("tree_output")
 
-    model_file = f"./models/model_{channel_US}_{model_era}_{subset_title}.pkl" ###SHOULD WE SWITCH TO ERA NOT MODEL ERA
+    model_file = f"./models/model_{channel_US}{file_append}_{model_era}_{subset_title}.pkl" ###SHOULD WE SWITCH TO ERA NOT MODEL ERA
     if use_bsConstrain:
-        model_file = f"./models/model_{channel_US}_{model_era}_{subset_title}_bsC.pkl"
-        
+        model_file = f"./models/model_{channel_US}{file_append}_{model_era}_{subset_title}_bsC.pkl"
+
+    print(f"[INFO] Reading model file: {model_file}")
 
     x_test = df.values
     if do_standardization:
