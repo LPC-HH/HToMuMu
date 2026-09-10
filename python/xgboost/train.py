@@ -50,6 +50,9 @@ USE_WEIGHT_MASS_RES = True
 APPEND_VARIABLES = True
 USE_BSCONSTRAIN = True 
 PLOT_LOSS = True
+READ_STANDARIZATION = False
+if not ifRetrain: 
+    READ_STANDARIZATION = True
 SEED = 7
 TEST_SIZE = 0.4
 SAMPLE_SIZE = 1.0
@@ -151,26 +154,94 @@ x_train[np.isnan(x_train)] = 0.0
 print("x_train:", x_train)
 mean_map = {}
 std_map = {}
+mean_map = {}
+std_map = {}
+
 if DO_STANDARDIZATION:
+
+    preprocessing_file = f"models/preprocessing_{test_name}"
+
+    if USE_BSCONSTRAIN:
+        preprocessing_file += "_bsC"
+
+    preprocessing_file += ".pkl"
+
+    if READ_STANDARIZATION:
+
+        print(f"[INFO] Reading standardization from {preprocessing_file}")
+
+        if not os.path.exists(preprocessing_file):
+            raise FileNotFoundError(
+                f"[ERROR] Preprocessing file not found: {preprocessing_file}"
+            )
+
+        with open(preprocessing_file, "rb") as f:
+            preprocessing_info = pickle.load(f)
+
+        mean_map = preprocessing_info["mean_map"]
+        std_map = preprocessing_info["std_map"]
+
+        saved_variables = preprocessing_info["variables"]
+        current_variables = [var[0] for var in variables[:-3]]
+
+        if saved_variables != current_variables:
+            raise ValueError(
+                "[ERROR] Variables in preprocessing file do not match "
+                "the variables used by the current BDT.\n"
+                f"Saved:   {saved_variables}\n"
+                f"Current: {current_variables}"
+            )
+
+        print("[INFO] Standardization information loaded successfully")
+
+    else:
+        print("[INFO] Calculating standardization from training sample")
+
+        for i, var in enumerate(variables[:-3]):
+
+            null_value = 0
+            if var[0] in ["delta_phi_diJet", "pt_balance"]:
+                null_value = -1
+
+            mask_train = x_train[:, i] != null_value
+
+            mean_map[var[0]] = x_train[mask_train, i].mean()
+            std_map[var[0]] = x_train[mask_train, i].std()
+
+            print("standarizing : ", var[0])
+            print("Iterator : ", i)
+            print("[Info]: Train Sample Mean: ", mean_map[var[0]])
+            print("[Info]: Train Sample std: ", std_map[var[0]])
+
+        # Save standardization
+        preprocessing_info = {
+            "mean_map": mean_map,
+            "std_map": std_map,
+            "variables": [var[0] for var in variables[:-3]],
+        }
+
+        with open(preprocessing_file, "wb") as f:
+            pickle.dump(preprocessing_info, f)
+
+        print(f"[INFO] Saved preprocessing information to {preprocessing_file}")
+
     for i, var in enumerate(variables[:-3]):
-        print("standarizing : ", var[0])
-        print("Iterator : ", i)
+
         null_value = 0
         if var[0] in ["delta_phi_diJet", "pt_balance"]:
             null_value = -1
 
         mask_train = x_train[:, i] != null_value
         mask_test = x_test[:, i] != null_value
-        mean_map[var[0]] = x_train[mask_train, i].mean()
-        std_map[var[0]] = x_train[mask_train, i].std()
-        print("[Info]: Train Sample Mean: ", mean_map[var[0]])
-        print("[Info]: Train Sample std: ", std_map[var[0]])
-        x_train[mask_train, i] = (x_train[mask_train, i] - mean_map[var[0]]) / std_map[
-            var[0]
-        ]
-        x_test[mask_test, i] = (x_test[mask_test, i] - mean_map[var[0]]) / std_map[
-            var[0]
-        ]
+
+        x_train[mask_train, i] = (
+            x_train[mask_train, i] - mean_map[var[0]]
+        ) / std_map[var[0]]
+
+        x_test[mask_test, i] = (
+            x_test[mask_test, i] - mean_map[var[0]]
+        ) / std_map[var[0]]
+
 
 print("x_train standaried:", x_train)
 
@@ -263,7 +334,7 @@ if ifRetrain:
             verbosity=2,
             n_jobs=4,
             eval_metric=["logloss", "auc"],
-            early_stopping_rounds=50
+            early_stopping_rounds=50,
         )
     
         model.fit(
@@ -289,7 +360,7 @@ if ifRetrain:
             verbosity=2,
             n_jobs=4,
             eval_metric=["logloss", "auc"],
-            early_stopping_rounds=50
+            early_stopping_rounds=50,
         )
 
     else:
@@ -321,6 +392,18 @@ if ifRetrain:
             reg_lambda=1.0,
             device='cuda',
         )
+        # model = xgb.XGBClassifier(
+            # max_depth=4,
+            # learning_rate=0.1,
+            # n_estimators=1000,
+            # verbosity=2,
+            # n_jobs=4,
+            # reg_lambda=1.0,
+            # eval_metric=["logloss", "auc"],
+            # early_stopping_rounds=50,
+            # tree_method="hist",
+            # device="cuda",
+        # )
 
     print("weights: ", sample_weights_train)
     print("abs(weights): ", np.absolute(sample_weights_train[y_train == 1]))
@@ -431,19 +514,28 @@ if ifRetrain:
         plot_path,
         scale="linear",
     )
-
+    
     xgb_utils.plot_BDT_sculpting(
-        y_pred, 
-        y_pred_train,
+        y_pred,
         y_test,
-        y_train,
         x_test_p,
-        x_train_p,
         channel_US,
         era,
         plot_path,
         bdt_divisions=6
     )
+    # xgb_utils.plot_BDT_sculpting(
+        # y_pred, 
+        # y_pred_train,
+        # y_test,
+        # y_train,
+        # x_test_p,
+        # x_train_p,
+        # channel_US,
+        # era,
+        # plot_path,
+        # bdt_divisions=6
+    # )
 
     results = model.evals_result()
 
@@ -468,7 +560,7 @@ if not APPEND_VARIABLES:
 else: 
     print("[INFO]: Adding BDT score to the nominal tuples")
     tuples = ["Data", "DY", "EWK", "TT", "DiBoson", "ggH", "VBF"]
-    # tuples = ["Data","ggH", "VBF"]
+    # tuples = ["Data", "ggH", "VBF"]
     for file_type in tuples:
         xgb_utils.append_BDT_score(
             file_type,
@@ -553,19 +645,7 @@ else:
             USE_BSCONSTRAIN,
         )
         
-        xgb_utils.append_BDT_score(
-            file_type,
-            channel_US,
-            "2024",
-            "Combined",
-            signal_subset,
-            background_subset,
-            variables[:-3],
-            mean_map,
-            std_map,
-            DO_STANDARDIZATION,
-            USE_BSCONSTRAIN,
-        )'''
+        '''
 
 if doSystematics:
     print("[INFO]: Addeding BDT score to the systematic tuples")

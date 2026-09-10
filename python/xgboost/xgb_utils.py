@@ -32,8 +32,12 @@ luminosity = {
     "2023BPix": 9.451,
     "2023Combined": 27.245,
     "2024": 	109.08,
+    "2024": 	109.08,
     # "Combined": 61.897,
-    "Combined": 170.905,
+    "2025": 110.73,
+    # "Combined": "61.89",
+    # "Combined": "170.97",
+    "Combined": 281.7
 }
 
 
@@ -72,17 +76,22 @@ def append_BDT_score(
 ):
 
     subset_title = f"B{background_subset}_S{signal_subset}"
+
     tuple_subset = ""
-    if file_type == "background" or file_type == "bkg":
+
+    if file_type in ["background", "bkg"]:
         tuple_subset = background_subset
     elif file_type == "signal":
         tuple_subset = signal_subset
 
+
     if not use_skim:
         tuple_path = "../../root_io/tuples/"
         tuple_name = f"{file_type}_{era}_tuples.root"
+
         BDT_path = f"{tuple_path}BDT_score/{channel_US}/{subset_title}/"
         BDT_name = f"{file_type}_{era}_{subset_title}.root"
+
     else:
         tuple_path = f"../../root_io/skim/{channel_US}/"
         tuple_name = f"{file_type}_{era}_skim_{tuple_subset}.root"
@@ -90,77 +99,200 @@ def append_BDT_score(
         BDT_name = f"{file_type}_{era}_skim_{subset_title}.root"
 
     os.makedirs(BDT_path, exist_ok=True)
+
     file_name = BDT_path + BDT_name
-    print(f"[INFO] Creating BDT file: {file_name}")
 
-    copy_and_skim_tree(tuple_path, tuple_name, BDT_path, BDT_name, channel_US, use_bsConstrain)
+    print("=" * 80)
+    print(f"[INFO] File type:    {file_type}")
+    print(f"[INFO] Channel:      {channel_US}")
+    print(f"[INFO] Era:          {era}")
+    print(f"[INFO] Model era:    {model_era}")
+    print(f"[INFO] Input:        {tuple_path + tuple_name}")
+    print(f"[INFO] Output:       {file_name}")
+    print("=" * 80)
 
-    with uproot.open(file_name) as file:
-        df = pd.DataFrame(
-            file["tree_output"].arrays([var[0] for var in variables], library="np"),
-        )
+    print("[INFO] Skimming tuple")
 
-    file = root.TFile(file_name, "update")
-    tree = file.Get("tree_output")
-
-    model_file = f"./modelsMatias/model_{channel_US}_{model_era}_{subset_title}.pkl" ###SHOULD WE SWITCH TO ERA NOT MODEL ERA
-    if use_bsConstrain:
-        model_file = f"./modelsMatias/model_{channel_US}_{model_era}_{subset_title}_bsC.pkl"
-        
-
-    x_test = df.values
-    if do_standardization:
-        for i, var in enumerate(variables):
-            print("standarizing : ", var[0])
-            print("Iterator : ", i)
-            null_value = 0
-            if var[0] in ["delta_phi_diJet", "pt_balance"]:
-                null_value = -1
-            mask = x_test[:, i] != null_value
-            x_test[mask, i] = (x_test[mask, i] - mean_map[var[0]]) / std_map[var[0]]
-
-    # get model from file
-    with open(model_file, "rb") as pkl_file:
-        model = pickle.load(pkl_file)
-
-    # make predictions for test data
-    y_pred = model.predict_proba(x_test)[:, 1]
-    print("y_pred", y_pred)
-    # Debug histogram (optional)
-    plt.figure()
-    plt.hist(y_pred, bins=50, alpha=0.3)
-    plt.title(f"Discriminator - {file_type} {era}")
-    plt.savefig(f"mydiscriminator_{era}.png")
-
-    ##Creating a new TTree with the discriminator
-
-    n_entries = tree.GetEntries()
-    print("n_entries = ", n_entries)
-    BDT_var_name = "BDT_" + channel_US
-
-    root.gROOT.ProcessLine("struct MyStruct{float BDT_var;};")
-
-    from ROOT import MyStruct
-
-    # Create branches in the tree
-    my_struct = MyStruct()
-    print(my_struct)
-    print(root.addressof(my_struct))
-    print(root.addressof(my_struct, "BDT_var"))
-    root.addressof(my_struct, "BDT_var")
-    new_branch = tree.Branch(
-        BDT_var_name, root.addressof(my_struct, "BDT_var"), f"{BDT_var_name}/F"
+    copy_and_skim_tree(
+        tuple_path,
+        tuple_name,
+        BDT_path,
+        BDT_name,
+        channel_US,
+        use_bsConstrain,
     )
 
-    for i in range(n_entries):
-        tree.GetEntry(i)
-        if i % 10000 == 0:
-            print(f"[INFO] Processing entry {i} of {n_entries}")
-        my_struct.BDT_var = y_pred[i]
+    variable_names = [var[0] for var in variables]
+
+    model_name = f"model_{channel_US}_{model_era}_{subset_title}"
+    preprocessing_name = f"preprocessing_{channel_US}_{model_era}_{subset_title}"
+
+    if use_bsConstrain:
+        model_name += "_bsC"
+        preprocessing_name += "_bsC"
+
+    model_file = f"./models/{model_name}.pkl"
+    preprocessing_file = f"./models/{preprocessing_name}.pkl"
+
+    print(f"[INFO] Loading model: {model_file}")
+    print(f"[INFO] Loading preprocessing: {preprocessing_file}")
+
+    with open(model_file, "rb") as f:
+        model = pickle.load(f)
+
+    with open(preprocessing_file, "rb") as f:
+        preprocessing = pickle.load(f)
+
+    saved_mean_map = preprocessing["mean_map"]
+    saved_std_map = preprocessing["std_map"]
+    training_variables = preprocessing["variables"]
+
+    if training_variables != variable_names:
+        raise RuntimeError(
+            "Variable list in preprocessing file does not "
+            "match the current BDT variable list.\n"
+            f"Training: {training_variables}\nCurrent:  {variable_names}"
+        )
+
+    print("[INFO] Reading BDT variables")
+
+    with uproot.open(file_name) as f:
+        if "tree_output" not in f:
+            raise RuntimeError(f"tree_output not found in {file_name}")
+
+        arrays = f["tree_output"].arrays(variable_names, library="np")
+
+    if len(variable_names) > 0:
+        x_test = np.column_stack([arrays[name] for name in variable_names]).astype(np.float32)
+
+    else:
+        x_test = np.empty((0, 0), dtype=np.float32)
+
+    number_of_events = len(x_test)
+
+    print(f"[INFO] Number of events after skimming: {number_of_events}")
+
+    if do_standardization and number_of_events > 0:
+        print("[INFO] Standardizing variables")
+
+        for i, variable in enumerate(variables):
+
+            variable_name = variable[0]
+
+            null_value = 0.0
+
+            if variable_name in ["delta_phi_diJet", "pt_balance"]:
+                null_value = -1.0
+
+            if variable_name not in saved_mean_map:
+                raise KeyError(f"Mean missing for {variable_name}")
+
+            if variable_name not in saved_std_map:
+                raise KeyError(f"Std missing for {variable_name}")
+
+            if saved_std_map[variable_name] == 0:
+                raise ValueError(f"Std is zero for {variable_name}")
+
+            mask = (
+                x_test[:, i] != null_value
+            )
+
+            x_test[mask, i] = (
+                x_test[mask, i]
+                - saved_mean_map[variable_name]
+            ) / saved_std_map[variable_name]
+
+
+    if number_of_events > 0:
+
+        booster = model.get_booster()
+        booster_feature_names = booster.feature_names
+
+        if (
+            booster_feature_names is not None
+            and len(booster_feature_names)
+            != x_test.shape[1]
+        ):
+            raise RuntimeError(
+                "Number of variables does not match model: "
+                f"model={len(booster_feature_names)}, input={x_test.shape[1]}"
+            )
+
+        if booster_feature_names is not None:
+            dtest = xgb.DMatrix(
+                x_test,
+                feature_names=booster_feature_names,
+            )
+
+        else:
+            dtest = xgb.DMatrix(x_test)
+
+        try:
+            best_iteration = booster.best_iteration
+
+        except (AttributeError, TypeError):
+
+            best_iteration = None
+
+        if best_iteration is not None:
+            y_pred = booster.predict(
+                dtest,
+                iteration_range=(
+                    0,
+                    best_iteration + 1,
+                ),
+            )
+
+        else:
+            y_pred = booster.predict(dtest)
+
+        y_pred = np.asarray(y_pred, dtype=np.float32,)
+
+    else:
+        y_pred = np.array([], dtype=np.float32)
+
+    print("[INFO] BDT predictions calculated")
+
+    print("[INFO] Adding BDT branch")
+
+    root_file = root.TFile.Open(file_name, "UPDATE")
+
+    if not root_file or root_file.IsZombie():
+        raise RuntimeError(f"Could not open {file_name}")
+
+    tree = root_file.Get("tree_output")
+
+    if not tree:
+        root_file.Close()
+        raise RuntimeError("tree_output not found")
+
+    n_entries = tree.GetEntries()
+
+    if n_entries != len(y_pred):
+        root_file.Close()
+
+        raise RuntimeError(f"Entry mismatch: tree={n_entries},predictions={len(y_pred)}")
+
+    BDT_var_name = f"BDT_{channel_US}"
+
+    BDT_value = array("f",[0.0])
+
+    new_branch = tree.Branch(BDT_var_name, BDT_value,f"{BDT_var_name}/F")
+
+    for entry_index in range(n_entries):
+        tree.GetEntry(entry_index)
+
+        if entry_index % 10000 == 0:
+            print(f"[INFO] Processing {entry_index}/{n_entries}")
+
+        BDT_value[0] = float(y_pred[entry_index])
         new_branch.Fill()
 
-    tree.GetCurrentFile().Write()
-    tree.GetCurrentFile().Close()
+    tree.Write("", root.TObject.kOverwrite,)
+
+    root_file.Close()
+
+    print(f"[INFO] Finished: {file_name}")
 
 
 def append_BDT_score_to_sys(
@@ -932,55 +1064,165 @@ def plot_loss(test_loss, train_loss, test_name, plot_path, era):
     plt.savefig(f"{plot_path}training/loss_{test_name}.pdf")
     plt.savefig(f"{plot_path}training/loss_{test_name}.png")
 
+
 def plot_BDT_sculpting(
-    y_pred, 
-    y_pred_train,
+    y_pred,
     y_test,
-    y_train,
     x_test_p,
-    x_train_p,
     channel_US,
     era,
     plot_path,
-    bdt_divisions=10):
+    bdt_divisions=10
+):
     
     mass_low = 115
     mass_high = 135
+
     hep.style.use("CMS")
+    colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
     fig, ax = plt.subplots()
-    
+
     hep.cms.label(
         data="False",
         label="",
         year=era,
         com="13.6",
         lumi=str(luminosity[era]),
+        ax=ax,
     )
-    ax.set_xlabel('$M_{\mu\mu}$')
+
+    ax.set_xlabel(r'$M_{\mu\mu}$')
     ax.set_ylabel('Normalized Events')
     ax.set_title("BDT Sculpting " + channel_US, y=-0.15)
 
-    diMuon_mass_BSC = np.concatenate((x_test_p[:, -3][y_test == 0],x_train_p[:, -3][y_train == 0]))
-    total_weights = np.concatenate((x_test_p[:, -1][y_test == 0],x_train_p[:, -1][y_train == 0]))
-    bdt_score = np.concatenate((y_pred[y_test == 0],y_pred_train[y_train == 0]))
+    background_mask = (y_test == 0)
 
-    for bdt_cut in np.linspace(0,1-1/bdt_divisions,bdt_divisions):
-        bdt_spacing = 1/bdt_divisions
-        bdt_low = bdt_cut
-        bdt_high = bdt_low + bdt_spacing
-        
-        mask = (bdt_score > bdt_low) & (diMuon_mass_BSC > mass_low) & (diMuon_mass_BSC < mass_high)
-        hep.style.use("CMS")
-    
-        counts, bins = np.histogram(diMuon_mass_BSC[mask], bins=20, weights=total_weights[mask])
-        counts = counts / counts.sum()
-    
-        hep.histplot(counts, bins=bins, ax=ax, label=f"BDT > {bdt_low:.2f}")
-        
+    diMuon_mass_BSC = x_test_p[:, -3][background_mask]
+    total_weights = x_test_p[:, -1][background_mask]
+    bdt_score = y_pred[background_mask]
+
+    bins = np.linspace(mass_low, mass_high, 21)
+
+
+    for i, bdt_cut in enumerate(np.linspace(0, 1 - 1 / bdt_divisions, bdt_divisions)):
+
+        color = colors[i % len(colors)]
+
+        mask = (
+            (bdt_score > bdt_cut)
+            & (diMuon_mass_BSC > mass_low)
+            & (diMuon_mass_BSC < mass_high)
+        )
+
+        masses = diMuon_mass_BSC[mask]
+        weights = total_weights[mask]
+
+        counts, _ = np.histogram(masses, bins=bins, weights=weights)
+
+        sumw2, _ = np.histogram(masses, bins=bins, weights=weights**2)
+
+        errors = np.sqrt(sumw2)
+
+        normalization = counts.sum()
+
+        if normalization == 0:
+            continue
+
+        counts_norm = counts / normalization
+        errors_norm = errors / normalization
+
+        # Histogram
+        hep.histplot(
+            counts_norm,
+            bins=bins,
+            ax=ax,
+            label=f"BDT > {bdt_cut:.2f}",
+            color=color
+        )
+
+        # Statistical uncertainty
+        bin_centers = 0.5 * (bins[:-1] + bins[1:])
+
+        # ax.errorbar(
+            # bin_centers,
+            # counts_norm,
+            # yerr=errors_norm,
+            # fmt='none',
+            # color=color,
+            # capsize=2
+        # )
+        ax.errorbar(
+            bin_centers,
+            counts_norm,
+            yerr=errors_norm,
+            fmt='none',
+            color=color,
+            capsize=1.5,
+            elinewidth=0.8,
+            alpha=0.8
+        )
+
+
     ax.legend(bbox_to_anchor=(1.02, 1), loc='upper left')
     os.makedirs(f"{plot_path}training/", exist_ok=True)
-    plt.savefig(f"{plot_path}training/BDTsculpting_{channel_US}_{era}.pdf", bbox_inches="tight")
-    plt.savefig(f"{plot_path}training/BDTsculpting_{channel_US}_{era}.png", bbox_inches="tight")
+
+    plt.savefig(f"{plot_path}training/BDTsculpting_{channel_US}_{era}.pdf",
+        bbox_inches="tight")
+
+    plt.savefig(f"{plot_path}training/BDTsculpting_{channel_US}_{era}.png",
+        bbox_inches="tight")
+
+    plt.close(fig)
+
+# def plot_BDT_sculpting(
+    # y_pred, 
+    # y_pred_train,
+    # y_test,
+    # y_train,
+    # x_test_p,
+    # x_train_p,
+    # channel_US,
+    # era,
+    # plot_path,
+    # bdt_divisions=10):
+    
+    # mass_low = 115
+    # mass_high = 135
+    # hep.style.use("CMS")
+    # fig, ax = plt.subplots()
+    
+    # hep.cms.label(
+        # data="False",
+        # label="",
+        # year=era,
+        # com="13.6",
+        # lumi=str(luminosity[era]),
+    # )
+    # ax.set_xlabel('$M_{\mu\mu}$')
+    # ax.set_ylabel('Normalized Events')
+    # ax.set_title("BDT Sculpting " + channel_US, y=-0.15)
+
+    # diMuon_mass_BSC = np.concatenate((x_test_p[:, -3][y_test == 0],x_train_p[:, -3][y_train == 0]))
+    # total_weights = np.concatenate((x_test_p[:, -1][y_test == 0],x_train_p[:, -1][y_train == 0]))
+    # bdt_score = np.concatenate((y_pred[y_test == 0],y_pred_train[y_train == 0]))
+
+    # for bdt_cut in np.linspace(0,1-1/bdt_divisions,bdt_divisions):
+        # bdt_spacing = 1/bdt_divisions
+        # bdt_low = bdt_cut
+        # bdt_high = bdt_low + bdt_spacing
+        
+        # mask = (bdt_score > bdt_low) & (diMuon_mass_BSC > mass_low) & (diMuon_mass_BSC < mass_high)
+        # hep.style.use("CMS")
+    
+        # counts, bins = np.histogram(diMuon_mass_BSC[mask], bins=20, weights=total_weights[mask])
+        # counts = counts / counts.sum()
+    
+        # hep.histplot(counts, bins=bins, ax=ax, label=f"BDT > {bdt_low:.2f}")
+        
+    # ax.legend(bbox_to_anchor=(1.02, 1), loc='upper left')
+    # os.makedirs(f"{plot_path}training/", exist_ok=True)
+    # plt.savefig(f"{plot_path}training/BDTsculpting_{channel_US}_{era}.pdf", bbox_inches="tight")
+    # plt.savefig(f"{plot_path}training/BDTsculpting_{channel_US}_{era}.png", bbox_inches="tight")
     
 
 if __name__ == "__main__":

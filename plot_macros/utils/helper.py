@@ -51,8 +51,6 @@ def save_figure(fig, outputDirectory, name):
 
     os.makedirs(outputDirectory, exist_ok=True)
     fig.savefig(outputDirectory + name + ".pdf", bbox_inches="tight")
-    fig.savefig(outputDirectory + name + ".png", bbox_inches="tight", dpi=300)
-    fig.savefig(outputDirectory + name + ".pdf")
     fig.savefig(outputDirectory + name + ".png", dpi=300)
     print(outputDirectory + name + " Has been created")
 

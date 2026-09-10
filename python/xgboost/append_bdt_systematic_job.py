@@ -40,8 +40,8 @@ signal_subset = sys.argv[7]
 DO_STANDARDIZATION = True
 USE_BSCONSTRAIN = True
 
-ANALYZER_VERSION = "v2.0"
-TUPLES_VERSION = "v2.0.0"
+ANALYZER_VERSION = "v2.1"
+TUPLES_VERSION = "v2.1.0"
 
 subset_title = f"B{background_subset}_S{signal_subset}"
 

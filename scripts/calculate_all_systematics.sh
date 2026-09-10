@@ -1,0 +1,3 @@
+python3 scripts/print_systematics_eff.py
+python3 scripts/print_systematics_pileup.py
+python3 scripts/print_systematics_pt.py

@@ -724,9 +724,9 @@
         "tagNameL2Relative": "Summer23Prompt23_V4_MC_L2Relative_AK4PFPuppi"
       },
       "JerNominal": {
-        "tagNamePtResolution": "Summer23Prompt23_RunCv1234_JRV2_MC_PtResolution_AK4PFPuppi",
-        "tagNameJerScaleFactor": "Summer23Prompt23_RunCv1234_JRV2_MC_ScaleFactor_AK4PFPuppi",
-        "tagNameJerSFUncertainty": "Summer23Prompt23_RunCv1234_JRV2_MC_SFUncertainty_AK4PFPuppi"
+        "tagNamePtResolution": "Summer23Prompt23_RunCv1234_JRV3_MC_PtResolution_AK4PFPuppi",
+        "tagNameJerScaleFactor": "Summer23Prompt23_RunCv1234_JRV3_MC_ScaleFactor_AK4PFPuppi",
+        "tagNameJerSFUncertainty": "Summer23Prompt23_RunCv1234_JRV3_MC_SFUncertainty_AK4PFPuppi"
       },
       "JesUncertaintySet": {
         "JesUncertaintySetFull": {
@@ -842,9 +842,9 @@
         "tagNameL2Relative": "Summer23BPixPrompt23_V4_MC_L2Relative_AK4PFPuppi"
       },
       "JerNominal": {
-        "tagNamePtResolution": "Summer23BPixPrompt23_RunD_JRV2_MC_PtResolution_AK4PFPuppi",
-        "tagNameJerScaleFactor": "Summer23BPixPrompt23_RunD_JRV2_MC_ScaleFactor_AK4PFPuppi",
-        "tagNameJerSFUncertainty": "Summer23BPixPrompt23_RunD_JRV2_MC_SFUncertainty_AK4PFPuppi"
+        "tagNamePtResolution": "Summer23BPixPrompt23_RunD_JRV3_MC_PtResolution_AK4PFPuppi",
+        "tagNameJerScaleFactor": "Summer23BPixPrompt23_RunD_JRV3_MC_ScaleFactor_AK4PFPuppi",
+        "tagNameJerSFUncertainty": "Summer23BPixPrompt23_RunD_JRV3_MC_SFUncertainty_AK4PFPuppi"
       },
       "JesUncertaintySet": {
         "JesUncertaintySetFull": {

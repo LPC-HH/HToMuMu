@@ -211,6 +211,7 @@ void HmmAnalyzer::EventLoop() {
         float value_h_sumOfgpw = h_sumOfgpw->GetBinContent(1);
         float puWeight, puWeightUp, puWeightDown;
 
+
         if (!is_data) {
             value_h_sumOfgw = value_h_sumOfgw + genWeight;
             puWeight = getPileupWeight(Pileup_nTrueInt);
@@ -220,12 +221,54 @@ void HmmAnalyzer::EventLoop() {
             h_pileup_nTrue->Fill(Pileup_nTrueInt);
 
             value_h_sumOfgpw = value_h_sumOfgpw + genWeight * puWeight;
+
+            for (unsigned int i = 0; i < nLHEPdfWeight; i++) {
+                t_LHEPdfWeight->push_back(LHEPdfWeight[i]);
+            }
+
+            for (unsigned int i = 0; i < nLHEScaleWeight; i++) {
+                t_LHEScaleWeight->push_back(LHEScaleWeight[i]);
+            }
+
+            for (unsigned int i = 0; i < nLHEPdfWeight; i++) {
+                h_sumOfLHEPdfWeight->AddBinContent(
+                    i + 1,
+                    genWeight * LHEPdfWeight[i]
+                );
+            }
+
+            // Sum scale weights over all events
+            for (unsigned int i = 0; i < nLHEScaleWeight; i++) {
+                h_sumOfLHEScaleWeight->AddBinContent(
+                    i + 1,
+                    genWeight * LHEScaleWeight[i]
+                );
+            }
+
         } else {
             value_h_sumOfgw = value_h_sumOfgw + 1.0;
             value_h_sumOfgpw = value_h_sumOfgpw + 1.0;
+            
+            t_LHEPdfWeight->assign(N_LHE_PDF_WEIGHTS, 1.0f);
+            t_LHEScaleWeight->assign(N_LHE_SCALE_WEIGHTS, 1.0f);
+
+            if (is_data) {
+
+                for (unsigned int i = 0; i < N_LHE_PDF_WEIGHTS; i++) {
+                    h_sumOfLHEPdfWeight->SetBinContent(i + 1, 1.0);
+                }
+
+                for (unsigned int i = 0; i < N_LHE_SCALE_WEIGHTS; i++) {
+                    h_sumOfLHEScaleWeight->SetBinContent(i + 1, 1.0);
+                }
+            }
+
+
         }
+        
         h_sumOfgw->SetBinContent(1, value_h_sumOfgw);
         h_sumOfgpw->SetBinContent(1, value_h_sumOfgpw);
+
 
         bool trig_decision = (HLT_IsoMu24 == 1);
 
@@ -655,6 +698,7 @@ void HmmAnalyzer::EventLoop() {
 
         float leadJet_pt = FLOAT_NULL_VALUE; 
         float subleadJet_pt = FLOAT_NULL_VALUE;
+        
         for (int j = 0; j < nJet; j++) {
             h_nJets->Fill(0.5);
             //std::cout << "looking at jet " << j << std::endl;
@@ -909,7 +953,27 @@ void HmmAnalyzer::EventLoop() {
             // t_Jet_btagCMVA->push_back(Jet_btagCMVA[j]);
             // t_Jet_btagCSVV2->push_back(Jet_btagCSVV2[j]);
             t_Jet_btagDeepB->push_back(Jet_btagDeepFlavB[j]);
+            t_Jet_btagDeepFlavQG->push_back(Jet_btagDeepFlavQG[j]);
             t_Jet_btagPNetB->push_back(Jet_btagPNetB[j]);
+            t_Jet_btagPNetQvG->push_back(Jet_btagPNetQvG[j]);
+
+            if (NANOAOD_VERSION.at(year) == "v15") {
+
+                t_Jet_chMultiplicity->push_back(Jet_chMultiplicity[j]);
+                t_Jet_neMultiplicity->push_back(Jet_neMultiplicity[j]);
+
+                t_Jet_btagUParTAK4QvG->push_back(Jet_btagUParTAK4QvG[j]);
+                t_Jet_btagUParTAK4B->push_back(Jet_btagUParTAK4B[j]);
+
+            } else {
+
+                t_Jet_chMultiplicity->push_back(INT_NULL_VALUE);
+                t_Jet_neMultiplicity->push_back(INT_NULL_VALUE);
+
+                t_Jet_btagUParTAK4QvG->push_back(FLOAT_NULL_VALUE);
+                t_Jet_btagUParTAK4B->push_back(FLOAT_NULL_VALUE);
+            }
+
             t_Jet_chEmEF->push_back(Jet_chEmEF[j]);
             t_Jet_chHEF->push_back(Jet_chHEF[j]);
             t_Jet_eta->push_back(Jet_eta[j]);
@@ -946,7 +1010,9 @@ void HmmAnalyzer::EventLoop() {
             t_Jet_pt_nanoAOD->push_back(Jet_pt[j]);
             // t_Jet_qgl->push_back(Jet_qgl[j]);
             // t_Jet_jetId->push_back(Jet_jetId[j]);
+
             t_Jet_nConstituents->push_back(Jet_nConstituents[j]);
+            
             t_Jet_nElectrons->push_back(Jet_nElectrons[j]);
             t_Jet_nMuons->push_back(Jet_nMuons[j]);
             // t_Jet_puId->push_back(Jet_puId[j]);
