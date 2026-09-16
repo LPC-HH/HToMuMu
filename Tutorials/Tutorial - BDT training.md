@@ -89,6 +89,13 @@ bash hadd_tuples.sh
 
 If you want to add a variable to the tuples, you just need to go to ./lib/CreateTuple.h add the variable to the CreateTuple class, and to the CreateTuple::setBranchesAddressesInput() method.
 
+### Copy tuples
+If instead you want to copy tuples over from EOS:
+```
+cd root_io/tuples/
+bash copy_hadd_tuples.sh <tuples_version (eg: 1.0.0)>
+``` 
+
 # Plotting 
 
 ## BDT Training 
@@ -104,8 +111,13 @@ You can change the datasets by changing the lists `eras`, `background_datasets`,
 
 Run
 ```
-python3 ./scripts/run_skim_ggH.py
-python3 ./scripts/run_skim_VBF.py
+python3 ./scripts/run_skim_ggH.py (bdt/kin)
+python3 ./scripts/run_skim_VBF.py (bdt/kin)
+```
+
+If you want to run all of the skimming for the recategorization and standard kinematic approach at once:
+```
+python3 scripts/run_skim_ggH.py bdt & python3 scripts/run_skim_ggH.py kin & python3 scripts/run_skim_VBF.py bdt & python3 scripts/run_skim_VBF.py kin
 ```
 
 Once we have the skim tuples, you must hadd to have one background tuple and one signal sample, you can just do
