@@ -115,7 +115,7 @@ def get_yields(bkg_branches, signal_branches, bdt_categories):
     total_region = (110.0, 150.0)
     yields = []
     for i in range(len(bdt_categories) - 1):
-        #print(f'Cat: {i + 1} of {len(bdt_categories) + 1}')
+        print(f'Cat: {len(bdt_categories) - i - 1} of {len(bdt_categories) - 1}')
         bdt_cut_min = bdt_categories[i]
         bdt_cut_max = bdt_categories[i+1]
 
@@ -136,7 +136,7 @@ def get_yields(bkg_branches, signal_branches, bdt_categories):
 
         bkg_bool_list_SR = (
             (bkg_branches[diMuon_mass_name] > signal_region[0])
-            & (bkg_branches[diMuon_mass_name] < total_region[1])
+            & (bkg_branches[diMuon_mass_name] < signal_region[1])
             & (bkg_branches[BDT_var] > bdt_cut_min)
             & (bkg_branches[BDT_var] < bdt_cut_max)
             & (bkg_branches["is_" + channel_US + "_" + category_var] == 1)
@@ -163,7 +163,7 @@ def get_yields(bkg_branches, signal_branches, bdt_categories):
             bkg_branches["weight"][bkg_bool_list_SR]
         )
         category_name = f"{channel_US}cat{len(bdt_categories) - i - 1}"
-        yieldsCat = {'Category': channel_US+str(i+1), 'Total Sig': signal_events_total, 'Total Bkg': bkg_events_total, 'Sig SR': signal_events_SR, 'Bkg SR': bkg_events_SR, 'S/sqrt(B) SR': signal_events_SR/math.sqrt(bkg_events_SR), 'Method': flag}
+        yieldsCat = {'Category': channel_US+str(len(bdt_categories) - i - 1), 'Total Sig': round(signal_events_total, 2), 'Total Bkg': round(bkg_events_total, 2), 'Sig SR': round(signal_events_SR, 2), 'Bkg SR': round(bkg_events_SR, 2), 'S/sqrt(B) SR': round(signal_events_SR/math.sqrt(bkg_events_SR), 2)}
         yields.append(yieldsCat)
     return yields
 
@@ -382,6 +382,8 @@ def draw_bdt_categories(era):
         bkg_bool_list = (
             (bkg_branches[diMuon_mass_name] > 110)
             & (bkg_branches[diMuon_mass_name] < 150)
+            & ((bkg_branches[diMuon_mass_name] < 120)
+            | (bkg_branches[diMuon_mass_name] > 130))
             & (bkg_branches["is_" + channel_US + "_" + category_var] == 1)
         )
         print(f'Max BDTtrans value {np.max(np.arctanh(bkg_branches[BDT_var][bkg_bool_list]))}')
@@ -453,7 +455,9 @@ def draw_bdt_categories(era):
     yields = get_yields(bkg_branches, signal_branches, bdt_categories)
 
     df_yields = pd.DataFrame(yields)
-    df_yields.to_csv(f"../yields/BDTcatYields{channel_US}{file_append}.csv", index=False)
+    csv_file = f"../yields/BDTcatYields{channel_US}{file_append}.csv"
+    print(f"Creating CSV file: {csv_file}")
+    df_yields.to_csv(csv_file, index=False)
 
     draw_bdt_output_plot(era, bkg_hist, bkg_bins, data_hist, data_bins, signal_hist, signal_bins,
                           bkg_branches, signal_branches, bdt_categories, normalize=True)
@@ -505,7 +509,7 @@ def draw_bdt_output_plot(era, bkg_hist, bkg_bins, data_hist, data_bins, signal_h
         data="True",
         label="",
         com="13.6",
-        # lumi=luminosity[era],
+        lumi=luminosity[era],
         ax=axs[0],
     )
 
