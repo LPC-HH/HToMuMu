@@ -8,12 +8,12 @@ from bdt_categories_io import load_bdt_categories, get_bdt_cuts
 production_channel = ""
 bdt_subset = ""
 use_categories = False
-version = "2.0.0"
+version = "2.2.0"
 
 if len(sys.argv) >= 2:
     production_channel = sys.argv[1]
 
-    if production_channel not in ["ggH", "VBF"]:
+    if production_channel not in ["ggH", "VBF", "ggHreCat", "VBFreCat"]:
         print("ERROR: channel must be ggH or VBF")
         sys.exit(1)
 
@@ -45,30 +45,6 @@ signal_sources = [
 ]
 bdt_categories_info = load_bdt_categories()
 bdt_mass_variable = "diMuon_bsConstrainedMass"
-
-bdt_selections = {
-    "ggH": {
-        "BFull_SNottH": [0.0, 0.45, 0.62, 0.8, 0.91, 1.0],
-    },
-    "VBF": {
-        "BFull_SNottH":[
-                0.0,
-                0.6400000000000002,
-                0.7800000000000011,
-                0.8600000000000017,
-                0.920000000000002,
-                0.9533333333333356,
-                0.966666666666669,
-                1.0,
-            ],
-    },
-    "": {"":""},
-}
-
-if use_categories:
-    bdt_cuts = bdt_selections[production_channel][bdt_subset]
-else:
-    bdt_cuts = []
 
 variablesBDT = [
     ## DiMuon variables
@@ -145,8 +121,34 @@ variables = [
     ## Jet variables
     "n_jet",
     "leading_jet_pt",
-    "subleading_jet_pt",
     "leading_jet_eta",
+    "leading_jet_mass",
+    "leading_jet_area",
+    "leading_jet_btagPNetQvG",
+    "leading_jet_btagUParTAK4QvG",
+    "leading_jet_btagDeepFlavQG",
+    "leading_jet_chEmEF",
+    "leading_jet_chHEF",
+    "leading_jet_neEmEF",
+    "leading_jet_neHEF",
+    "leading_jet_nConstituents",
+    "leading_jet_chMultiplicity",
+    "leading_jet_neMultiplicity",
+    ## subleading
+    "subleading_jet_pt",
+    "subleading_jet_eta",
+    "subleading_jet_mass",
+    "subleading_jet_area",
+    "subleading_jet_btagPNetQvG",
+    "subleading_jet_btagUParTAK4QvG",
+    "subleading_jet_btagDeepFlavQG",
+    "subleading_jet_chEmEF",
+    "subleading_jet_chHEF",
+    "subleading_jet_neEmEF",
+    "subleading_jet_neHEF",
+    "subleading_jet_nConstituents",
+    "subleading_jet_chMultiplicity",
+    "subleading_jet_neMultiplicity"
     ## diJet variables
     "diJet_mass",
     "delta_eta_diJet",
@@ -168,16 +170,48 @@ variables = [
 
 # variables = ["leading_jet_eta", "subleading_jet_eta", "diMuon_bsConstrainedMass"]
 #variables = ["diMuon_bsConstrainedMass"]
-variables = variablesBDT
+#variables = variablesBDT
+variables = [
+    "n_jet",
+    "leading_jet_pt",
+    "leading_jet_eta",
+    "leading_jet_mass",
+    "leading_jet_area",
+    "leading_jet_btagPNetQvG",
+    "leading_jet_btagDeepFlavQG",
+    "leading_jet_chEmEF",
+    "leading_jet_chHEF",
+    "leading_jet_neEmEF",
+    "leading_jet_neHEF",
+    "leading_jet_nConstituents",
+    "leading_jet_chMultiplicity",
+    "leading_jet_neMultiplicity",
+    "subleading_jet_pt",
+    "subleading_jet_eta",
+    "subleading_jet_mass",
+    "subleading_jet_area",
+    "subleading_jet_btagPNetQvG",
+    "subleading_jet_btagDeepFlavQG",
+    "subleading_jet_chEmEF",
+    "subleading_jet_chHEF",
+    "subleading_jet_neEmEF",
+    "subleading_jet_neHEF",
+    "subleading_jet_nConstituents",
+    "subleading_jet_chMultiplicity",
+    "subleading_jet_neMultiplicity",
+    "diJet_mass",
+    "delta_eta_diJet",
+]
+
 
 # eras = ["2022EE", "2022", "2023", "2023BPix", "2024"]#, "2025"]
-# eras = ["2022", "2022EE", "2023", "2023BPix", "2024", "2025", "Combined"]
+eras = ["2022", "2022EE", "2023", "2023BPix", "2024", "2025", "Combined"]
 # eras = ["2022", "2022EE"]
 # eras = ["2023", "2023BPix"]
 #eras = ["2023BPix"]
 # eras = ["2025","2024", "Combined"]
+# eras = ["Combined", "2025", "2024"]
 eras = ["Combined"]
-#eras = ["2025"]
 
 for era in eras:
     if production_channel == "":
@@ -186,8 +220,8 @@ for era in eras:
         bdt_cuts = get_bdt_cuts(
             bdt_categories_info, production_channel, era, bdt_subset, bdt_mass_variable
         )
-
     for variable in variables:
+        print(production_channel)
         draw_data_and_simul_and_ratio(
             variable,
             era,
