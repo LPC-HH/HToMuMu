@@ -60,7 +60,29 @@ bdt_variables = [
     "delta_phi_diJet",
     "n_jet",
     "leading_jet_pt",
+    #"leading_jet_area",
+    #"leading_jet_mass",
+    #"leading_jet_btagPNetQvG",
+    #"leading_jet_btagDeepFlavQG",
+    #"leading_jet_chEmEF",
+    #"leading_jet_chHEF",
+    #"leading_jet_chMultiplicity",
+    #"leading_jet_nConstituents",
+    #"leading_jet_neEmEF",
+    #"leading_jet_neHEF",
+    #"leading_jet_neMultiplicity",
     "subleading_jet_pt",
+    #"subleading_jet_area",
+    #"subleading_jet_mass",
+    #"subleading_jet_btagPNetQvG",
+    #"subleading_jet_btagDeepFlavQG",
+    #"subleading_jet_chEmEF",
+    #"subleading_jet_chHEF",
+    #"subleading_jet_chMultiplicity",
+    #"subleading_jet_nConstituents",
+    #"subleading_jet_neEmEF",
+    #"subleading_jet_neHEF",
+    #"subleading_jet_neMultiplicity",
     "min_delta_eta_diMuon_jet",
     "min_delta_phi_diMuon_jet",
     "diMuon_bsConstrainedPt",
@@ -80,6 +102,17 @@ bdt_variables1 = [
     "leading_jet_eta",
     "n_jet",
     "leading_jet_pt",
+    #"leading_jet_area",
+    #"leading_jet_mass",
+    #"leading_jet_btagPNetQvG",
+    #"leading_jet_btagDeepFlavQG",
+    #"leading_jet_chEmEF",
+    #"leading_jet_chHEF",
+    #"leading_jet_chMultiplicity",
+    #"leading_jet_nConstituents",
+    #"leading_jet_neEmEF",
+    #"leading_jet_neHEF",
+    #"leading_jet_neMultiplicity",
     "min_delta_eta_diMuon_jet",
     "min_delta_phi_diMuon_jet",
     "diMuon_bsConstrainedPt",
@@ -943,7 +976,7 @@ def main():
     ggH_file_name = f"{tuple_dir}ggH_Combined_tuples.root"
     VBF_file_name = f"{tuple_dir}VBF_Combined_tuples.root"
 
-    PLOT_INPUTS = False
+    PLOT_INPUTS = True
     RUN_SCULPTING_DIAGNOSTICS = False
 
     print("[INFO] Loading ggH/VBF tuples")

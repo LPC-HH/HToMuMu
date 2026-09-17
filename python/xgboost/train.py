@@ -102,7 +102,14 @@ with uproot.open(bkg_file_name) as file:
     df_bkg = pd.DataFrame(
         file["tree_output"].arrays([var[0] for var in variables], library="np"),
     )
-    
+
+# NaN out dijet/leading-jet variables that lib/CreateTuple.h could only pad
+# (n_jet < 2 / n_jet < 1) so the BDT does not read the 0/-1 padding as a
+# physical jet system -- relevant now that the categorization BDT promotes
+# single-jet events into the VBF channel.
+xgb_utils.mask_undefined_jet_features(df_signal)
+xgb_utils.mask_undefined_jet_features(df_bkg)
+
 print("[INFO]: Data frames created successfully")
 
 if USE_BSCONSTRAIN:
@@ -162,12 +169,10 @@ x_test = x_test_p[:, :-3]
 sample_weights_train = x_train_p[:, -1]
 sample_weights_test = x_test_p[:, -1]
 
-print("-inf position (by index):", np.isneginf(x_train)[np.isneginf(x_train)])
-print("inf position (by index):", np.isinf(x_train)[np.isinf(x_train)])
-print("nan position (by index):", np.isnan(x_train)[np.isnan(x_train)])
-x_train[np.isneginf(x_train)] = np.nan
+# +/-inf -> NaN; NaN (missing jet features and any accidental div-by-zero) is
+# kept and handled natively by XGBoost's missing-value mechanism.
 x_train[np.isinf(x_train)] = np.nan
-x_train[np.isnan(x_train)] = 0.0
+x_test[np.isinf(x_test)] = np.nan
 
 print("x_train:", x_train)
 mean_map = {}
@@ -176,12 +181,12 @@ if DO_STANDARDIZATION:
     for i, var in enumerate(variables[:-3]):
         print("standarizing : ", var[0])
         print("Iterator : ", i)
-        null_value = 0
-        if var[0] in ["delta_phi_diJet", "pt_balance"]:
-            null_value = -1
 
-        mask_train = x_train[:, i] != null_value
-        mask_test = x_test[:, i] != null_value
+        # NaN entries (missing jet features) are excluded from the mean/std and
+        # left as NaN for XGBoost's native missing-value handling; every finite
+        # value is z-scored.
+        mask_train = np.isfinite(x_train[:, i])
+        mask_test = np.isfinite(x_test[:, i])
         mean_map[var[0]] = x_train[mask_train, i].mean()
         std_map[var[0]] = x_train[mask_train, i].std()
         print("[Info]: Train Sample Mean: ", mean_map[var[0]])
@@ -218,6 +223,7 @@ if ifRetrain:
             "n_jobs": 4,
             "verbosity": 0,
             "early_stopping_rounds": 50,
+            "missing": np.nan,
         }
     
         model = xgb.XGBClassifier(**params)
@@ -276,16 +282,17 @@ if ifRetrain:
         )
     
         fig.write_html(optimization_plot_path + "optuna_slice.html")
-        best_params = study.best_params   
+        best_params = study.best_params
         model = xgb.XGBClassifier(
             **best_params,
             n_estimators=2000,
             verbosity=2,
             n_jobs=4,
             eval_metric=["logloss", "auc"],
-            early_stopping_rounds=50
+            early_stopping_rounds=50,
+            missing=np.nan,
         )
-    
+
         model.fit(
             x_train,
             y_train,
@@ -309,7 +316,8 @@ if ifRetrain:
             verbosity=2,
             n_jobs=4,
             eval_metric=["logloss", "auc"],
-            early_stopping_rounds=50
+            early_stopping_rounds=50,
+            missing=np.nan,
         )
 
     else:
@@ -351,6 +359,7 @@ if ifRetrain:
             reg_lambda=1.0,
             eval_metric=["logloss", "auc"],
             device='cuda',
+            missing=np.nan,
         )
 
     print("weights: ", sample_weights_train)

@@ -16,6 +16,39 @@ import uproot
 import xgboost as xgb
 
 root.gROOT.Reset()
+
+# get_variables() branch names that lib/CreateTuple.h can only fill from a real
+# jet system; for events with too few jets it leaves them at a 0 (or -1, for
+# delta_phi_diJet/pt_balance/pt_centrality) padding value that overlaps the
+# physical range. Mask them to NaN so XGBoost treats them as missing rather than
+# a physical measurement. Same convention as train_VBF_ggH_BDT.py.
+DIJET_VARIABLES = frozenset({
+    "subleading_jet_pt", "diJet_mass", "delta_eta_diJet", "delta_phi_diJet",
+    "z_zeppenfeld", "pt_balance", "pt_centrality",
+})
+SINGLE_JET_VARIABLES = frozenset({
+    "leading_jet_pt", "leading_jet_eta",
+    "min_delta_eta_diMuon_jet", "min_delta_phi_diMuon_jet",
+})
+
+
+def mask_undefined_jet_features(df):
+    """In-place: NaN out jet variables that are lib/CreateTuple.h padding rather
+    than a real measurement (dijet vars when n_jet < 2, leading-jet vars when
+    n_jet < 1) so XGBoost's native missing-value handling routes those events
+    consistently instead of treating the 0/-1 padding as physical. No-op if
+    n_jet is not among the columns."""
+    if "n_jet" not in df.columns:
+        return df
+    dijet = [c for c in df.columns if c in DIJET_VARIABLES]
+    single = [c for c in df.columns if c in SINGLE_JET_VARIABLES]
+    if dijet:
+        df.loc[df["n_jet"] < 2, dijet] = np.nan
+    if single:
+        df.loc[df["n_jet"] < 1, single] = np.nan
+    return df
+
+
 matplotlib.use("Agg")
 plt.style.use(hep.style.CMS)
 use_skim = False
@@ -110,6 +143,7 @@ def append_BDT_score(
         df = pd.DataFrame(
             file["tree_output"].arrays([var[0] for var in variables], library="np"),
         )
+    mask_undefined_jet_features(df)
 
     file = root.TFile(file_name, "update")
     tree = file.Get("tree_output")
@@ -121,14 +155,14 @@ def append_BDT_score(
     print(f"[INFO] Reading model file: {model_file}")
 
     x_test = df.values
+    x_test[np.isinf(x_test)] = np.nan
     if do_standardization:
         for i, var in enumerate(variables):
             print("standarizing : ", var[0])
             print("Iterator : ", i)
-            null_value = 0
-            if var[0] in ["delta_phi_diJet", "pt_balance"]:
-                null_value = -1
-            mask = x_test[:, i] != null_value
+            # NaN entries (missing jet features) are left as NaN for XGBoost's
+            # native missing-value handling; only finite values are z-scored.
+            mask = np.isfinite(x_test[:, i])
             x_test[mask, i] = (x_test[mask, i] - mean_map[var[0]]) / std_map[var[0]]
 
     # get model from file
@@ -386,8 +420,10 @@ def append_BDT_score_to_sys(
                         for variable_name in variable_names
                     }
                 )
+                mask_undefined_jet_features(df)
 
             x_test = df.to_numpy(dtype=np.float32, copy=True)
+            x_test[np.isinf(x_test)] = np.nan
             number_of_events = len(x_test)
 
             print(
@@ -398,14 +434,6 @@ def append_BDT_score_to_sys(
             if do_standardization and number_of_events > 0:
                 for variable_index, variable in enumerate(variables):
                     variable_name = variable[0]
-
-                    null_value = 0.0
-
-                    if variable_name in [
-                        "delta_phi_diJet",
-                        "pt_balance",
-                    ]:
-                        null_value = -1.0
 
                     if variable_name not in mean_map:
                         raise KeyError(
@@ -424,9 +452,10 @@ def append_BDT_score_to_sys(
                             f"{variable_name}"
                         )
 
-                    mask = (
-                        x_test[:, variable_index] != null_value
-                    )
+                    # NaN entries (missing jet features) are left as NaN for
+                    # XGBoost's native missing-value handling; only finite
+                    # values are z-scored.
+                    mask = np.isfinite(x_test[:, variable_index])
 
                     x_test[mask, variable_index] = (
                         x_test[mask, variable_index]

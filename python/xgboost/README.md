@@ -42,7 +42,7 @@ source setup.sh #activates the xgboost_env
 
 Run the training (Make sure you generated the skim tuples first)
 ```
-python3 train.py channel era ifRetrain background_sources_subset signal_sources_subset
+python3 train.py channel era ifRetrain ifUseBDTReCategorization background_sources_subset signal_sources_subset
 ```
 
 You can append the BDT variable to the tuples running
@@ -50,7 +50,8 @@ You can append the BDT variable to the tuples running
 python3 append_xgboost_discriminator_to_tree.py higgs_channel era era_model data_set bkg_src signal_src
 ```
 
-You can run everything with the following script
+You can run everything with the following script (the wait makes sure that node memory doesnt fill)
 ```
-bash run_train.sh higgs_channel
+bash run_train.sh higgs_channel ifUseBDTReCategorization
+bash run_train.sh ggH T & bash run_train.sh ggH F & wait; bash run_train.sh VBF T & bash run_train.sh VBF F
 ```
