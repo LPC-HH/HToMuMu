@@ -115,10 +115,11 @@ python3 ./scripts/run_skim_ggH.py (bdt/kin)
 python3 ./scripts/run_skim_VBF.py (bdt/kin)
 ```
 
-If you want to run all of the skimming for the recategorization and standard kinematic approach at once:
+You can also run the skimming, hadd, and removal of previous tuples at once with:
+```bash
+bash scripts/run_skim.sh (bdt/kin/both)
 ```
-python3 scripts/run_skim_ggH.py bdt & python3 scripts/run_skim_ggH.py kin & python3 scripts/run_skim_VBF.py bdt & python3 scripts/run_skim_VBF.py kin
-```
+This logs the scripts for the skimming and hadd in scripts/logs/
 
 Once we have the skim tuples, you must hadd to have one background tuple and one signal sample, you can just do
 
@@ -152,6 +153,8 @@ If you use **USE_WEIGHT_MASS_RES=True**, then the training weight will be *weigh
 ## After training
 
 The training ```run_train.sh {category}``` code will generate one file containing the model (python/xgboost/models/model_ggH_Combined_BFull_SNottH.xgb), one file containing the roc curve (python/xgboost/roc/ggH_Combined_BFull_SNottH_roc.txt), and will add the BDT score to the tuples.
+
+**Note (K-fold training) WIP:** the training now produces *five* fold models (`python/xgboost/models/model_ggH_Combined_BFull_SNottH_fold<k>_bsC.json`, k = 0..4) instead of a single one, and each MC event is scored by the model that did not train on it (out-of-fold). The fold labels must be made once with `python3 make_fold_labels.py`, and the development/test/final stages are described in `python/xgboost/README.md` ("K-fold training and out-of-fold scoring"). The scored tuples additionally contain the integer branch `BDT_fold`.
 The tuples with the BDT score added are saved in root_io/tuples/BDT_score/(ggH/VBF)/BFull_SNottH/ 
 
 

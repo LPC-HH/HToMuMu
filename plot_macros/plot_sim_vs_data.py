@@ -8,7 +8,7 @@ from bdt_categories_io import load_bdt_categories, get_bdt_cuts
 production_channel = ""
 bdt_subset = ""
 use_categories = False
-version = "2.2.0"
+version = "2.2.1"
 
 if len(sys.argv) >= 2:
     production_channel = sys.argv[1]
@@ -148,7 +148,7 @@ variables = [
     "subleading_jet_neHEF",
     "subleading_jet_nConstituents",
     "subleading_jet_chMultiplicity",
-    "subleading_jet_neMultiplicity"
+    "subleading_jet_neMultiplicity",
     ## diJet variables
     "diJet_mass",
     "delta_eta_diJet",
@@ -171,41 +171,13 @@ variables = [
 # variables = ["leading_jet_eta", "subleading_jet_eta", "diMuon_bsConstrainedMass"]
 #variables = ["diMuon_bsConstrainedMass"]
 #variables = variablesBDT
-variables = [
-    "n_jet",
-    "leading_jet_pt",
-    "leading_jet_eta",
-    "leading_jet_mass",
-    "leading_jet_area",
-    "leading_jet_btagPNetQvG",
-    "leading_jet_btagDeepFlavQG",
-    "leading_jet_chEmEF",
-    "leading_jet_chHEF",
-    "leading_jet_neEmEF",
-    "leading_jet_neHEF",
-    "leading_jet_nConstituents",
-    "leading_jet_chMultiplicity",
-    "leading_jet_neMultiplicity",
-    "subleading_jet_pt",
-    "subleading_jet_eta",
-    "subleading_jet_mass",
-    "subleading_jet_area",
-    "subleading_jet_btagPNetQvG",
-    "subleading_jet_btagDeepFlavQG",
-    "subleading_jet_chEmEF",
-    "subleading_jet_chHEF",
-    "subleading_jet_neEmEF",
-    "subleading_jet_neHEF",
-    "subleading_jet_nConstituents",
-    "subleading_jet_chMultiplicity",
-    "subleading_jet_neMultiplicity",
-    "diJet_mass",
-    "delta_eta_diJet",
-]
+variables = variables[-11:]
+
+
 
 
 # eras = ["2022EE", "2022", "2023", "2023BPix", "2024"]#, "2025"]
-eras = ["2022", "2022EE", "2023", "2023BPix", "2024", "2025", "Combined"]
+# eras = ["2022", "2022EE", "2023", "2023BPix", "2024", "2025", "Combined"]
 # eras = ["2022", "2022EE"]
 # eras = ["2023", "2023BPix"]
 #eras = ["2023BPix"]
