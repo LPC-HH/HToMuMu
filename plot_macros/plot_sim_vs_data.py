@@ -8,7 +8,7 @@ from bdt_categories_io import load_bdt_categories, get_bdt_cuts
 production_channel = ""
 bdt_subset = ""
 use_categories = False
-version = "2.0.0"
+version = "2.1.0"
 
 if len(sys.argv) >= 2:
     production_channel = sys.argv[1]
@@ -45,30 +45,6 @@ signal_sources = [
 ]
 bdt_categories_info = load_bdt_categories()
 bdt_mass_variable = "diMuon_bsConstrainedMass"
-
-bdt_selections = {
-    "ggH": {
-        "BFull_SNottH": [0.0, 0.45, 0.62, 0.8, 0.91, 1.0],
-    },
-    "VBF": {
-        "BFull_SNottH":[
-                0.0,
-                0.6400000000000002,
-                0.7800000000000011,
-                0.8600000000000017,
-                0.920000000000002,
-                0.9533333333333356,
-                0.966666666666669,
-                1.0,
-            ],
-    },
-    "": {"":""},
-}
-
-if use_categories:
-    bdt_cuts = bdt_selections[production_channel][bdt_subset]
-else:
-    bdt_cuts = []
 
 variables = [
     ## DiMuon variables
@@ -129,18 +105,13 @@ variables = [
 variables = ["diMuon_bsConstrainedMass"]
 
 # eras = ["2022EE", "2022", "2023", "2023BPix", "2024"]#, "2025"]
-# eras = ["2022", "2022EE", "2023", "2023BPix", "2024", "2025", "Combined"]
-# eras = ["2022", "2022EE"]
-# eras = ["2023", "2023BPix"]
-#eras = ["2023BPix"]
 # eras = ["2025","2024", "Combined"]
 eras = ["Combined"]
 #eras = ["2025"]
 
 for era in eras:
-    if production_channel == "":
-        bdt_cuts = []
-    else:
+    bdt_cuts = []
+    if use_categories:
         bdt_cuts = get_bdt_cuts(
             bdt_categories_info, production_channel, era, bdt_subset, bdt_mass_variable
         )

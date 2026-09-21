@@ -47,6 +47,8 @@
 constexpr float MUON_MASS = 0.1056583745;
 constexpr float FLOAT_NULL_VALUE = -999.;
 constexpr int INT_NULL_VALUE = -999;
+constexpr unsigned int N_LHE_PDF_WEIGHTS = 103;
+constexpr unsigned int N_LHE_SCALE_WEIGHTS = 9;
 
 inline const std::map<TString, TString> NANOAOD_VERSION = {
     {"2022", "v12"}, {"2022EE", "v12"},  {"2023", "v12"}, {"2023BPix", "v12"}, {"2024", "v15"}, {"2025", "v15"}
@@ -329,7 +331,23 @@ class HmmAnalyzer : public MainEvent {
         new TH1D("h_sumOfgenpuWeight", "h_sumOfgenpuWeight", 1, 0, 1);
     TH1D *h_pileup = new TH1D("h_pileup", "h_pileup", 99, 0, 99);
     TH1D *h_pileup_nTrue = new TH1D("h_pileup_nTrue", "h_pileup_nTrue", 99, 0, 99);
+    TH1D *h_sumOfLHEPdfWeight =
+        new TH1D(
+            "h_sumOfLHEPdfWeight",
+            "h_sumOfLHEPdfWeight",
+            N_LHE_PDF_WEIGHTS,
+            0,
+            N_LHE_PDF_WEIGHTS
+        );
 
+    TH1D *h_sumOfLHEScaleWeight =
+        new TH1D(
+            "h_sumOfLHEScaleWeight",
+            "h_sumOfLHEScaleWeight",
+            N_LHE_SCALE_WEIGHTS,
+            0,
+            N_LHE_SCALE_WEIGHTS
+        );
     TFile *pileupWeightFile;
     TH1F *pileupWeightHist, *pileupWeightSysUpHist, *pileupWeightSysDownHist;
 
@@ -363,6 +381,8 @@ class HmmAnalyzer : public MainEvent {
     uint t_luminosityBlock;
     ulong t_event;
     float t_genWeight;
+    std::vector<float> *t_LHEPdfWeight;
+    std::vector<float> *t_LHEScaleWeight;
     float t_pileup;
     float t_puWeight;
     float t_puWeightUp;
@@ -504,7 +524,11 @@ class HmmAnalyzer : public MainEvent {
     // std::vector<float>         *t_Jet_btagCMVA;
     // std::vector<float>         *t_Jet_btagCSVV2;
     std::vector<float> *t_Jet_btagDeepB;
+    std::vector<float> *t_Jet_btagDeepFlavQG;
     std::vector<float> *t_Jet_btagPNetB;
+    std::vector<float> *t_Jet_btagPNetQvG;
+    std::vector<float> *t_Jet_btagUParTAK4QvG;
+    std::vector<float> *t_Jet_btagUParTAK4B;
     // std::vector<float>         *t_Jet_btagDeepC;
     // std::vector<float>         *t_Jet_btagDeepFlavB;
     std::vector<float> *t_Jet_chEmEF;
@@ -880,6 +904,10 @@ HmmAnalyzer::~HmmAnalyzer() {
     h_sumOfgpw->Write();
     h_pileup->Write();
     h_pileup_nTrue->Write();
+    if (h_sumOfLHEPdfWeight != nullptr)
+        h_sumOfLHEPdfWeight->Write();
+    if (h_sumOfLHEScaleWeight != nullptr)
+        h_sumOfLHEScaleWeight->Write();
 
     h_nEntries->Write();
     h_nTrigger->Write();
@@ -923,6 +951,8 @@ void HmmAnalyzer::clearTreeVectors() {
     t_luminosityBlock = 0;
     t_event = 0;
     t_genWeight = FLOAT_NULL_VALUE;
+    t_LHEPdfWeight->clear();
+    t_LHEScaleWeight->clear();
     t_pileup = FLOAT_NULL_VALUE;
     t_puWeight = FLOAT_NULL_VALUE;
     t_puWeightUp = FLOAT_NULL_VALUE;
@@ -1074,7 +1104,11 @@ void HmmAnalyzer::clearTreeVectors() {
     // t_Jet_btagCMVA->clear();
     // t_Jet_btagCSVV2->clear();
     t_Jet_btagDeepB->clear();
+    t_Jet_btagDeepFlavQG->clear();
     t_Jet_btagPNetB->clear();
+    t_Jet_btagPNetQvG->clear();
+    t_Jet_btagUParTAK4QvG->clear();
+    t_Jet_btagUParTAK4B->clear();
     // t_Jet_btagDeepC->clear();
     // t_Jet_btagDeepFlavB->clear();
     t_Jet_chEmEF->clear();
@@ -1167,11 +1201,18 @@ void HmmAnalyzer::BookTreeBranches() {
     tree = new TTree("tree", "tree");
     tree->SetAutoSave(10000);
 
+
     tree->Branch("t_run", &t_run, "t_run/i");
     tree->Branch("t_luminosityBlock", &t_luminosityBlock,
                  "t_luminosityBlock/i");
     tree->Branch("t_event", &t_event, "t_event/l");
     tree->Branch("t_genWeight", &t_genWeight, "t_genWeight/F");
+    
+    t_LHEPdfWeight = new std::vector<float>();
+    t_LHEScaleWeight = new std::vector<float>();
+    tree->Branch("t_LHEPdfWeight", "vector<float>", &t_LHEPdfWeight);
+    tree->Branch("t_LHEScaleWeight", "vector<float>",&t_LHEScaleWeight);
+   
     tree->Branch("t_pileup", &t_pileup, "t_pileup/F");
     tree->Branch("t_puWeight", &t_puWeight, "t_puWeight/F");
     tree->Branch("t_puWeightUp", &t_puWeightUp, "t_puWeightUp/F");
@@ -1439,7 +1480,11 @@ void HmmAnalyzer::BookTreeBranches() {
     // t_Jet_btagCMVA= new std::vector<float>();
     // t_Jet_btagCSVV2= new std::vector<float>();
     t_Jet_btagDeepB = new std::vector<float>();
+    t_Jet_btagDeepFlavQG = new std::vector<float>();
     t_Jet_btagPNetB = new std::vector<float>();
+    t_Jet_btagPNetQvG = new std::vector<float>();
+    t_Jet_btagUParTAK4QvG = new std::vector<float>();
+    t_Jet_btagUParTAK4B = new std::vector<float>();
     // t_Jet_btagDeepC= new std::vector<float>();
     // t_Jet_btagDeepFlavB= new std::vector<float>();
     t_Jet_chEmEF = new std::vector<float>();
@@ -1509,7 +1554,11 @@ void HmmAnalyzer::BookTreeBranches() {
     // tree->Branch("t_Jet_btagCMVA"    , "vector<float>" ,&t_Jet_btagCMVA);
     // tree->Branch("t_Jet_btagCSVV2"    , "vector<float>" ,&t_Jet_btagCSVV2);
     tree->Branch("t_Jet_btagDeepB", "vector<float>", &t_Jet_btagDeepB);
+    tree->Branch("t_Jet_btagDeepFlavQG", "vector<float>", &t_Jet_btagDeepFlavQG);
     tree->Branch("t_Jet_btagPNetB", "vector<float>", &t_Jet_btagPNetB);
+    tree->Branch("t_Jet_btagPNetQvG", "vector<float>", &t_Jet_btagPNetQvG);
+    tree->Branch("t_Jet_btagUParTAK4QvG", "vector<float>", &t_Jet_btagUParTAK4QvG);
+    tree->Branch("t_Jet_btagUParTAK4B", "vector<float>",&t_Jet_btagUParTAK4B);
     // tree->Branch("t_Jet_btagDeepC"    , "vector<float>" ,&t_Jet_btagDeepC);
     // tree->Branch("t_Jet_btagDeepFlavB"    , "vector<float>"
     // ,&t_Jet_btagDeepFlavB);

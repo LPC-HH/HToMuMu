@@ -23,8 +23,8 @@ MODEL_ERA="Combined"
 BKG_SUBSET="Full"
 SIG_SUBSET="NottH"
 
-ANALYZER_VERSION="v2.0"
-TUPLES_VERSION="v2.0.0"
+ANALYZER_VERSION="v2.1"
+TUPLES_VERSION="v2.1.0"
 
 
 EOS_DIR="/store/group/lpchmumu/${USER}/analyzer_HiggsMuMu_${ANALYZER_VERSION}/tuples_${TUPLES_VERSION}/systematics"
@@ -134,8 +134,8 @@ transfer_input_files = \
 use_x509userproxy = true
 
 request_cpus = 1
-request_memory = 4000MB
-request_disk = 8000MB
+request_memory = 2000MB
+request_disk = 3000MB
 
 Queue era, tuple_type, systematic from ${JOBLIST}
 EOF
