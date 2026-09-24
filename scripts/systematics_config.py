@@ -6,8 +6,8 @@ sys_path.insert(0, str(Path(__file__).resolve().parent.parent / "python"))
 from bdt_categories_io import load_bdt_categories, get_bdt_cuts
 
 
-MASS_MIN = 122.5
-MASS_MAX = 127.5
+MASS_MIN = 110.0
+MASS_MAX = 150.0
 
 FLASHGG_PATH = "/uscms_data/d3/mbarrial/fits_Hmumu/CMSSW_14_1_0_pre4/src/flashggFinalFit/"
 

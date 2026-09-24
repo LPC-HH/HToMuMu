@@ -422,139 +422,139 @@ void CreateTuple::fillChain() {
 
 void CreateTuple::setBranchesAddressesOutput() {
 
-    tree_output->Branch("gen_weight", &gen_weight, "gen_weight/f");
-    tree_output->Branch("pileup_weight", &pileup_weight, "pileup_weight/f");
-    tree_output->Branch("pileup_weight_up", &pileup_weight_up, "pileup_weight_up/f");
+    tree_output->Branch("gen_weight", &gen_weight, "gen_weight/F");
+    tree_output->Branch("pileup_weight", &pileup_weight, "pileup_weight/F");
+    tree_output->Branch("pileup_weight_up", &pileup_weight_up, "pileup_weight_up/F");
     tree_output->Branch("pileup_weight_down", &pileup_weight_down,
-                        "pileup_weight_down/f");
-    tree_output->Branch("scale_factor", &scale_factor, "scale_factor/d");
+                        "pileup_weight_down/F");
+    tree_output->Branch("scale_factor", &scale_factor, "scale_factor/D");
     tree_output->Branch("weight", &weight, "weight/D");
     tree_output->Branch("weight_no_eff_sf", &weight_no_eff_sf, "weight_no_eff_sf/D");
-    tree_output->Branch("weight_no_lumi", &weight_no_lumi, "weight_no_lumi/d");
+    tree_output->Branch("weight_no_lumi", &weight_no_lumi, "weight_no_lumi/D");
     // tree_output->Branch("is_data", &is_data_int, "is_data/i");
     // tree_output->Branch("is_signal", &is_signal_int, "signal/i");
-    tree_output->Branch("rho", &rho, "rho/f");
-    tree_output->Branch("PV", &pv, "PV/i");
+    tree_output->Branch("rho", &rho, "rho/F");
+    tree_output->Branch("PV", &pv, "PV/I");
 
-    tree_output->Branch("mu_trig_eff_SF", &mu_trig_eff_SF, "mu_trig_eff_SF/f");
+    tree_output->Branch("mu_trig_eff_SF", &mu_trig_eff_SF, "mu_trig_eff_SF/F");
     tree_output->Branch("mu_trig_eff_SF_down", &mu_trig_eff_SF_down,
-                        "mu_trig_eff_SF_down/f");
+                        "mu_trig_eff_SF_down/F");
     tree_output->Branch("mu_trig_eff_SF_up", &mu_trig_eff_SF_up,
-                        "mu_trig_eff_SF_up/f");
-    tree_output->Branch("mu_ID_eff_SF", &mu_ID_eff_SF, "mu_ID_eff_SF/f");
+                        "mu_trig_eff_SF_up/F");
+    tree_output->Branch("mu_ID_eff_SF", &mu_ID_eff_SF, "mu_ID_eff_SF/F");
     tree_output->Branch("mu_ID_eff_SF_down", &mu_ID_eff_SF_down,
-                        "mu_ID_eff_SF_down/f");
+                        "mu_ID_eff_SF_down/F");
     tree_output->Branch("mu_ID_eff_SF_up", &mu_ID_eff_SF_up,
-                        "mu_ID_eff_SF_up/f");
-    tree_output->Branch("mu_ISO_eff_SF", &mu_ISO_eff_SF, "mu_ISO_eff_SF/f");
+                        "mu_ID_eff_SF_up/F");
+    tree_output->Branch("mu_ISO_eff_SF", &mu_ISO_eff_SF, "mu_ISO_eff_SF/F");
     tree_output->Branch("mu_ISO_eff_SF_down", &mu_ISO_eff_SF_down,
-                        "mu_ISO_eff_SF_down/f");
+                        "mu_ISO_eff_SF_down/F");
     tree_output->Branch("mu_ISO_eff_SF_up", &mu_ISO_eff_SF_up,
-                        "mu_ISO_eff_SF_up/f");
+                        "mu_ISO_eff_SF_up/F");
 
-    tree_output->Branch("n_SoftJet_pt2", &n_SoftJet_pt2, "n_SoftJet_pt2/i");
-    tree_output->Branch("n_SoftJet_pt5", &n_SoftJet_pt5, "n_SoftJet_pt5/i");
-    tree_output->Branch("n_SoftJet_pt10", &n_SoftJet_pt10, "n_SoftJet_pt10/i");
-    tree_output->Branch("HT", &HT, "HT/f");
-    tree_output->Branch("HT_pt2", &HT_pt2, "HT_pt2/f");
-    tree_output->Branch("HT_pt5", &HT_pt5, "HT_pt5/f");
-    tree_output->Branch("HT_pt10", &HT_pt10, "HT_pt10/f");
+    tree_output->Branch("n_SoftJet_pt2", &n_SoftJet_pt2, "n_SoftJet_pt2/I");
+    tree_output->Branch("n_SoftJet_pt5", &n_SoftJet_pt5, "n_SoftJet_pt5/I");
+    tree_output->Branch("n_SoftJet_pt10", &n_SoftJet_pt10, "n_SoftJet_pt10/I");
+    tree_output->Branch("HT", &HT, "HT/F");
+    tree_output->Branch("HT_pt2", &HT_pt2, "HT_pt2/F");
+    tree_output->Branch("HT_pt5", &HT_pt5, "HT_pt5/F");
+    tree_output->Branch("HT_pt10", &HT_pt10, "HT_pt10/F");
 
     tree_output->Branch("is_ggH_category", &is_ggH_category,
-                        "is_ggH_category/i");
+                        "is_ggH_category/I");
     tree_output->Branch("is_VBF_category", &is_VBF_category,
-                        "is_VBF_category/i");
+                        "is_VBF_category/I");
 
-    tree_output->Branch("mc_campaign", &mc_campaign, "mc_campaign/i");
+    tree_output->Branch("mc_campaign", &mc_campaign, "mc_campaign/I");
     tree_output->Branch("channel", &analysis_channel);
 
     // DiMuon variables
-    tree_output->Branch("diMuon_mass", &diMuon_mass, "diMuon_mass/f");
+    tree_output->Branch("diMuon_mass", &diMuon_mass, "diMuon_mass/F");
     tree_output->Branch("diMuon_bsConstrainedMass_nanoAOD", &diMuon_bsConstrainedMass_nanoAOD,
-                        "diMuon_bsConstrainedMass_nanoAOD/f");
+                        "diMuon_bsConstrainedMass_nanoAOD/F");
     tree_output->Branch("diMuon_bsConstrainedMass", &diMuon_bsConstrainedMass,
-                        "diMuon_bsConstrainedMass/f");
-    tree_output->Branch("diMuon_pt", &diMuon_pt, "diMuon_pt/f");
+                        "diMuon_bsConstrainedMass/F");
+    tree_output->Branch("diMuon_pt", &diMuon_pt, "diMuon_pt/F");
     tree_output->Branch("diMuon_bsConstrainedPt", &diMuon_bsConstrainedPt,
-                        "diMuon_bsConstrainedPt/f");
-    tree_output->Branch("diMuon_phi", &diMuon_phi, "diMuon_phi/f");
-    tree_output->Branch("diMuon_eta", &diMuon_eta, "diMuon_eta/f");
+                        "diMuon_bsConstrainedPt/F");
+    tree_output->Branch("diMuon_phi", &diMuon_phi, "diMuon_phi/F");
+    tree_output->Branch("diMuon_eta", &diMuon_eta, "diMuon_eta/F");
     tree_output->Branch("diMuon_rapidity", &diMuon_rapidity,
-                        "diMuon_rapidity/f");
+                        "diMuon_rapidity/F");
 
     // MET variables
-    tree_output->Branch("PuppiMET_phi", &PuppiMET_phi, "PuppiMET_phi/f");
-    tree_output->Branch("PuppiMET_pt", &PuppiMET_pt, "PuppiMET_pt/f");
-    tree_output->Branch("PuppiMET_sumEt", &PuppiMET_sumEt, "PuppiMET_sumEt/f");
+    tree_output->Branch("PuppiMET_phi", &PuppiMET_phi, "PuppiMET_phi/F");
+    tree_output->Branch("PuppiMET_pt", &PuppiMET_pt, "PuppiMET_pt/F");
+    tree_output->Branch("PuppiMET_sumEt", &PuppiMET_sumEt, "PuppiMET_sumEt/F");
 
     // Muon variables
     tree_output->Branch("mu1_pt_mass_ratio", &mu1_pt_mass_ratio,
-                        "mu1_pt_mass_ratio/f");
+                        "mu1_pt_mass_ratio/F");
     tree_output->Branch("mu2_pt_mass_ratio", &mu2_pt_mass_ratio,
-                        "mu2_pt_mass_ratio/f");
+                        "mu2_pt_mass_ratio/F");
     tree_output->Branch("mu1_bsConstrainedPt_mass_ratio",
                         &mu1_bsConstrainedPt_mass_ratio,
-                        "mu1_bsConstrainedPt_mass_ratio/f");
+                        "mu1_bsConstrainedPt_mass_ratio/F");
     tree_output->Branch("mu2_bsConstrainedPt_mass_ratio",
                         &mu2_bsConstrainedPt_mass_ratio,
-                        "mu2_bsConstrainedPt_mass_ratio/f");
-    tree_output->Branch("mu1_eta", &mu1_eta, "mu1_eta/f");
-    tree_output->Branch("mu2_eta", &mu2_eta, "mu2_eta/f");
-    tree_output->Branch("mu1_pt", &mu1_pt, "mu1_pt/f");
-    tree_output->Branch("mu2_pt", &mu2_pt, "mu2_pt/f");
+                        "mu2_bsConstrainedPt_mass_ratio/F");
+    tree_output->Branch("mu1_eta", &mu1_eta, "mu1_eta/F");
+    tree_output->Branch("mu2_eta", &mu2_eta, "mu2_eta/F");
+    tree_output->Branch("mu1_pt", &mu1_pt, "mu1_pt/F");
+    tree_output->Branch("mu2_pt", &mu2_pt, "mu2_pt/F");
     tree_output->Branch("mu1_bsConstrainedPt_nanoAOD",
                         &mu1_bsConstrainedPt_nanoAOD,
-                        "mu1_bsConstrainedPt_nanoAOD/f");
+                        "mu1_bsConstrainedPt_nanoAOD/F");
     tree_output->Branch("mu2_bsConstrainedPt_nanoAOD",
                         &mu2_bsConstrainedPt_nanoAOD,
-                        "mu2_bsConstrainedPt_nanoAOD/f");
+                        "mu2_bsConstrainedPt_nanoAOD/F");
     tree_output->Branch("mu1_bsConstrainedPt", &mu1_bsConstrainedPt,
-                        "mu1_bsConstrainedPt/f");
+                        "mu1_bsConstrainedPt/F");
     tree_output->Branch("mu2_bsConstrainedPt", &mu2_bsConstrainedPt,
-                        "mu2_bsConstrainedPt/f");
-    tree_output->Branch("mu1_ptErr", &mu1_ptErr, "mu1_ptErr/f");
-    tree_output->Branch("mu2_ptErr", &mu2_ptErr, "mu2_ptErr/f");
+                        "mu2_bsConstrainedPt/F");
+    tree_output->Branch("mu1_ptErr", &mu1_ptErr, "mu1_ptErr/F");
+    tree_output->Branch("mu2_ptErr", &mu2_ptErr, "mu2_ptErr/F");
     tree_output->Branch("mu1_bsConstrainedPtErr", &mu1_bsConstrainedPtErr,
-                        "mu1_bsConstrainedPtErr/f");
+                        "mu1_bsConstrainedPtErr/F");
     tree_output->Branch("mu2_bsConstrainedPtErr", &mu2_bsConstrainedPtErr,
-                        "mu2_bsConstrainedPtErr/f");
-    tree_output->Branch("mu1_dz", &mu1_dz, "mu1_dz/f");
-    tree_output->Branch("mu2_dz", &mu2_dz, "mu2_dz/f");
-    tree_output->Branch("mu1_dzErr", &mu1_dzErr, "mu1_dzErr/f");
-    tree_output->Branch("mu2_dzErr", &mu2_dzErr, "mu2_dzErr/f");
-    tree_output->Branch("phi_CS", &phi_CS, "phi_CS/f");
-    tree_output->Branch("cos_theta_CS", &cos_theta_CS, "cos_theta_CS/f");
+                        "mu2_bsConstrainedPtErr/F");
+    tree_output->Branch("mu1_dz", &mu1_dz, "mu1_dz/F");
+    tree_output->Branch("mu2_dz", &mu2_dz, "mu2_dz/F");
+    tree_output->Branch("mu1_dzErr", &mu1_dzErr, "mu1_dzErr/F");
+    tree_output->Branch("mu2_dzErr", &mu2_dzErr, "mu2_dzErr/F");
+    tree_output->Branch("phi_CS", &phi_CS, "phi_CS/F");
+    tree_output->Branch("cos_theta_CS", &cos_theta_CS, "cos_theta_CS/F");
 
     // Error variables
     tree_output->Branch("relative_diMuon_mass_error",
                         &relative_diMuon_mass_error,
-                        "relative_diMuon_mass_error/f");
+                        "relative_diMuon_mass_error/F");
     tree_output->Branch("relative_diMuon_bsConstrainedMass_error",
                         &relative_diMuon_bsConstrainedMass_error,
-                        "relative_diMuon_bsConstrainedMass_error/f");
+                        "relative_diMuon_bsConstrainedMass_error/F");
 
     // Jet variables
-    tree_output->Branch("n_jet", &n_jet, "n_jet/i");
-    tree_output->Branch("n_bjet", &n_bjet, "n_bjet/i");
-    tree_output->Branch("n_bjet_Loose", &n_bjet_Loose, "n_bjet_Loose/i");
-    tree_output->Branch("leading_jet_pt", &leading_jet_pt, "leading_jet_pt/f");
+    tree_output->Branch("n_jet", &n_jet, "n_jet/I");
+    tree_output->Branch("n_bjet", &n_bjet, "n_bjet/I");
+    tree_output->Branch("n_bjet_Loose", &n_bjet_Loose, "n_bjet_Loose/I");
+    tree_output->Branch("leading_jet_pt", &leading_jet_pt, "leading_jet_pt/F");
     if (jet_syst_name.empty()) {
         tree_output->Branch("leading_jet_pt_nanoAOD", &leading_jet_pt_nanoAOD,
-                            "leading_jet_pt_nanoAOD/f");
+                            "leading_jet_pt_nanoAOD/F");
     }
-    tree_output->Branch("leading_jet_eta", &leading_jet_eta,"leading_jet_eta/f");
-    tree_output->Branch("leading_jet_mass", &leading_jet_mass, "leading_jet_mass/f");
-    tree_output->Branch("leading_jet_area", &leading_jet_area, "leading_jet_area/f");
+    tree_output->Branch("leading_jet_eta", &leading_jet_eta,"leading_jet_eta/F");
+    tree_output->Branch("leading_jet_mass", &leading_jet_mass, "leading_jet_mass/F");
+    tree_output->Branch("leading_jet_area", &leading_jet_area, "leading_jet_area/F");
     tree_output->Branch("leading_jet_btagPNetQvG", &leading_jet_btagPNetQvG,
-                            "leading_jet_btagPNetQvG/f");
+                            "leading_jet_btagPNetQvG/F");
     tree_output->Branch("leading_jet_btagUParTAK4QvG",&leading_jet_btagUParTAK4QvG,
-                        "leading_jet_btagUParTAK4QvG/f");
+                        "leading_jet_btagUParTAK4QvG/F");
     tree_output->Branch("leading_jet_btagDeepFlavQG",&leading_jet_btagDeepFlavQG,
-                        "leading_jet_btagDeepFlavQG/f");
-    tree_output->Branch("leading_jet_chEmEF", &leading_jet_chEmEF, "leading_jet_chEmEF/f");
-    tree_output->Branch("leading_jet_chHEF", &leading_jet_chHEF,"leading_jet_chHEF/f");
-    tree_output->Branch("leading_jet_neEmEF", &leading_jet_neEmEF,"leading_jet_neEmEF/f");
-    tree_output->Branch("leading_jet_neHEF", &leading_jet_neHEF, "leading_jet_neHEF/f");
+                        "leading_jet_btagDeepFlavQG/F");
+    tree_output->Branch("leading_jet_chEmEF", &leading_jet_chEmEF, "leading_jet_chEmEF/F");
+    tree_output->Branch("leading_jet_chHEF", &leading_jet_chHEF,"leading_jet_chHEF/F");
+    tree_output->Branch("leading_jet_neEmEF", &leading_jet_neEmEF,"leading_jet_neEmEF/F");
+    tree_output->Branch("leading_jet_neHEF", &leading_jet_neHEF, "leading_jet_neHEF/F");
     tree_output->Branch("leading_jet_nConstituents", &leading_jet_nConstituents,
                             "leading_jet_nConstituents/I");
     tree_output->Branch("leading_jet_chMultiplicity", &leading_jet_chMultiplicity,
@@ -563,27 +563,27 @@ void CreateTuple::setBranchesAddressesOutput() {
                         "leading_jet_neMultiplicity/I");
 
     tree_output->Branch("subleading_jet_pt", &subleading_jet_pt,
-                        "subleading_jet_pt/f");
+                        "subleading_jet_pt/F");
     if (jet_syst_name.empty()) {
         tree_output->Branch("subleading_jet_pt_nanoAOD", &subleading_jet_pt_nanoAOD,
-                            "subleading_jet_pt_nanoAOD/f");
+                            "subleading_jet_pt_nanoAOD/F");
     }
     tree_output->Branch("subleading_jet_eta", &subleading_jet_eta,
-                        "subleading_jet_eta/f");
-    tree_output->Branch("subleading_jet_mass", &subleading_jet_mass, "subleading_jet_mass/f");
-    tree_output->Branch("subleading_jet_area", &subleading_jet_area, "subleading_jet_area/f");
+                        "subleading_jet_eta/F");
+    tree_output->Branch("subleading_jet_mass", &subleading_jet_mass, "subleading_jet_mass/F");
+    tree_output->Branch("subleading_jet_area", &subleading_jet_area, "subleading_jet_area/F");
     tree_output->Branch("subleading_jet_btagPNetQvG", &subleading_jet_btagPNetQvG,
-                        "subleading_jet_btagPNetQvG/f");
+                        "subleading_jet_btagPNetQvG/F");
     tree_output->Branch("subleading_jet_btagUParTAK4QvG", &subleading_jet_btagUParTAK4QvG,
-                        "subleading_jet_btagUParTAK4QvG/f");
+                        "subleading_jet_btagUParTAK4QvG/F");
     tree_output->Branch("subleading_jet_btagDeepFlavQG", &subleading_jet_btagDeepFlavQG,
-                        "subleading_jet_btagDeepFlavQG/f");
+                        "subleading_jet_btagDeepFlavQG/F");
     tree_output->Branch("subleading_jet_chEmEF", &subleading_jet_chEmEF,
-                        "subleading_jet_chEmEF/f");
-    tree_output->Branch("subleading_jet_chHEF", &subleading_jet_chHEF, "subleading_jet_chHEF/f");
+                        "subleading_jet_chEmEF/F");
+    tree_output->Branch("subleading_jet_chHEF", &subleading_jet_chHEF, "subleading_jet_chHEF/F");
     tree_output->Branch("subleading_jet_neEmEF", &subleading_jet_neEmEF,
-                        "subleading_jet_neEmEF/f");
-    tree_output->Branch("subleading_jet_neHEF", &subleading_jet_neHEF, "subleading_jet_neHEF/f");
+                        "subleading_jet_neEmEF/F");
+    tree_output->Branch("subleading_jet_neHEF", &subleading_jet_neHEF, "subleading_jet_neHEF/F");
     tree_output->Branch("subleading_jet_nConstituents", &subleading_jet_nConstituents,
                         "subleading_jet_nConstituents/I");
     tree_output->Branch("subleading_jet_chMultiplicity", &subleading_jet_chMultiplicity,
@@ -591,18 +591,18 @@ void CreateTuple::setBranchesAddressesOutput() {
     tree_output->Branch("subleading_jet_neMultiplicity", &subleading_jet_neMultiplicity,
                         "subleading_jet_neMultiplicity/I");
     // diJet variables
-    tree_output->Branch("diJet_mass", &diJet_mass, "diJet_mass/f");
+    tree_output->Branch("diJet_mass", &diJet_mass, "diJet_mass/F");
     tree_output->Branch("delta_eta_diJet", &delta_eta_diJet,
-                        "delta_eta_diJet/f");
+                        "delta_eta_diJet/F");
     tree_output->Branch("delta_phi_diJet", &delta_phi_diJet,
-                        "delta_phi_diJet/f");
-    tree_output->Branch("z_zeppenfeld", &z_zeppenfeld, "z_zeppenfeld/f");
-    tree_output->Branch("pt_balance", &pt_balance, "pt_balance/f");
-    tree_output->Branch("pt_centrality", &pt_centrality, "pt_centrality/f");
+                        "delta_phi_diJet/F");
+    tree_output->Branch("z_zeppenfeld", &z_zeppenfeld, "z_zeppenfeld/F");
+    tree_output->Branch("pt_balance", &pt_balance, "pt_balance/F");
+    tree_output->Branch("pt_centrality", &pt_centrality, "pt_centrality/F");
     tree_output->Branch("min_delta_eta_diMuon_jet", &min_delta_eta_diMuon_jet,
-                        "min_delta_eta_diMuon_jet/f");
+                        "min_delta_eta_diMuon_jet/F");
     tree_output->Branch("min_delta_phi_diMuon_jet", &min_delta_phi_diMuon_jet,
-                        "min_delta_phi_diMuon_jet/f");
+                        "min_delta_phi_diMuon_jet/F");
     
 
     // LHE variables

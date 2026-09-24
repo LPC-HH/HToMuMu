@@ -4,10 +4,24 @@ set -e
 
 PROCESS=$1
 SYST=$2
+VERSION=$3
 
-ANALYZER_VERSION="v2.1"
-TUPLES_VERSION="v2.1.0"
+if [[ -z "$PROCESS" || -z "$SYST" || -z "$VERSION" ]]; then
+    echo "Usage: $0 <process> <systematic> <version>"
+    echo "Example:"
+    echo "  $0 ggH scale_up 2.2.1"
+    exit 1
+fi
 
+# Remove leading "v" if supplied
+VERSION="${VERSION#v}"
+
+# Full tuples version
+TUPLES_VERSION="v${VERSION}"
+
+# Analyzer version = major.minor
+# 2.2.1 -> 2.2
+ANALYZER_VERSION="v$(echo "$VERSION" | cut -d. -f1,2)"
 EOS_REDIRECTOR="root://cmseos.fnal.gov"
 
 EOS_BASE="/store/group/lpchmumu/${USER}/analyzer_HiggsMuMu_${ANALYZER_VERSION}/tuples_${TUPLES_VERSION}"
@@ -15,6 +29,8 @@ EOS_OUTDIR="${EOS_BASE}/systematics"
 
 echo "============================================================"
 echo "Starting job"
+echo "Analyzer version : ${ANALYZER_VERSION}"
+echo "Tuples version   : ${TUPLES_VERSION}"
 echo "Process    : ${PROCESS}"
 echo "Systematic: ${SYST}"
 echo "Host       : $(hostname)"

@@ -29,6 +29,8 @@ elif era_input == "2023":
     eras = ["2023", "2023BPix", "2023Combined"]
 elif era_input == "2024":
     eras = ["2024"]
+elif era_input == "2025":
+    eras = ["2025"]
 elif era_input == "Combined":
     eras = ["Combined"]
 elif era_input == "All":
@@ -252,7 +254,7 @@ def find_bdt_categories(era, bdt_categories, bdt_cut_max=1, iteration=0):
     # hep.cms.label(
     # data="True", label="", year=era, com="13.6", lumi=luminosity[era], ax=ax
     # )
-    hep.cms.label(data="True", ax=ax, com="13.6")
+    hep.cms.label(data="True", ax=ax, com="13.6", lumi=luminosity[era])
 
     print(f"MAX significance: {optimal_Z_tot} at BDT score: {optimal_bdt_cut}")
 
@@ -682,7 +684,7 @@ def draw_bdt_categories(era):
         hep.histplot(
             data_hist / np.sum(data_hist),
             data_bins,
-            label="Data",
+            label="Data (Sidebands)",
             ax=axs[0],
             stack=True,
             linewidth=2,
@@ -702,7 +704,7 @@ def draw_bdt_categories(era):
         data="True",
         label="",
         com="13.6",
-        # lumi=luminosity[era],
+        lumi=luminosity[era],
         ax=axs[0],
     )
 

@@ -2,11 +2,11 @@ universe = vanilla
 
 executable = run_hadd_systematic_job.sh
 
-arguments = $(process) $(systematic)
+arguments = $(process) $(systematic) $(version)
 
-output = hadd_sys/out/hadd_$(process)_$(systematic).out
-error  = hadd_sys/err/hadd_$(process)_$(systematic).err
-log    = hadd_sys/log/hadd_$(process)_$(systematic).log
+output = hadd_sys/out/hadd_$(process)_$(systematic)_v$(version).out
+error  = hadd_sys/err/hadd_$(process)_$(systematic)_v$(version).err
+log    = hadd_sys/log/hadd_$(process)_$(systematic)_v$(version).log
 
 request_cpus   = 1
 request_memory = 3000MB
@@ -17,4 +17,4 @@ getenv = True
 should_transfer_files = YES
 when_to_transfer_output = ON_EXIT
 
-queue process, systematic from systematics_jobs.txt
+queue process, systematic, version from systematics_jobs.txt

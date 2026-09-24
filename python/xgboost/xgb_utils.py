@@ -84,7 +84,6 @@ def append_BDT_score(
     elif file_type == "signal":
         tuple_subset = signal_subset
 
-
     if not use_skim:
         tuple_path = "../../root_io/tuples/"
         tuple_name = f"{file_type}_{era}_tuples.root"
@@ -95,6 +94,7 @@ def append_BDT_score(
     else:
         tuple_path = f"../../root_io/skim/{channel_US}/"
         tuple_name = f"{file_type}_{era}_skim_{tuple_subset}.root"
+
         BDT_path = f"../../root_io/skim/BDT_score/{channel_US}/"
         BDT_name = f"{file_type}_{era}_skim_{subset_title}.root"
 
@@ -151,107 +151,169 @@ def append_BDT_score(
         raise RuntimeError(
             "Variable list in preprocessing file does not "
             "match the current BDT variable list.\n"
-            f"Training: {training_variables}\nCurrent:  {variable_names}"
+            f"Training: {training_variables}\n"
+            f"Current:  {variable_names}"
         )
 
-    print("[INFO] Reading BDT variables")
+    # ============================================================
+    # Prepare XGBoost model
+    # ============================================================
+
+    booster = model.get_booster()
+    booster_feature_names = booster.feature_names
+
+    if (
+        booster_feature_names is not None
+        and len(booster_feature_names) != len(variable_names)
+    ):
+        raise RuntimeError(
+            "Number of variables does not match model: "
+            f"model={len(booster_feature_names)}, "
+            f"input={len(variable_names)}"
+        )
+
+    try:
+        best_iteration = booster.best_iteration
+    except (AttributeError, TypeError):
+        best_iteration = None
+
+    # ============================================================
+    # Read and predict in chunks
+    # ============================================================
+
+    CHUNK_SIZE = 500_000
+
+    print("[INFO] Reading BDT variables and predicting in chunks")
+    print(f"[INFO] Chunk size: {CHUNK_SIZE:,} events")
 
     with uproot.open(file_name) as f:
+
         if "tree_output" not in f:
             raise RuntimeError(f"tree_output not found in {file_name}")
 
-        arrays = f["tree_output"].arrays(variable_names, library="np")
+        tree_uproot = f["tree_output"]
 
-    if len(variable_names) > 0:
-        x_test = np.column_stack([arrays[name] for name in variable_names]).astype(np.float32)
+        number_of_events = tree_uproot.num_entries
 
-    else:
-        x_test = np.empty((0, 0), dtype=np.float32)
+        print(
+            f"[INFO] Number of events after skimming: "
+            f"{number_of_events:,}"
+        )
 
-    number_of_events = len(x_test)
+        y_pred = np.empty(number_of_events, dtype=np.float32)
 
-    print(f"[INFO] Number of events after skimming: {number_of_events}")
+        for start in range(0, number_of_events, CHUNK_SIZE):
 
-    if do_standardization and number_of_events > 0:
-        print("[INFO] Standardizing variables")
+            stop = min(start + CHUNK_SIZE, number_of_events)
 
-        for i, variable in enumerate(variables):
-
-            variable_name = variable[0]
-
-            null_value = 0.0
-
-            if variable_name in ["delta_phi_diJet", "pt_balance"]:
-                null_value = -1.0
-
-            if variable_name not in saved_mean_map:
-                raise KeyError(f"Mean missing for {variable_name}")
-
-            if variable_name not in saved_std_map:
-                raise KeyError(f"Std missing for {variable_name}")
-
-            if saved_std_map[variable_name] == 0:
-                raise ValueError(f"Std is zero for {variable_name}")
-
-            mask = (
-                x_test[:, i] != null_value
+            print(
+                f"[INFO] Predicting events "
+                f"{start:,} - {stop:,} / {number_of_events:,}"
             )
 
-            x_test[mask, i] = (
-                x_test[mask, i]
-                - saved_mean_map[variable_name]
-            ) / saved_std_map[variable_name]
-
-
-    if number_of_events > 0:
-
-        booster = model.get_booster()
-        booster_feature_names = booster.feature_names
-
-        if (
-            booster_feature_names is not None
-            and len(booster_feature_names)
-            != x_test.shape[1]
-        ):
-            raise RuntimeError(
-                "Number of variables does not match model: "
-                f"model={len(booster_feature_names)}, input={x_test.shape[1]}"
+            # Read ONLY this chunk from the ROOT tree.
+            arrays = tree_uproot.arrays(
+                variable_names,
+                entry_start=start,
+                entry_stop=stop,
+                library="np",
             )
 
-        if booster_feature_names is not None:
-            dtest = xgb.DMatrix(
-                x_test,
-                feature_names=booster_feature_names,
+            chunk_events = stop - start
+
+            # Create the matrix directly as float32.
+            #
+            x_test = np.empty(
+                (chunk_events, len(variable_names)),
+                dtype=np.float32,
             )
 
-        else:
-            dtest = xgb.DMatrix(x_test)
+            for variable_index, variable_name in enumerate(variable_names):
+                x_test[:, variable_index] = arrays[variable_name]
 
-        try:
-            best_iteration = booster.best_iteration
+            # ====================================================
+            # Standardization
+            # ====================================================
 
-        except (AttributeError, TypeError):
+            if do_standardization and chunk_events > 0:
 
-            best_iteration = None
+                for variable_index, variable in enumerate(variables):
 
-        if best_iteration is not None:
-            y_pred = booster.predict(
-                dtest,
-                iteration_range=(
-                    0,
-                    best_iteration + 1,
-                ),
+                    variable_name = variable[0]
+
+                    null_value = 0.0
+
+                    if variable_name in [
+                        "delta_phi_diJet",
+                        "pt_balance",
+                    ]:
+                        null_value = -1.0
+
+                    if variable_name not in saved_mean_map:
+                        raise KeyError(
+                            f"Mean missing for {variable_name}"
+                        )
+
+                    if variable_name not in saved_std_map:
+                        raise KeyError(
+                            f"Std missing for {variable_name}"
+                        )
+
+                    if saved_std_map[variable_name] == 0:
+                        raise ValueError(
+                            f"Std is zero for {variable_name}"
+                        )
+
+                    mask = (
+                        x_test[:, variable_index]
+                        != null_value
+                    )
+
+                    x_test[mask, variable_index] = (
+                        x_test[mask, variable_index]
+                        - saved_mean_map[variable_name]
+                    ) / saved_std_map[variable_name]
+
+            # ====================================================
+            # XGBoost prediction for this chunk
+            # ====================================================
+
+            if booster_feature_names is not None:
+                dtest = xgb.DMatrix(
+                    x_test,
+                    feature_names=booster_feature_names,
+                )
+            else:
+                dtest = xgb.DMatrix(x_test)
+
+            if best_iteration is not None:
+                chunk_pred = booster.predict(
+                    dtest,
+                    iteration_range=(
+                        0,
+                        best_iteration + 1,
+                    ),
+                )
+            else:
+                chunk_pred = booster.predict(dtest)
+
+            y_pred[start:stop] = np.asarray(
+                chunk_pred,
+                dtype=np.float32,
             )
 
-        else:
-            y_pred = booster.predict(dtest)
-
-        y_pred = np.asarray(y_pred, dtype=np.float32,)
-
-    else:
-        y_pred = np.array([], dtype=np.float32)
+            # Explicitly release the large temporary objects
+            # before reading the next chunk.
+            del arrays
+            del x_test
+            del dtest
+            del chunk_pred
 
     print("[INFO] BDT predictions calculated")
+
+    # ============================================================
+    # Add BDT branch
+    # ============================================================
 
     print("[INFO] Adding BDT branch")
 
@@ -271,415 +333,40 @@ def append_BDT_score(
     if n_entries != len(y_pred):
         root_file.Close()
 
-        raise RuntimeError(f"Entry mismatch: tree={n_entries},predictions={len(y_pred)}")
+        raise RuntimeError(
+            f"Entry mismatch: "
+            f"tree={n_entries}, predictions={len(y_pred)}"
+        )
 
     BDT_var_name = f"BDT_{channel_US}"
 
-    BDT_value = array("f",[0.0])
+    BDT_value = array("f", [0.0])
 
-    new_branch = tree.Branch(BDT_var_name, BDT_value,f"{BDT_var_name}/F")
+    new_branch = tree.Branch(
+        BDT_var_name,
+        BDT_value,
+        f"{BDT_var_name}/F",
+    )
 
     for entry_index in range(n_entries):
+
         tree.GetEntry(entry_index)
 
-        if entry_index % 10000 == 0:
-            print(f"[INFO] Processing {entry_index}/{n_entries}")
+        if entry_index % 100000 == 0:
+            print(
+                f"[INFO] Writing BDT score "
+                f"{entry_index:,}/{n_entries:,}"
+            )
 
         BDT_value[0] = float(y_pred[entry_index])
         new_branch.Fill()
 
-    tree.Write("", root.TObject.kOverwrite,)
+    tree.Write("", root.TObject.kOverwrite)
 
     root_file.Close()
 
     print(f"[INFO] Finished: {file_name}")
 
-
-def append_BDT_score_to_sys(
-    file_type,
-    channel_US,
-    era,
-    model_era,
-    signal_subset,
-    background_subset,
-    variables,
-    mean_map,
-    std_map,
-    do_standardization,
-    use_bsConstrain,
-):
-    subset_title = f"B{background_subset}_S{signal_subset}"
-
-    systematics = [
-        "scale_up",
-        "scale_down",
-        "smearing_up",
-        "smearing_down",
-    ]
-
-    jet_jes_syst_names = [
-        "CMS_scale_j_FlavorQCD",
-        "CMS_scale_j_RelativeBal",
-        "CMS_scale_j_HF",
-        "CMS_scale_j_BBEC1",
-        "CMS_scale_j_EC2",
-        "CMS_scale_j_Absolute",
-        
-        "CMS_scale_j_BBEC1_2022",
-        "CMS_scale_j_RelativeSample_2022",
-        "CMS_scale_j_EC2_2022",
-        "CMS_scale_j_HF_2022",
-        "CMS_scale_j_Absolute_2022",
-        
-        "CMS_scale_j_BBEC1_2022EE",
-        "CMS_scale_j_RelativeSample_2022EE",
-        "CMS_scale_j_EC2_2022EE",
-        "CMS_scale_j_HF_2022EE",
-        "CMS_scale_j_Absolute_2022EE",
-        
-        "CMS_scale_j_BBEC1_2023",
-        "CMS_scale_j_RelativeSample_2023",
-        "CMS_scale_j_EC2_2023",
-        "CMS_scale_j_HF_2023",
-        "CMS_scale_j_Absolute_2023",
-       
-        "CMS_scale_j_BBEC1_2023BPix",
-        "CMS_scale_j_RelativeSample_2023BPix",
-        "CMS_scale_j_EC2_2023BPix",
-        "CMS_scale_j_HF_2023BPix",
-        "CMS_scale_j_Absolute_2023BPix",
-        
-        "CMS_scale_j_BBEC1_2024",
-        "CMS_scale_j_RelativeSample_2024",
-        "CMS_scale_j_EC2_2024",
-        "CMS_scale_j_HF_2024",
-        "CMS_scale_j_Absolute_2024",
-       
-        "CMS_scale_j_BBEC1_2025",
-        "CMS_scale_j_RelativeSample_2025",
-        "CMS_scale_j_EC2_2025",
-        "CMS_scale_j_HF_2025",
-        "CMS_scale_j_Absolute_2025",
-        
-        "CMS_res_j_eta0to1p93_pt0toInf_2022",
-        "CMS_res_j_eta1p93to2p5_pt0toInf_2022",
-        "CMS_res_j_eta2p5to3p0_pt0to50_2022",
-        "CMS_res_j_eta2p5to3p0_pt50toInf_2022",
-        "CMS_res_j_eta3to5_pt0to50_2022",
-        "CMS_res_j_eta3to5_pt50toInf_2022",
-        
-        "CMS_res_j_eta0to1p93_pt0toInf_2022EE",
-        "CMS_res_j_eta1p93to2p5_pt0toInf_2022EE",
-        "CMS_res_j_eta2p5to3p0_pt0to50_2022EE",
-        "CMS_res_j_eta2p5to3p0_pt50toInf_2022EE",
-        "CMS_res_j_eta3to5_pt0to50_2022EE",
-        "CMS_res_j_eta3to5_pt50toInf_2022EE",
-        
-        "CMS_res_j_eta0to1p93_pt0toInf_2023",
-        "CMS_res_j_eta1p93to2p5_pt0toInf_2023",
-        "CMS_res_j_eta2p5to3p0_pt0to50_2023",
-        "CMS_res_j_eta2p5to3p0_pt50toInf_2023",
-        "CMS_res_j_eta3to5_pt0to50_2023",
-        "CMS_res_j_eta3to5_pt50toInf_2023",
-        
-        "CMS_res_j_eta0to1p93_pt0toInf_2023BPix",
-        "CMS_res_j_eta1p93to2p5_pt0toInf_2023BPix",
-        "CMS_res_j_eta2p5to3p0_pt0to50_2023BPix",
-        "CMS_res_j_eta2p5to3p0_pt50toInf_2023BPix",
-        "CMS_res_j_eta3to5_pt0to50_2023BPix",
-        "CMS_res_j_eta3to5_pt50toInf_2023BPix",
-        
-        "CMS_res_j_eta0to1p93_pt0toInf_2024",
-        "CMS_res_j_eta1p93to2p5_pt0toInf_2024",
-        "CMS_res_j_eta2p5to3p0_pt0to50_2024",
-        "CMS_res_j_eta2p5to3p0_pt50toInf_2024",
-        "CMS_res_j_eta3to5_pt0to50_2024",
-        "CMS_res_j_eta3to5_pt50toInf_2024",
-        
-        "CMS_res_j_eta0to1p93_pt0toInf_2025",
-        "CMS_res_j_eta1p93to2p5_pt0toInf_2025",
-        "CMS_res_j_eta2p5to3p0_pt0to50_2025",
-        "CMS_res_j_eta2p5to3p0_pt50toInf_2025",
-        "CMS_res_j_eta3to5_pt0to50_2025",
-        "CMS_res_j_eta3to5_pt50toInf_2025",
-    ]
-
-    for syst_name in jet_jes_syst_names:
-        systematics.extend(
-            [
-                f"{syst_name}_up",
-                f"{syst_name}_down",
-            ]
-        )
-
-    tuple_path = (
-        "/eos/uscms/store/user/lpchmumu/mbarrial/"
-        "analyzer_HiggsMuMu_v2.0/tuples_v2.0.0/systematics/"
-    )
-
-    BDT_path = (
-        f"{tuple_path}BDT_score/"
-        f"{channel_US}/{subset_title}/"
-    )
-
-    os.makedirs(BDT_path, exist_ok=True)
-
-    model_file = (
-        f"./models/model_{channel_US}_{model_era}_"
-        f"{subset_title}.pkl"
-    )
-
-    if use_bsConstrain:
-        model_file = (
-            f"./models/model_{channel_US}_{model_era}_"
-            f"{subset_title}_bsC.pkl"
-        )
-
-    print(f"[INFO] Loading model: {model_file}")
-
-    with open(model_file, "rb") as pkl_file:
-        model = pickle.load(pkl_file)
-
-    if not hasattr(model, "use_label_encoder"):
-        model.use_label_encoder = False
-
-
-    variable_names = [var[0] for var in variables]
-    BDT_var_name = f"BDT_{channel_US}"
-
-    successful_systematics = []
-    missing_systematics = []
-    failed_systematics = []
-
-    for syst_index, systematic in enumerate(systematics, start=1):
-        tuple_name = (
-            f"{file_type}_{era}_{systematic}_tuples.root"
-        )
-
-        input_file_name = tuple_path + tuple_name
-
-        # Preserve the systematic tuple filename inside BDT_score.
-        BDT_name = tuple_name
-        output_file_name = BDT_path + BDT_name
-
-        print()
-        print("=" * 80)
-        print(
-            f"[INFO] Systematic {syst_index}/{len(systematics)}: "
-            f"{systematic}"
-        )
-        print(f"[INFO] Input:  {input_file_name}")
-        print(f"[INFO] Output: {output_file_name}")
-        print("=" * 80)
-
-        if not os.path.exists(input_file_name):
-            print(f"[WARNING] Input file does not exist. Skipping.")
-            missing_systematics.append(systematic)
-            continue
-
-        try:
-            # Copy and skim the original systematic tuple.
-            copy_and_skim_tree(
-                tuple_path,
-                tuple_name,
-                BDT_path,
-                BDT_name,
-                channel_US,
-                use_bsConstrain,
-            )
-
-            # Read the variables in exactly the same order used for training.
-            with uproot.open(output_file_name) as uproot_file:
-                if "tree_output" not in uproot_file:
-                    raise RuntimeError(
-                        f"tree_output not found in {output_file_name}"
-                    )
-
-                arrays = uproot_file["tree_output"].arrays(
-                    variable_names,
-                    library="np",
-                )
-
-                df = pd.DataFrame(
-                    {
-                        variable_name: arrays[variable_name]
-                        for variable_name in variable_names
-                    }
-                )
-
-            x_test = df.to_numpy(dtype=np.float32, copy=True)
-            number_of_events = len(x_test)
-
-            print(
-                f"[INFO] Number of events after skimming: "
-                f"{number_of_events}"
-            )
-
-            if do_standardization and number_of_events > 0:
-                for variable_index, variable in enumerate(variables):
-                    variable_name = variable[0]
-
-                    null_value = 0.0
-
-                    if variable_name in [
-                        "delta_phi_diJet",
-                        "pt_balance",
-                    ]:
-                        null_value = -1.0
-
-                    if variable_name not in mean_map:
-                        raise KeyError(
-                            f"Mean not found for {variable_name}"
-                        )
-
-                    if variable_name not in std_map:
-                        raise KeyError(
-                            f"Standard deviation not found for "
-                            f"{variable_name}"
-                        )
-
-                    if std_map[variable_name] == 0:
-                        raise ValueError(
-                            f"Standard deviation is zero for "
-                            f"{variable_name}"
-                        )
-
-                    mask = (
-                        x_test[:, variable_index] != null_value
-                    )
-
-                    x_test[mask, variable_index] = (
-                        x_test[mask, variable_index]
-                        - mean_map[variable_name]
-                    ) / std_map[variable_name]
-
-            if number_of_events > 0:
-                # Bypass the XGBClassifier sklearn wrapper because the model was
-                # pickled with an older XGBoost version.
-                booster = model.get_booster()
-
-                booster_feature_names = booster.feature_names
-
-                if (
-                    booster_feature_names is not None
-                    and len(booster_feature_names) != x_test.shape[1]
-                ):
-                    raise RuntimeError(
-                        "Number of BDT input variables does not match the model: "
-                        f"model expects {len(booster_feature_names)}, "
-                        f"but input contains {x_test.shape[1]}"
-                    )
-
-                dtest = xgb.DMatrix(
-                    x_test,
-                    feature_names=booster_feature_names,
-                )
-
-                try:
-                    best_iteration = booster.best_iteration
-                except (AttributeError, TypeError):
-                    best_iteration = None
-
-                if best_iteration is not None:
-                    y_pred = booster.predict(
-                        dtest,
-                        iteration_range=(0, best_iteration + 1),
-                    )
-                else:
-                    y_pred = booster.predict(dtest)
-
-                y_pred = np.asarray(y_pred, dtype=np.float32)
-
-            else:
-                y_pred = np.array([], dtype=np.float32)
-
-            root_file = root.TFile.Open(
-                output_file_name,
-                "UPDATE",
-            )
-
-            if not root_file or root_file.IsZombie():
-                raise RuntimeError(
-                    f"Could not open {output_file_name} with ROOT"
-                )
-
-            tree = root_file.Get("tree_output")
-
-            if not tree:
-                root_file.Close()
-                raise RuntimeError(
-                    f"tree_output not found in {output_file_name}"
-                )
-
-            n_entries = tree.GetEntries()
-
-            if n_entries != len(y_pred):
-                root_file.Close()
-                raise RuntimeError(
-                    f"Entry mismatch for {systematic}: "
-                    f"tree has {n_entries}, predictions have "
-                    f"{len(y_pred)}"
-                )
-
-            BDT_value = array("f", [0.0])
-
-            new_branch = tree.Branch(
-                BDT_var_name,
-                BDT_value,
-                f"{BDT_var_name}/F",
-            )
-
-            for entry_index in range(n_entries):
-                tree.GetEntry(entry_index)
-
-                if entry_index % 10000 == 0:
-                    print(
-                        f"[INFO] Processing entry "
-                        f"{entry_index}/{n_entries}"
-                    )
-
-                BDT_value[0] = float(y_pred[entry_index])
-                new_branch.Fill()
-
-            tree.Write("", root.TObject.kOverwrite)
-            root_file.Close()
-
-            successful_systematics.append(systematic)
-
-            print(
-                f"[INFO] Finished systematic: {systematic}"
-            )
-
-        except Exception as error:
-            failed_systematics.append(
-                (systematic, str(error))
-            )
-
-            print(
-                f"[ERROR] Failed systematic {systematic}: "
-                f"{error}"
-            )
-
-    print()
-    print("=" * 80)
-    print("[INFO] Systematic BDT processing completed")
-    print(f"[INFO] Successful: {len(successful_systematics)}")
-    print(f"[INFO] Missing:    {len(missing_systematics)}")
-    print(f"[INFO] Failed:     {len(failed_systematics)}")
-    print(f"[INFO] Output directory: {BDT_path}")
-    print("=" * 80)
-
-    if missing_systematics:
-        print("[WARNING] Missing systematics:")
-
-        for systematic in missing_systematics:
-            print(f"  {systematic}")
-
-    if failed_systematics:
-        print("[ERROR] Failed systematics:")
-
-        for systematic, error in failed_systematics:
-            print(f"  {systematic}: {error}")
 
 
 

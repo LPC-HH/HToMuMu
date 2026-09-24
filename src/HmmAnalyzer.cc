@@ -699,6 +699,8 @@ void HmmAnalyzer::EventLoop() {
         float leadJet_pt = FLOAT_NULL_VALUE; 
         float subleadJet_pt = FLOAT_NULL_VALUE;
         
+        bool veto_event_jvm = false;
+        
         for (int j = 0; j < nJet; j++) {
             h_nJets->Fill(0.5);
             //std::cout << "looking at jet " << j << std::endl;
@@ -897,6 +899,15 @@ void HmmAnalyzer::EventLoop() {
                     shifted_jes_masses.at(mass_branch_name) *= shifted_jer_factor;
                 }
             }
+            
+            if (passesJetIdTightLepVeto(j) &&
+                jvm_checker.checkJetInVetoRegion(Jet_eta[j], Jet_phi[j], corrected_jet_pt,
+                    Jet_jetId[j], Jet_chEmEF[j], Jet_neEmEF[j])) {
+
+                veto_event_jvm = true;
+                break;
+            }
+
 
 
             if (!isValidJet(j, corrected_jet_pt)) {
@@ -909,6 +920,9 @@ void HmmAnalyzer::EventLoop() {
             // Jet_jetId[j] >= 2 [> && Jet_puId[j]>=1 <])) {
             // continue;
             //}
+            //
+            
+
             double dR1 = DeltaR(Muon_eta[index_mu1], Muon_phi[index_mu1],
                                 Jet_eta[j], Jet_phi[j]);
             double dR2 = DeltaR(Muon_eta[index_mu2], Muon_phi[index_mu2],
@@ -924,14 +938,16 @@ void HmmAnalyzer::EventLoop() {
                 continue;
             }*/
             //std::cout << "Jet pass dR and EmEF" << std::endl;
-            if (jvm_checker.checkJetInVetoRegion(
-                    Jet_eta[j], Jet_phi[j], corrected_jet_pt, Jet_jetId[j],
-                    Jet_chEmEF[j], Jet_neEmEF[j])) {
-                // std::cout << "Jet " << j << " vetoed" << std::endl;
-                continue;
-            }
+            //if (jvm_checker.checkJetInVetoRegion(
+                    //Jet_eta[j], Jet_phi[j], corrected_jet_pt, Jet_jetId[j],
+                    //Jet_chEmEF[j], Jet_neEmEF[j])) {
+                //// std::cout << "Jet " << j << " vetoed" << std::endl;
+                //continue;
+            //}
+
+
+
             
-            h_nValidNotVetoedJets->Fill(0.5);
 
             //std::cout << "Jet pass jetVeto" << std::endl;
             int stored_jet_idx = t_nJet;
@@ -1063,7 +1079,10 @@ void HmmAnalyzer::EventLoop() {
             t_bJet_SFup->push_back(jet_scalefactor_up);
             t_bJet_SFdown->push_back(jet_scalefactor_do);
         }
-       
+        if (veto_event_jvm) {
+            continue; 
+        }      
+        h_nValidNotVetoedJets->Fill(0.5);
         t_leadJet_idx = leadJet_idx;
         t_subleadJet_idx = subleadJet_idx;
 
@@ -1072,7 +1091,7 @@ void HmmAnalyzer::EventLoop() {
             //continue;
         //}
 
-        h_nBjetRejection->Fill(0.5);
+        //h_nBjetRejection->Fill(0.5);
 
 
 

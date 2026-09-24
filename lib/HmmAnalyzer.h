@@ -307,6 +307,7 @@ class HmmAnalyzer : public MainEvent {
     float getPileupWeightUp(int);
     float getPileupWeightDown(int);
     //bool passesJetPtSelection(int index, float corrected_pt);
+    bool passesJetIdTightLepVeto(int index);
     bool isValidJet(int index, float corrected_pt);
     void EventLoop();
 
@@ -802,43 +803,100 @@ float HmmAnalyzer::getPileupWeightDown(int NPU) {
     //}
 //}
 
-bool HmmAnalyzer::isValidJet(int index, float corrected_pt) {
+bool HmmAnalyzer::passesJetIdTightLepVeto(int index) {
+
     bool Jet_passJetIdTight = false;
     bool Jet_passJetIdTightLepVeto = false;
-    if(NANOAOD_VERSION.at(year) == "v12"){ //nanoAODv12
-        //std::cout << "Running v12" << std::endl;
-        if (fabs(Jet_eta[index]) <= 2.7) Jet_passJetIdTight = Jet_jetId[index] & (1 << 1);
-        else if (fabs(Jet_eta[index]) > 2.7 && fabs(Jet_eta[index]) <= 3.0) Jet_passJetIdTight = (Jet_jetId[index] & (1 << 1)) && (Jet_neHEF[index] < 0.99);
-        else if (fabs(Jet_eta[index]) > 3.0) Jet_passJetIdTight = (Jet_jetId[index] & (1 << 1)) && (Jet_neEmEF[index] < 0.4);
-        
-        if (abs(Jet_eta[index]) <= 2.7) Jet_passJetIdTightLepVeto = Jet_passJetIdTight && (Jet_muEF[index] < 0.8) && (Jet_chEmEF[index] < 0.8);
-        else Jet_passJetIdTightLepVeto = Jet_passJetIdTight;
+
+    if (NANOAOD_VERSION.at(year) == "v12") {
+
+        if (fabs(Jet_eta[index]) <= 2.7) {
+            Jet_passJetIdTight =
+                Jet_jetId[index] & (1 << 1);
+        }
+        else if (fabs(Jet_eta[index]) > 2.7 &&
+                 fabs(Jet_eta[index]) <= 3.0) {
+
+            Jet_passJetIdTight =
+                (Jet_jetId[index] & (1 << 1)) &&
+                (Jet_neHEF[index] < 0.99);
+        }
+        else if (fabs(Jet_eta[index]) > 3.0) {
+
+            Jet_passJetIdTight =
+                (Jet_jetId[index] & (1 << 1)) &&
+                (Jet_neEmEF[index] < 0.4);
+        }
+
+        if (fabs(Jet_eta[index]) <= 2.7) {
+            Jet_passJetIdTightLepVeto =
+                Jet_passJetIdTight &&
+                (Jet_muEF[index] < 0.8) &&
+                (Jet_chEmEF[index] < 0.8);
+        }
+        else {
+            Jet_passJetIdTightLepVeto = Jet_passJetIdTight;
+        }
     }
 
-    else{ //nanoAODv15
-        //std::cout << "Running v15" << std::endl;
-        if (fabs(Jet_eta[index]) <= 2.6){
-            Jet_passJetIdTight = (Jet_neHEF[index] < 0.99) && (Jet_neEmEF[index] < 0.9) && (Jet_chMultiplicity[index]+Jet_neMultiplicity[index] > 1) && 
-             (Jet_chHEF[index] > 0.01) && (Jet_chMultiplicity[index] > 0);
+    else {  // NanoAOD v15
+
+        if (fabs(Jet_eta[index]) <= 2.6) {
+
+            Jet_passJetIdTight =
+                (Jet_neHEF[index] < 0.99) &&
+                (Jet_neEmEF[index] < 0.9) &&
+                (Jet_chMultiplicity[index] +
+                 Jet_neMultiplicity[index] > 1) &&
+                (Jet_chHEF[index] > 0.01) &&
+                (Jet_chMultiplicity[index] > 0);
         }
-        else if (fabs(Jet_eta[index]) > 2.6 && abs(Jet_eta[index]) <= 2.7){
-            Jet_passJetIdTight = (Jet_neHEF[index] < 0.90) && (Jet_neEmEF[index] < 0.99);
+
+        else if (fabs(Jet_eta[index]) > 2.6 &&
+                 fabs(Jet_eta[index]) <= 2.7) {
+
+            Jet_passJetIdTight =
+                (Jet_neHEF[index] < 0.90) &&
+                (Jet_neEmEF[index] < 0.99);
         }
-        else if (fabs(Jet_eta[index]) > 2.7 && fabs(Jet_eta[index]) <= 3.0){
-            Jet_passJetIdTight = (Jet_neHEF[index] < 0.99);
+
+        else if (fabs(Jet_eta[index]) > 2.7 &&
+                 fabs(Jet_eta[index]) <= 3.0) {
+
+            Jet_passJetIdTight =
+                (Jet_neHEF[index] < 0.99);
         }
-        else if (fabs(Jet_eta[index]) > 3.0){
-            Jet_passJetIdTight = (Jet_neMultiplicity[index] >= 2) && (Jet_neEmEF[index] < 0.4);
+
+        else if (fabs(Jet_eta[index]) > 3.0) {
+
+            Jet_passJetIdTight =
+                (Jet_neMultiplicity[index] >= 2) &&
+                (Jet_neEmEF[index] < 0.4);
         }
-        
-        if (abs(Jet_eta[index]) <= 2.7) 
-           Jet_passJetIdTightLepVeto = Jet_passJetIdTight && (Jet_muEF[index] < 0.8) && (Jet_chEmEF[index] < 0.8);
-        else 
-           Jet_passJetIdTightLepVeto = Jet_passJetIdTight;
+
+        if (fabs(Jet_eta[index]) <= 2.7) {
+
+            Jet_passJetIdTightLepVeto =
+                Jet_passJetIdTight &&
+                (Jet_muEF[index] < 0.8) &&
+                (Jet_chEmEF[index] < 0.8);
+        }
+        else {
+            Jet_passJetIdTightLepVeto = Jet_passJetIdTight;
+        }
     }
 
-    return (corrected_pt > 15. && fabs(Jet_eta[index]) < 4.7 &&
-            Jet_passJetIdTightLepVeto /* && Jet_puId[index]>=1 */);
+    return Jet_passJetIdTightLepVeto;
+}
+
+
+bool HmmAnalyzer::isValidJet(int index, float corrected_pt) {
+
+    return (
+        corrected_pt > 15. &&
+        fabs(Jet_eta[index]) < 4.7 &&
+        passesJetIdTightLepVeto(index)
+    );
 }
 
 bool HmmAnalyzer::FillChain(TChain *chain, const TString &inputFileList) {

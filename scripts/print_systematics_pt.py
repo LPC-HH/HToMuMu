@@ -6,6 +6,8 @@ from pathlib import Path
 
 import numpy as np
 import uproot
+import argparse
+import os
 from systematics_config import (
     BDT_CUTS,
     CHANNELS,
@@ -79,8 +81,21 @@ class Tee:
             stream.flush()
 
 
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "version",
+    help="Tuple version, e.g. 2.2.0"
+)
+args = parser.parse_args()
+VERSION = args.version
+USER = os.environ["USER"]
+
+ANALYZER_VERSION = ".".join(VERSION.split(".")[:2])
+
 TUPLE_BASE = Path(
-    "/eos/uscms/store/user/lpchmumu/mbarrial/analyzer_HiggsMuMu_v2.1/tuples_v2.1.0"
+    f"/eos/uscms/store/user/lpchmumu/{USER}/"
+    f"analyzer_HiggsMuMu_v{ANALYZER_VERSION}/"
+    f"tuples_v{VERSION}"
 )
 
 TUPLE_BASE_NOMINAL = Path("./root_io/tuples/")
