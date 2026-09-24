@@ -8,6 +8,10 @@ from typing import Dict, Iterable, List, Mapping, NamedTuple, Optional, Sequence
 import numpy as np
 import uproot as ur
 
+# Read the (tens of GB) BDT_score files in chunks rather than memory-mapping them whole:
+# the whole-file map alone exceeds the 16 GiB per-process limit on the LPC login nodes.
+UPROOT_OPEN = dict(file_handler=ur.MultithreadedFileSource)
+
 
 TREE_NAME = "tree_output"
 INCLUSIVE_SELECTION_KEY = "inclusive"
@@ -336,7 +340,7 @@ def validate_tuple_file(
         return False, "file does not exist"
 
     try:
-        with ur.open(file_path) as root_file:
+        with ur.open(file_path, **UPROOT_OPEN) as root_file:
             if TREE_NAME not in root_file:
                 return False, f"missing TTree '{TREE_NAME}'"
 
@@ -572,6 +576,7 @@ def read_nominal_and_nanoaod_branch_histograms(
         branches_to_read,
         library="np",
         step_size="50 MB",
+        **UPROOT_OPEN,
     ):
         number_of_events = len(arrays[variables[0]])
         if use_weights:
@@ -713,6 +718,7 @@ def read_variation_histograms(
         branches_to_read,
         library="np",
         step_size="50 MB",
+        **UPROOT_OPEN,
     ):
         number_of_events = len(arrays[variables[0]])
         if use_weights:
