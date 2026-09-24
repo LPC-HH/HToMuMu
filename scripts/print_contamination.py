@@ -42,6 +42,13 @@ from typing import Iterable
 import numpy as np
 import uproot as ur
 
+sys_path.insert(0, str(Path(__file__).resolve().parent.parent / "python"))
+from bdt_categories_io import load_bdt_categories, get_bdt_cuts
+
+# Read the (tens of GB) BDT_score files in chunks rather than memory-mapping them whole:
+# the whole-file map alone exceeds the 16 GiB per-process limit on the LPC login nodes.
+UPROOT_OPEN = dict(file_handler=ur.MultithreadedFileSource)
+
 
 MASS_BRANCH = "diMuon_bsConstrainedMass"
 WEIGHT_BRANCH = "weight_no_eff_sf"
@@ -69,24 +76,10 @@ PROCESS_FILE_NAMES = {
 
 # BDT category boundaries in ascending score order.
 # The highest-score interval is category 1.
+ch_list = ["ggH", "VBF"]
 bdt_cuts = {
-    "ggH": [
-        0.0,
-        0.4400000000000002,
-        0.6100000000000003,
-        0.8100000000000005,
-        0.9200000000000006,
-        1.0,
-    ],
-    "VBF": [
-        0.0,
-        0.6466666666666667,
-        0.8800000000000018,
-        0.9466666666666689,
-        0.9733333333333357,
-        1.0,
-    ],
-}
+    ch: get_bdt_cuts(bdt_categories_info, ch, "Combined", "BFull_SNottH", mass_variable)
+} 
 
 
 @dataclass
@@ -189,7 +182,7 @@ def load_process_yields(
     if not file_path.is_file():
         raise FileNotFoundError(f"Input file not found: {file_path}")
 
-    with ur.open(file_path) as root_file:
+    with ur.open(file_path, **UPROOT_OPEN) as root_file:
         if TREE_NAME not in root_file:
             raise KeyError(f"Tree '{TREE_NAME}' not found in {file_path}")
 
@@ -210,6 +203,7 @@ def load_process_yields(
         expressions=branches,
         library="np",
         step_size=STEP_SIZE,
+        **UPROOT_OPEN,
     ):
         masses = np.asarray(arrays[MASS_BRANCH], dtype=float)
         weights = np.asarray(arrays[WEIGHT_BRANCH], dtype=float)

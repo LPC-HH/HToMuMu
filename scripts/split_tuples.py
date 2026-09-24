@@ -2,6 +2,10 @@ import argparse
 import os
 from sys import path as sys_path
 import uproot
+
+# Read the (tens of GB) BDT_score files in chunks rather than memory-mapping them whole:
+# the whole-file map alone exceeds the 16 GiB per-process limit on the LPC login nodes.
+UPROOT_OPEN = dict(file_handler=uproot.MultithreadedFileSource)
 import numpy as np
 from pathlib import Path
 
@@ -81,7 +85,7 @@ def split_tuples_by_category(
             #     print("Reweighting signal MC")
             #     reweight = 281.7/170.97
 
-            branches = uproot.open(input_file_name)["tree_output"].arrays(
+            branches = uproot.open(input_file_name, **UPROOT_OPEN)["tree_output"].arrays(
                 selected_branches, library="np"
             )
             # Changing the weight from xs*gen_weight*pu*br*1000/SumGenweight to xs*gen_weight*1000/SumGenweight

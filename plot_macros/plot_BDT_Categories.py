@@ -22,6 +22,13 @@ if len(sys.argv) < 3:
 channel_US = sys.argv[1]
 era_input = sys.argv[2]
 
+ifKfold = False
+if "--legacy" in sys.argv:
+    print("Not using k-fold BDT")
+    ifKfold = True
+else:
+    print("Using k-fold BDT")
+
 if "--only" in sys.argv:
     sys.argv.remove("--only")
     eras = [era_input]
@@ -58,6 +65,13 @@ elif len(sys.argv) == 4:
         file_append = "reCat"
     elif flag == "kin":
         category_var = "category"
+    if ifKfold:
+        # the pre-K-fold single-model scores (train.py --stage legacy). Reads
+        # BDT_score/<channel>legacy/ and saves its boundaries under the key "<channel>legacy",
+        # so the fold-matched boundaries under "<channel>" are left untouched. Those MC scores
+        # are in-sample for 60% of the MC, so the resulting significance is optimistically
+        # biased -- for comparison only.
+        file_append += "legacy"
     else:
         print("Set production categorization to be:")
         print(" > bdt, kin")
@@ -78,6 +92,12 @@ print("Production category: " + category_var)
 
 subset_title = "B" + background_subset + "_S" + signal_subset
 BDT_var = "BDT_" + channel_US
+
+# The hadded BDT_score files are tens of GB. uproot's default source memory-maps the whole
+# file, which alone exhausts the 16 GiB per-process virtual-memory limit on the LPC login
+# nodes (MemoryError); this handler reads the file in chunks instead. Accepted by both the
+# CMSSW uproot (5.0.7) and current versions.
+UPROOT_OPEN = dict(file_handler=ur.MultithreadedFileSource)
 # BDT_score_path = "/eos/uscms/store/user/lpchmumu/esledge/analyzer_HiggsMuMu_v1.5/tuples_v1.5.0/BDT_score/" + channel_US + "/" + subset_title + "/"
 BDT_score_path = "../root_io/tuples/BDT_score/" + channel_US + file_append + "/" + subset_title + "/"
 #N_max_iterations = 4 if channel_US == "ggH" else 4
@@ -372,9 +392,10 @@ def find_bdt_categories(era, bkg_branches, signal_branches, bdt_categories, bdt_
 
 def draw_bdt_categories(era):
     plt.style.use(hep.style.CMS)
-
+    fname = BDT_score_path + "background_" + era + ".root:tree_output"
+    print(f"Opening {fname}")
     with ur.open(
-        BDT_score_path + "background_" + era + ".root:tree_output"
+        fname, **UPROOT_OPEN
     ) as file:
         bkg_branches = file.arrays(
             [BDT_var, "weight", diMuon_mass_name, "is_" + channel_US + "_" + category_var], library="np"
@@ -398,7 +419,7 @@ def draw_bdt_categories(era):
 
     if draw_data:
         with ur.open(
-            BDT_score_path + "data_" + era + ".root:tree_output"
+            BDT_score_path + "data_" + era + ".root:tree_output", **UPROOT_OPEN
         ) as file:
             data_branches = file.arrays(
                 [BDT_var, diMuon_mass_name, "is_" + channel_US + "_" + category_var], library="np"
@@ -420,7 +441,7 @@ def draw_bdt_categories(era):
 
     print("BDT bins: ", n_bins[BDT_var])
     with ur.open(
-        BDT_score_path + "signal_" + era + ".root:tree_output"
+        BDT_score_path + "signal_" + era + ".root:tree_output", **UPROOT_OPEN
     ) as file:
         signal_branches = file.arrays(
             [BDT_var, "weight", diMuon_mass_name,"is_" + channel_US + "_" + category_var], library="np"
@@ -455,6 +476,20 @@ def draw_bdt_categories(era):
     yields = get_yields(bkg_branches, signal_branches, bdt_categories)
 
     df_yields = pd.DataFrame(yields)
+    # Add combined row
+    combined_row = {
+        "Category": "Combined",
+        "Total Sig": round(df_yields["Total Sig"].sum(), 2),
+        "Total Bkg": round(df_yields["Total Bkg"].sum(), 2),
+        "Sig SR": round(df_yields["Sig SR"].sum(), 2),
+        "Bkg SR": round(df_yields["Bkg SR"].sum(), 2),
+        "S/sqrt(B) SR": round(np.sqrt(np.sum(df_yields["S/sqrt(B) SR"]**2)), 2),
+    }
+
+    df_yields = pd.concat(
+        [df_yields, pd.DataFrame([combined_row])],
+        ignore_index=True
+    )
     csv_file = f"../yields/BDTcatYields{channel_US}{file_append}.csv"
     print(f"Creating CSV file: {csv_file}")
     df_yields.to_csv(csv_file, index=False)
