@@ -59,6 +59,7 @@ x_labels = {
     "leading_jet_mass": r"$M_{j1}$",
     "leading_jet_area": r"$Area_{j1}$",
     "leading_jet_btagPNetQvG": r"$PNet QvsG_{j1}$",
+    "mc_campaign": r"campaign",
     "leading_jet_btagUParTAK4QvG": r"$UParT QvsG_{j1}$",
     "leading_jet_btagDeepFlavQG": r"$Deep QvsG_{j1}$",
     "leading_jet_chEmEF": r"Charged EM EF j1",
@@ -166,6 +167,7 @@ n_bins = {
     "leading_jet_mass": 50,
     "leading_jet_area": 25,
     "leading_jet_btagPNetQvG": 50,
+    "mc_campaign": 6,
     "leading_jet_btagUParTAK4QvG": 50,
     "leading_jet_btagDeepFlavQG": 50,
     "leading_jet_chEmEF": 50,
@@ -276,6 +278,7 @@ x_range = {
     "leading_jet_mass": (0,150),
     "leading_jet_area": (0.2, 1),
     "leading_jet_btagPNetQvG": (0,1),
+    "mc_campaign": (0.5, 6.5),  # integer era index 1-6
     "leading_jet_btagUParTAK4QvG": (0,1),
     "leading_jet_btagDeepFlavQG": (0,1),
     "leading_jet_chEmEF": (0,1),
@@ -398,6 +401,7 @@ variables_type = {
         "HT_pt5",
         "HT_pt10",
         "HT_extra",
+        "mc_campaign",
     ],
     ## DiMuon variables
     "diMuon": [

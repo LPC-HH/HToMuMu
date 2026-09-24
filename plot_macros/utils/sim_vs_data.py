@@ -1,4 +1,8 @@
 import uproot as ur
+
+# Read the (tens of GB) BDT_score files in chunks rather than memory-mapping them whole:
+# the whole-file map alone exceeds the 16 GiB per-process limit on the LPC login nodes.
+UPROOT_OPEN = dict(file_handler=ur.MultithreadedFileSource)
 import mplhep as hep
 import numpy as np
 import matplotlib.pyplot as plt
@@ -117,7 +121,8 @@ def get_histograms_from_tuple(
                 range=x_range_histos,
         )
 
-        for branches in ur.iterate(tuple_path + file_name, variables, library="np", step_size="500 MB"):
+        for branches in ur.iterate(tuple_path + file_name, variables, library="np", step_size="500 MB",
+                                **UPROOT_OPEN):
             #print("TUPLE PATH in get Hist from tup_____: " + tuple_path)
             bool_list = np.ones(len(branches[variables[0]]), dtype=bool)
 
@@ -235,7 +240,8 @@ def get_data_histograms_from_tuple(
 
     data_histogram = np.zeros(number_of_bins)
 
-    for branches in ur.iterate(tuple_path + file_name, variables, step_size=9000000, library="np"):
+    for branches in ur.iterate(tuple_path + file_name, variables, step_size=9000000, library="np",
+                                **UPROOT_OPEN):
         if variable_bin + "_" + production_channel in x_range:
             variable_bin += "_" + production_channel
 
