@@ -606,8 +606,8 @@ void CreateTuple::setBranchesAddressesOutput() {
     
 
     // LHE variables
-    tree_output->Branch("LHEPdfWeight", &lhe_pdf_weight);
-    tree_output->Branch("LHEScaleWeight", &lhe_scale_weight);
+    //tree_output->Branch("LHEPdfWeight", &lhe_pdf_weight);
+    //tree_output->Branch("LHEScaleWeight", &lhe_scale_weight);
 
     std::cout << "Output Branches addressed setted" << std::endl;
 }
