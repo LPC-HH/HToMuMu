@@ -82,6 +82,12 @@ cd ./root_io/skim/(ggH/VBF)
 bash hadd_skim.sh
 ```
 
+You can also run the skimming, hadd, and removal of previous tuples at once with:
+```bash
+bash scripts/run_skim.sh (bdt/kin/both)
+```
+This logs the scripts for the skimming and hadd in scripts/logs/
+
 ## BDT Training
 Look at python/xgboost/README.md
 
