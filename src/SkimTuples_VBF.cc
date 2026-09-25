@@ -94,6 +94,7 @@ int main(int argc, char *argv[]) {
         "HT_pt5",
         "HT_pt10",
         //"weight_no_lumi",
+        "event",
         "mc_campaign",
         "weight",
 	    "relative_diMuon_mass_error",

@@ -91,10 +91,11 @@ If you want to add a variable to the tuples, you just need to go to ./lib/Create
 
 ### Copy tuples
 If instead you want to copy tuples over from EOS:
-```
+```bash
 cd root_io/tuples/
-bash copy_hadd_tuples.sh <tuples_version (eg: 1.0.0)>
+bash copy_hadd_tuples.sh <tuples_version (eg: 1.0.0)> <era (eg: 2022, 2022EE, 2023, 2023BPix, 2024, 2025, Combined)>
 ``` 
+If the era argument left out, all tuples will be copied
 
 # Plotting 
 
@@ -160,7 +161,7 @@ If you use **USE_WEIGHT_MASS_RES=True**, then the training weight will be *weigh
 
 The training ```run_train.sh {category}``` code will generate one file containing the model (python/xgboost/models/model_ggH_Combined_BFull_SNottH.xgb), one file containing the roc curve (python/xgboost/roc/ggH_Combined_BFull_SNottH_roc.txt), and will add the BDT score to the tuples.
 
-**Note (K-fold training) WIP:** the training now produces *five* fold models (`python/xgboost/models/model_ggH_Combined_BFull_SNottH_fold<k>_bsC.json`, k = 0..4) instead of a single one, and each MC event is scored by the model that did not train on it (out-of-fold). The fold is simply the tuple entry index % 5 (one function, `xgb_kfold.fold_ids`, to be swapped for `event % 5` once the tuples carry an event ID), and the development/test/final stages are described in `python/xgboost/README.md` ("K-fold training and out-of-fold scoring"). The scored tuples additionally contain the integer branch `BDT_fold`.
+**Note (K-fold training) WIP:** the training now produces *five* fold models (`python/xgboost/models/model_ggH_Combined_BFull_SNottH_fold<k>_bsC.json`, k = 0..4) instead of a single one, and each MC event is scored by the model that did not train on it (out-of-fold). The fold is `event % 5`, so an event keeps its fold across the skim, the nominal tuple and every systematic variation, and the development/test/final stages are described in `python/xgboost/README.md` ("K-fold training and out-of-fold scoring"). The scored tuples additionally contain the integer branch `BDT_fold`.
 The tuples with the BDT score added are saved in root_io/tuples/BDT_score/(ggH/VBF)/BFull_SNottH/ 
 
 

@@ -8,7 +8,7 @@ from bdt_categories_io import load_bdt_categories, get_bdt_cuts
 production_channel = ""
 bdt_subset = ""
 use_categories = False
-version = "2.2.1"
+version = "2.2.2"
 
 if len(sys.argv) >= 2:
     production_channel = sys.argv[1]
@@ -171,7 +171,6 @@ variables = [
 # variables = ["leading_jet_eta", "subleading_jet_eta", "diMuon_bsConstrainedMass"]
 #variables = ["diMuon_bsConstrainedMass"]
 #variables = variablesBDT
-variables = variables[-11:]
 
 
 

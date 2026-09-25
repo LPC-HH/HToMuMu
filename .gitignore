@@ -12,3 +12,4 @@ scripts/makeDataPileupHist.sh
 *.jpeg
 *.txt
 yields/
+*.out

@@ -81,6 +81,7 @@ int main(int argc, char *argv[]) {
                               "min_delta_eta_diMuon_jet",
                               "min_delta_phi_diMuon_jet",
                               //"weight_no_lumi",
+                              "event",
                               "mc_campaign",
                               "weight",
 			                  "relative_diMuon_mass_error",
