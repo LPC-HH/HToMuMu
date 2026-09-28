@@ -4,6 +4,19 @@ import sys
 import matplotlib
 import os
 
+
+
+
+###########################################################################################
+# DEPRECATED: uses `python3 train.py ... --stage apply`
+###########################################################################################
+
+
+
+
+sys.exit("[ERROR] append_xgboost_discriminator_to_tree.py is deprecated: use "
+         "`python3 train.py <channel> <era> ... --stage apply` (fold-matched out-of-fold scoring).")
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
