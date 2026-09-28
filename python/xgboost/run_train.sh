@@ -24,15 +24,13 @@ declare -a tuples=("Data" "DY" "EWK" "TT" "DiBoson" "ggH" "VBF")
 
 #declare -a tuples=("ggH" "VBF")
 
-ifRetrain="T"
-ifOptimize="F"
-doSystematics="F"
+recat_flag=""
+if [[ "${useRecategorization}" == "T" ]]; then
+    recat_flag="--use-recategorization"
+fi
 
 echo "Higgs Channel: ${HIGGS_CHANNEL}"
 echo "Eras: ${eras}"
-echo "Retrain? ${ifRetrain}"
-echo "Optimize? ${ifOptimize}"
-echo "Do Systematics? ${doSystematics}"
 echo "Use BDT ReCat? ${useRecategorization}"
 
 # now loop through the above array
@@ -40,8 +38,8 @@ for bs in "${bkg_subset[@]}"; do
     for ss in "${sig_subset[@]}"; do
         echo "--------- B ${bs} - S ${ss} ---------"
         for era in "${eras[@]}"; do
-            echo "python3 train.py ${HIGGS_CHANNEL} ${era} $ifRetrain $ifOptimize $doSystematics $useRecategorization ${bs} ${ss}"
-            python3 train.py ${HIGGS_CHANNEL} ${era} $ifRetrain $ifOptimize $doSystematics $useRecategorization ${bs} ${ss}
+            echo "python3 train.py ${HIGGS_CHANNEL} ${era} ${recat_flag} --bkg-subset ${bs} --sig-subset ${ss}"
+            python3 train.py ${HIGGS_CHANNEL} ${era} ${recat_flag} --bkg-subset ${bs} --sig-subset ${ss}
 
             #for type in "signal" "background" "data"; do
                 #echo "         --- ${era} Skim ${type} ---"

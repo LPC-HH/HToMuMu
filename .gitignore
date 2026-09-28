@@ -13,3 +13,5 @@ scripts/makeDataPileupHist.sh
 *.txt
 yields/
 *.out
+/*.md 
+!/*README*.md
