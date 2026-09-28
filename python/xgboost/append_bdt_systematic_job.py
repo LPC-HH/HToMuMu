@@ -2,14 +2,8 @@
 
 import os
 import sys
-import pickle
 import subprocess
-from array import array
 
-import numpy as np
-import uproot
-import ROOT as root
-import xgboost as xgb
 
 import xgb_utils
 
@@ -99,280 +93,43 @@ run_command([
 
 
 # ----------------------------------------------------------------------
-# Load BDT configuration
+# Load the fold models, skim, score and append
 # ----------------------------------------------------------------------
 
-variables = xgb_utils.get_variables(
-    channel_US,
-    USE_BSCONSTRAIN,
-)
+# Fold-matched, exactly as for the nominal tuples: fold = event % n_folds, so a varied event
+# carries the same `event` as its nominal self, lands in the same fold and is scored by the same
+# model -- one that was not trained on it. This used to be a single legacy model with a
+# hand-rolled standardize / predict / append block, because before the event ID a varied row
+# could not be matched to its nominal row's fold. score_tuple_into() raises a clear error if
+# the systematic tuple predates the `event` branch.
 
-variables = variables[:-3]
+import xgb_kfold as kf
+
+variables = xgb_utils.get_variables(channel_US, USE_BSCONSTRAIN)[:-3]
 variable_names = [var[0] for var in variables]
 
-
-model_name = (
-    f"model_{channel_US}_{model_era}_"
-    f"{subset_title}"
-)
-
-preprocessing_name = (
-    f"preprocessing_{channel_US}_{model_era}_"
-    f"{subset_title}"
-)
-
-if USE_BSCONSTRAIN:
-    model_name += "_bsC"
-    preprocessing_name += "_bsC"
-
-model_file = model_name + ".pkl"
-preprocessing_file = preprocessing_name + ".pkl"
-
-
-print(f"[INFO] Loading model: {model_file}")
-print(f"[INFO] Loading preprocessing: {preprocessing_file}")
-
-
-with open(model_file, "rb") as f:
-    model = pickle.load(f)
-
-
-with open(preprocessing_file, "rb") as f:
-    preprocessing = pickle.load(f)
-
-
-mean_map = preprocessing["mean_map"]
-std_map = preprocessing["std_map"]
-
-training_variables = preprocessing["variables"]
-
-
-if training_variables != variable_names:
+test_name = f"{channel_US}_{model_era}_{subset_title}"
+print(f"[INFO] Loading fold models: {test_name}")
+bundle = kf.load_fold_bundle(test_name, USE_BSCONSTRAIN)
+if variable_names != list(bundle[0]["meta"]["variables"]):
     raise RuntimeError(
-        "Variable list in preprocessing file does not "
-        "match current xgb_utils.get_variables()"
+        "xgb_utils.get_variables() does not match the variables the fold models were trained "
+        f"with ({len(variable_names)} vs {len(bundle[0]['meta']['variables'])})"
     )
+print(f"[INFO] {len(bundle)} fold models, {len(variable_names)} variables")
 
-
-# ----------------------------------------------------------------------
-# Skim
-# ----------------------------------------------------------------------
-
-print("[INFO] Skimming tuple")
-
-xgb_utils.copy_and_skim_tree(
+xgb_utils.score_tuple_into(
     "./",
     local_input,
     "./",
     local_output,
     channel_US,
+    "_category",
     USE_BSCONSTRAIN,
+    variable_names,
+    bundle,
+    tag=f"{tuple_type}_{era}_{systematic}",
 )
-
-
-# ----------------------------------------------------------------------
-# Read BDT variables
-# ----------------------------------------------------------------------
-
-print("[INFO] Reading BDT variables")
-
-with uproot.open(local_output) as f:
-
-    if "tree_output" not in f:
-        raise RuntimeError(
-            f"tree_output not found in {local_output}"
-        )
-
-    arrays = f["tree_output"].arrays(
-        variable_names,
-        library="np",
-    )
-
-
-if len(variable_names) > 0:
-    x_test = np.column_stack(
-        [arrays[name] for name in variable_names]
-    ).astype(np.float32)
-else:
-    x_test = np.empty((0, 0), dtype=np.float32)
-
-
-number_of_events = len(x_test)
-
-print(
-    f"[INFO] Number of events after skimming: "
-    f"{number_of_events}"
-)
-
-
-# ----------------------------------------------------------------------
-# Standardization
-# ----------------------------------------------------------------------
-
-if DO_STANDARDIZATION and number_of_events > 0:
-
-    for i, variable in enumerate(variables):
-
-        variable_name = variable[0]
-
-        null_value = 0.0
-
-        if variable_name in [
-            "delta_phi_diJet",
-            "pt_balance",
-        ]:
-            null_value = -1.0
-
-        if variable_name not in mean_map:
-            raise KeyError(
-                f"Mean missing for {variable_name}"
-            )
-
-        if variable_name not in std_map:
-            raise KeyError(
-                f"Std missing for {variable_name}"
-            )
-
-        if std_map[variable_name] == 0:
-            raise ValueError(
-                f"Std is zero for {variable_name}"
-            )
-
-        mask = x_test[:, i] != null_value
-
-        x_test[mask, i] = (
-            x_test[mask, i]
-            - mean_map[variable_name]
-        ) / std_map[variable_name]
-
-
-# ----------------------------------------------------------------------
-# BDT prediction
-# ----------------------------------------------------------------------
-
-if number_of_events > 0:
-
-    booster = model.get_booster()
-
-    booster_feature_names = booster.feature_names
-
-    if (
-        booster_feature_names is not None
-        and len(booster_feature_names)
-        != x_test.shape[1]
-    ):
-        raise RuntimeError(
-            "Number of variables does not match model: "
-            f"model={len(booster_feature_names)}, "
-            f"input={x_test.shape[1]}"
-        )
-
-    if booster_feature_names is not None:
-        dtest = xgb.DMatrix(
-            x_test,
-            feature_names=booster_feature_names,
-        )
-    else:
-        dtest = xgb.DMatrix(x_test)
-
-    try:
-        best_iteration = booster.best_iteration
-    except (AttributeError, TypeError):
-        best_iteration = None
-
-    if best_iteration is not None:
-        y_pred = booster.predict(
-            dtest,
-            iteration_range=(0, best_iteration + 1),
-        )
-    else:
-        y_pred = booster.predict(dtest)
-
-    y_pred = np.asarray(
-        y_pred,
-        dtype=np.float32,
-    )
-
-else:
-
-    y_pred = np.array(
-        [],
-        dtype=np.float32,
-    )
-
-
-# ----------------------------------------------------------------------
-# Append branch
-# ----------------------------------------------------------------------
-
-print("[INFO] Adding BDT branch")
-
-root_file = root.TFile.Open(
-    local_output,
-    "UPDATE",
-)
-
-if not root_file or root_file.IsZombie():
-    raise RuntimeError(
-        f"Could not open {local_output}"
-    )
-
-
-tree = root_file.Get("tree_output")
-
-if not tree:
-    root_file.Close()
-
-    raise RuntimeError(
-        "tree_output not found"
-    )
-
-
-n_entries = tree.GetEntries()
-
-if n_entries != len(y_pred):
-    root_file.Close()
-
-    raise RuntimeError(
-        f"Entry mismatch: "
-        f"tree={n_entries}, predictions={len(y_pred)}"
-    )
-
-
-BDT_var_name = f"BDT_{channel_US}"
-
-BDT_value = array("f", [0.0])
-
-new_branch = tree.Branch(
-    BDT_var_name,
-    BDT_value,
-    f"{BDT_var_name}/F",
-)
-
-
-for entry_index in range(n_entries):
-
-    tree.GetEntry(entry_index)
-
-    if entry_index % 10000 == 0:
-        print(
-            f"[INFO] Processing "
-            f"{entry_index}/{n_entries}"
-        )
-
-    BDT_value[0] = float(
-        y_pred[entry_index]
-    )
-
-    new_branch.Fill()
-
-
-tree.Write(
-    "",
-    root.TObject.kOverwrite,
-)
-
-root_file.Close()
 
 
 # ----------------------------------------------------------------------
