@@ -63,7 +63,6 @@ USE_BSCONSTRAIN = Tru
 PLOT_LOSS = True #Plot loss curves
 
 SIGNAL_REGION = (121., 129.)
-TRAIN_REGION = (115., 135.)
 PROGRESS_EVERY = 10  # print boosting progress every N rounds (0 = silent)
 
 SMOKE_FRACTION = 0.05
@@ -94,6 +93,9 @@ MAX_ESTIMATORS = 2000  # cap for CV with early stopping
 EARLY_STOPPING_ROUNDS = 50  # on the VALIDATION fold, CV only
 N_ROUNDS_SCALE = 1.0  # final rounds = median(best_iter + 1) * scale
 ```
+It writes the best configuration (parameters, number of rounds and the per-fold CV results) to
+`models/dev/config_optuna_<name>.json` and the Optuna history/importance plots to `optunaPlots/`.
+The training mass window is `TRAIN_REGION` in `xgb_kfold.py`.
 # 2. Optuna test
 Only run this ONCE after the optuna development since this looks at the held out 20% of events to validate the optuna created model. Information from this should not be used to further tune the model.
 Before doing the optimization, set N_OPTUNA_TRIALS, MAX_ESTIMATORS, EARLY_STOPPING ROUNDS to whichever values you'd like
@@ -101,6 +103,9 @@ Before doing the optimization, set N_OPTUNA_TRIALS, MAX_ESTIMATORS, EARLY_STOPPI
 python3 train.py higgs_channel era --stage test
 #e.g. python3 train.py ggH Combined --stage test
 ```
+It refits the configuration on the 80% development sample, prints the test-sample AUC/log loss next to
+the CV numbers and writes `results/test_evaluation_<name>.json`. A marker file then refuses a second
+evaluation unless `--force-retest` is given.
 
 # 3. Final BDT training
 This is the main step that needs to be run for each set of new tuples. If you set --stage final, the model is trained and NOT appended to the tuples.

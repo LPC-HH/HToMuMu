@@ -70,7 +70,7 @@ def main():
 
     # ---- 2./3. the scored tuples
     for file_type in ["Data", "DY", "EWK", "TT", "DiBoson", "ggH", "VBF"]:
-        p = xgb_utils._scoring_paths(file_type, channel, era, sig, bkg, reCat)
+        p = xgb_utils.scoring_paths(file_type, channel, era, sig, bkg, reCat)
         scored = p["BDT_path"] + p["BDT_name"]
         if not os.path.exists(scored):
             print(f"[SKIP] {scored} not found")
