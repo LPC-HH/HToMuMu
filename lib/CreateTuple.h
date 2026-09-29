@@ -23,7 +23,7 @@
 
 std::map<TString, int> MC_CAMPAIGN_MAP = {{"2022", 1}, {"2022EE", 2},
                                           {"2023", 3}, {"2023BPix", 4},
-                                          {"2024", 5}, {"2025", 6}};
+                                          {"2024", 5}, {"2025", 6}, {"2026", 7}};
 
 /**
  * @class CreateTuple
@@ -122,6 +122,10 @@ class CreateTuple {
     int mc_campaign;
 
     /** Read event variables */
+    UInt_t run;
+    UInt_t luminosityBlock;
+    ULong64_t event;
+
     float gen_weight, pileup_weight, pileup_weight_up, pileup_weight_down;
 
     //std::vector<float> *mu_trig_eff_SF_vec, *mu_trig_eff_SF_up_vec,
@@ -297,11 +301,11 @@ CreateTuple::CreateTuple(TString input, TString weightFile, TString output, TStr
               << ", cross section: " << cross_section << std::endl;
     if (!is_data) {
         gen_weight_sum = GetGenWeightSum(weight_name);
-        //if(era == "2024"){
-            //scale_factor = GetScaleFactor(luminosity + LUMINOSITY.at("2025"), cross_section, gen_weight_sum);
+        //if(era == "2025"){
+        //    scale_factor = GetScaleFactor(luminosity + LUMINOSITY.at("2026"), cross_section, gen_weight_sum);
         //}
         //else{
-            //scale_factor = GetScaleFactor(luminosity, cross_section, gen_weight_sum);
+        //    scale_factor = GetScaleFactor(luminosity, cross_section, gen_weight_sum);
         //}
         // is_data_int = 0;
         scale_factor = GetScaleFactor(luminosity, cross_section, gen_weight_sum);
@@ -422,6 +426,9 @@ void CreateTuple::fillChain() {
 
 void CreateTuple::setBranchesAddressesOutput() {
 
+    tree_output->Branch("run", &run, "run/i");
+    tree_output->Branch("luminosityBlock", &luminosityBlock, "luminosityBlock/i");
+    tree_output->Branch("event", &event, "event/l");
     tree_output->Branch("gen_weight", &gen_weight, "gen_weight/F");
     tree_output->Branch("pileup_weight", &pileup_weight, "pileup_weight/F");
     tree_output->Branch("pileup_weight_up", &pileup_weight_up, "pileup_weight_up/F");
@@ -615,7 +622,12 @@ void CreateTuple::setBranchesAddressesOutput() {
 void CreateTuple::setBranchesAddressesInput() {
 
     tree_input->SetBranchStatus("*", 0);
-
+    tree_input->SetBranchStatus("t_run", 1);
+    tree_input->SetBranchAddress("t_run", &run);
+    tree_input->SetBranchStatus("t_luminosityBlock", 1);
+    tree_input->SetBranchAddress("t_luminosityBlock", &luminosityBlock);
+    tree_input->SetBranchStatus("t_event", 1);
+    tree_input->SetBranchAddress("t_event", &event);
     tree_input->SetBranchStatus("t_puWeight", 1);
     tree_input->SetBranchAddress("t_puWeight", &pileup_weight);
     tree_input->SetBranchStatus("t_puWeightUp", 1);
@@ -1038,6 +1050,10 @@ void CreateTuple::fillOutputTree() {
             btag_loose_cut = 0.0246;
             btag_medium_cut = 0.1272;
             break;
+        case 7:
+            btag_loose_cut = 0.0246;
+            btag_medium_cut = 0.1272;
+            break;
         default:
             throw std::runtime_error("Unsupported MC campaign for b-tag cuts");
         }
@@ -1052,9 +1068,9 @@ void CreateTuple::fillOutputTree() {
             // 2022, 2022EE, 2023, 2023BPix
             jet_btag_for_selection = jet_btagPNetB;
 
-        } else if (mc_campaign == 5 || mc_campaign == 6) {
+        } else if (mc_campaign == 5 || mc_campaign == 6 || mc_campaign == 7) {
 
-            // 2024, 2025
+            // 2024, 2025, 2026
             jet_btag_for_selection = jet_btagUParTAK4B;
 
         } else {
@@ -1386,7 +1402,7 @@ bool CreateTuple::passesJetPtSelection(size_t index) const {
     }
 
     // 2025
-    else if (mc_campaign == 6) {
+    else if (mc_campaign == 6 || mc_campaign == 7) {
         return true;
     }
 
