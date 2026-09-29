@@ -12,6 +12,10 @@ import mplhep as hep
 import numpy as np
 import uproot as ur
 
+# Read the (tens of GB) BDT_score files in chunks rather than memory-mapping them whole:
+# the whole-file map alone exceeds the 16 GiB per-process limit on the LPC login nodes.
+UPROOT_OPEN = dict(file_handler=ur.MultithreadedFileSource)
+
 from utils.helper import get_canvas, save_figure
 from utils.labels import luminosity, n_bins, x_labels, x_range
 
@@ -296,7 +300,7 @@ def load_channel_categories(
     if not file_path.is_file():
         raise FileNotFoundError(f"Input file not found: {file_path}")
 
-    with ur.open(file_path) as root_file:
+    with ur.open(file_path, **UPROOT_OPEN) as root_file:
         if TREE_NAME not in root_file:
             raise KeyError(f"Tree '{TREE_NAME}' not found in {file_path}")
 
@@ -327,6 +331,7 @@ def load_channel_categories(
         expressions=branches,
         library="np",
         step_size=step_size,
+        **UPROOT_OPEN,
     ):
         masses = np.asarray(arrays[MASS_BRANCH], dtype=float)
         bdt_values = np.asarray(arrays[bdt_branch], dtype=float)

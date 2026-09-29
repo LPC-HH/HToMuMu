@@ -102,6 +102,11 @@ def get_histograms_ratio(numerator_histogram, denominator_histogram):
     ------
     If any elements in the denominator are zero, they are excluded from the calculation.
     """
+    if not np.any(numerator_histogram) and not np.any(denominator_histogram):
+        ratio = np.ones_like(numerator_histogram, dtype=float)
+        error = np.ones_like(numerator_histogram, dtype=float)
+        return ratio, error
+
     ratio = np.divide(
         numerator_histogram, denominator_histogram, where=(denominator_histogram != 0)
     )

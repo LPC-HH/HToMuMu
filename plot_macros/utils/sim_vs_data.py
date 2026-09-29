@@ -1,4 +1,8 @@
 import uproot as ur
+
+# Read the (tens of GB) BDT_score files in chunks rather than memory-mapping them whole:
+# the whole-file map alone exceeds the 16 GiB per-process limit on the LPC login nodes.
+UPROOT_OPEN = dict(file_handler=ur.MultithreadedFileSource)
 import mplhep as hep
 import numpy as np
 import matplotlib.pyplot as plt
@@ -45,6 +49,7 @@ def get_histograms_from_tuple(
     Z_study=False,
     jet_pT_study=False,
     version="2.0.0",
+    recategorize=False,
 ):
     
     if not use_puweight:
@@ -83,12 +88,23 @@ def get_histograms_from_tuple(
         f"/eos/uscms/store/group/lpchmumu/{user}/"
         f"{analyzer_version}/{tuple_version}/haddTuples/"
     )
+
+    file_append = ""
+    bdt_append = ""
+    if recategorize:
+        file_append = "_categorized"
+        bdt_append = "BDT"
+
+    tuple_path = "../root_io/tuples/"
     if bdt_subset != "" or variables[0] == "BDT_" + production_channel:
         tuple_path = "../root_io/tuples/"
-        tuple_path += "BDT_score/" + production_channel + "/" + bdt_subset + "/"
+        if recategorize:
+            tuple_path += "BDT_score/" + production_channel + "reCat/" + bdt_subset + "/"
+        else: 
+            tuple_path += "BDT_score/" + production_channel + "/" + bdt_subset + "/"
 
     for source in sources:
-        file_name = source + "_" + era + "_tuples.root:tree_output"
+        file_name = source + "_" + era + f"_tuples{file_append}.root:tree_output"
         if bdt_subset != "" or variables[0] == "BDT_" + production_channel:
             file_name = source + "_" + era + "_" + bdt_subset + ".root:tree_output"
 
@@ -105,7 +121,8 @@ def get_histograms_from_tuple(
                 range=x_range_histos,
         )
 
-        for branches in ur.iterate(tuple_path + file_name, variables, library="np", step_size="500 MB"):
+        for branches in ur.iterate(tuple_path + file_name, variables, library="np", step_size="500 MB",
+                                **UPROOT_OPEN):
             #print("TUPLE PATH in get Hist from tup_____: " + tuple_path)
             bool_list = np.ones(len(branches[variables[0]]), dtype=bool)
 
@@ -130,7 +147,7 @@ def get_histograms_from_tuple(
 
             if production_channel != "":
                 bool_list = (bool_list) & (
-                    branches["is_" + production_channel + "_category"] == 1
+                    branches["is_" + production_channel + f"_category{bdt_append}"] == 1
                 )
 
             if len(bdt_cuts) > 1:
@@ -183,6 +200,7 @@ def get_data_histograms_from_tuple(
     Z_study=False,
     jet_pT_study=False,
     version="2.0.0",
+    recategorize=False,
 ):
     # tuple_path = "../root_io/tuples/"
     user = os.getenv("USER")
@@ -190,14 +208,23 @@ def get_data_histograms_from_tuple(
     analyzer_version = ".".join(version.split(".")[:2])
     analyzer_version = f"analyzer_HiggsMuMu_v{analyzer_version}"
 
-    tuple_path = (
-        f"/eos/uscms/store/group/lpchmumu/{user}/"
-        f"{analyzer_version}/{tuple_version}/haddTuples/"
-    )
-    file_name = "Data_" + era + "_tuples.root:tree_output"
+    #tuple_path = (
+    #    f"/eos/uscms/store/group/lpchmumu/{user}/"
+    #    f"{analyzer_version}/{tuple_version}/haddTuples/"
+    #)
+    file_append = ""
+    bdt_append = ""
+    if recategorize:
+        file_append = "_categorized"
+        bdt_append = "BDT"
+    tuple_path = "../root_io/tuples/"
+    file_name = "Data_" + era + f"_tuples{file_append}.root:tree_output"
     if bdt_subset != "" or variables[0] == "BDT_" + production_channel:
         tuple_path = "../root_io/tuples/"
-        tuple_path += "BDT_score/" + production_channel + "/" + bdt_subset + "/"
+        if recategorize:
+            tuple_path += "BDT_score/" + production_channel + "reCat/" + bdt_subset + "/"
+        else:
+            tuple_path += "BDT_score/" + production_channel + "/" + bdt_subset + "/"
         file_name = "Data_" + era + "_" + bdt_subset + ".root:tree_output"
 
     #with ur.open(tuple_path + file_name) as data_file:
@@ -213,7 +240,8 @@ def get_data_histograms_from_tuple(
 
     data_histogram = np.zeros(number_of_bins)
 
-    for branches in ur.iterate(tuple_path + file_name, variables, step_size=9000000, library="np"):
+    for branches in ur.iterate(tuple_path + file_name, variables, step_size=9000000, library="np",
+                                **UPROOT_OPEN):
         if variable_bin + "_" + production_channel in x_range:
             variable_bin += "_" + production_channel
 
@@ -233,7 +261,7 @@ def get_data_histograms_from_tuple(
         
         if production_channel != "":
             bool_list = (bool_list) & (
-                branches["is_" + production_channel + "_category"] == 1
+                branches["is_" + production_channel + f"_category{bdt_append}"] == 1
             )
 
         if len(bdt_cuts) > 1:
@@ -286,10 +314,23 @@ def draw_data_and_simul_and_ratio(
 ):
     plt.style.use(hep.style.CMS)
     tuple_version = f"tuples_v{version}"
-    print("*" * len("****** PLOTTING " + variable + era + " *****"))
-    print("****** PLOTTING " + variable + " ERA " + era + " *****")
-    print("*" * len("****** PLOTTING " + variable + era + " *****"))
-
+    bdt_append = ""
+    output_append = ""
+    USE_CATEGORIZATION_BDT = False
+    if production_channel in ["ggHreCat", "VBFreCat"]:
+        production_channel = production_channel[:3]
+        USE_CATEGORIZATION_BDT = True
+        bdt_append = "BDT"
+        output_append = "reCat"
+        
+    if USE_CATEGORIZATION_BDT:
+        print("*" * len("****** PLOTTING " + variable + era + " RECATEGORIZED *****"))
+        print("****** PLOTTING " + variable + " ERA " + era + " RECATEGORIZED *****")
+        print("*" * len("****** PLOTTING " + variable + era + " RECATEGORIZED *****"))
+    else:
+        print("*" * len("****** PLOTTING " + variable + era + " *****"))
+        print("****** PLOTTING " + variable + " ERA " + era + " *****")
+        print("*" * len("****** PLOTTING " + variable + era + " *****"))
     variables = [variable, "weight"] 
     if (("bsConstrained" in variable) and variable != "diMuon_bsConstrainedMass"):
         variables.append("diMuon_bsConstrainedMass")
@@ -310,7 +351,7 @@ def draw_data_and_simul_and_ratio(
 
     # if variable != "diMuon_mass":
     if production_channel != "":
-        variables.append("is_" + production_channel + "_category")
+        variables.append("is_" + production_channel + f"_category{bdt_append}")
     if len(bdt_cuts) != 0:
         variables.append("BDT_" + production_channel)
 
@@ -323,6 +364,7 @@ def draw_data_and_simul_and_ratio(
         Z_study=Z_study,
         jet_pT_study=jet_pT_study,
         version=version,
+        recategorize=USE_CATEGORIZATION_BDT
     )
 
 
@@ -342,6 +384,7 @@ def draw_data_and_simul_and_ratio(
         Z_study=Z_study,
         jet_pT_study=jet_pT_study,
         version=version,
+        recategorize=USE_CATEGORIZATION_BDT
     )
 
     signal_histograms_list, signal_bins_list = get_histograms_from_tuple(
@@ -357,10 +400,10 @@ def draw_data_and_simul_and_ratio(
         Z_study=Z_study,
         jet_pT_study=jet_pT_study,
         version=version,
+        recategorize=USE_CATEGORIZATION_BDT
     )
 
     fig, axs = get_canvas(True)
-
     hep.histplot(
         bkg_histograms_list,
         bkg_bins_list[0],
@@ -409,7 +452,7 @@ def draw_data_and_simul_and_ratio(
     )
 
     axs[0].set_ylabel(r"Events")
-    axs[0].set_ylim(0.1, 1000 * np.max(data_histogram))
+    axs[0].set_ylim(0.1, 1000 * max(np.max(data_histogram), 1))
     axs[0].set_xlim(data_bins[0], data_bins[-1])
     axs[0].set_yscale("log")
     axs[0].legend(frameon=False, loc="upper right", ncols=2)
@@ -447,27 +490,28 @@ def draw_data_and_simul_and_ratio(
     axs[1].set_xlim(data_bins[0], data_bins[-1])
     axs[1].set_xlabel(x_labels[variable])
 
-    output_directory = f"../plots/ratio/{tuple_version}/" + era + "/"
+    output_directory = f"../plots/ratio/{tuple_version}{output_append}/" + era + "/"
     output_name = variable + "_" + era + "_MCData_ratio"
     if Z_study:
         output_name = variable + "_Z_included_" + era + "_MCData_ratio"
 
     if not use_puweight:
-        output_directory = f"../plots/ratio/{tuple_version}/" + era + "/no_puWeight/"
+        output_directory = f"../plots/ratio/{tuple_version}{output_append}/" + era + "/no_puWeight/"
     if production_channel != "":
         output_directory = (
-            f"../plots/ratio/{tuple_version}/"
+            f"../plots/ratio/{tuple_version}{output_append}/"
             + production_channel + "_category/" + era + "/"
         )
 
         if len(bdt_cuts) > 1:
             output_directory = (
-                f"../plots/ratio/{tuple_version}/"
+                f"../plots/ratio/{tuple_version}{output_append}/"
                 + production_channel + "_category/bdt_selections/" + era + "/"
             )
 
     output_directory = get_output_directory(variable, output_directory, variables_type)
-
+    if USE_CATEGORIZATION_BDT:
+        output_directory = output_directory[:-1] + "BDTSigCats/"
     save_figure(fig, output_directory, output_name + label + labelAdd)
 
     plt.close()
@@ -479,7 +523,7 @@ def draw_data_and_simul_and_ratio(
             background_sources,
             signal_sources,
             use_puweight=use_puweight,
-            production_channel=production_channel,
+            production_channel=production_channel + "reCat" if USE_CATEGORIZATION_BDT else production_channel,
             bdt_cuts=bdt_cuts[1:],
             bdt_subset=bdt_subset,
             Z_study=Z_study,
