@@ -1,19 +1,15 @@
-BDT_CUTS = {
-    "ggH": [0.0, 0.45, 0.62, 0.8, 0.91, 1.0],
-    "VBF": [
-        0.0,
-        0.6400000000000002,
-        0.7800000000000011,
-        0.8600000000000017,
-        0.920000000000002,
-        0.9533333333333356,
-        0.966666666666669,
-        1.0,
-    ],
-}
+from pathlib import Path
+from sys import path as sys_path
 
-MASS_MIN = 122.5
-MASS_MAX = 127.5
+sys_path.insert(0, str(Path(__file__).resolve().parent.parent / "python"))
+
+from bdt_categories_io import load_bdt_categories, get_bdt_cuts
+
+
+MASS_MIN = 110.0
+MASS_MAX = 150.0
+
+FLASHGG_PATH = "/uscms_data/d3/mbarrial/fits_Hmumu/CMSSW_14_1_0_pre4/src/flashggFinalFit/"
 
 CHANNELS = ("ggH", "VBF")
 
@@ -28,3 +24,16 @@ DATACARD_CATEGORY_ORDER = ("VBF", "ggH")
 
 SUBSET = "BFull_SNottH"
 TREE_NAME = "tree_output"
+
+bdt_categories_info = load_bdt_categories()
+
+BDT_CUTS = {
+    channel: get_bdt_cuts(
+        bdt_categories_info,
+        channel,
+        "Combined",
+        SUBSET,
+        "diMuon_bsConstrainedMass",
+    )
+    for channel in CHANNELS
+}

@@ -15,6 +15,8 @@ TUPLE_TYPE=$4
 SYSTEMATIC=$5
 BKG_SUBSET=$6
 SIG_SUBSET=$7
+VERSION=$8
+USER_NAME=$9
 
 echo "CHANNEL     = ${CHANNEL}"
 echo "ERA         = ${ERA}"
@@ -23,6 +25,8 @@ echo "TUPLE TYPE  = ${TUPLE_TYPE}"
 echo "SYSTEMATIC  = ${SYSTEMATIC}"
 echo "BKG SUBSET  = ${BKG_SUBSET}"
 echo "SIG SUBSET  = ${SIG_SUBSET}"
+echo "VERSION     = ${VERSION}"
+echo "USER        = ${USER_NAME}"
 
 echo
 echo "========================================"
@@ -41,9 +45,6 @@ cd CMSSW_15_0_19/src
 eval "$(scramv1 runtime -sh)"
 
 cd "${WORKDIR}"
-
-# Condor container may not define USER
-export USER="${USER:-mbarrial}"
 
 echo "USER = ${USER}"
 
@@ -71,7 +72,9 @@ python3 append_bdt_systematic_job.py \
     "${TUPLE_TYPE}" \
     "${SYSTEMATIC}" \
     "${BKG_SUBSET}" \
-    "${SIG_SUBSET}"
+    "${SIG_SUBSET}" \
+    "${VERSION}" \
+    "${USER_NAME}"
 
 STATUS=$?
 

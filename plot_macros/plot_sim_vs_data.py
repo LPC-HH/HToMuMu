@@ -125,7 +125,7 @@ variables = [
     "leading_jet_mass",
     "leading_jet_area",
     "leading_jet_btagPNetQvG",
-    "leading_jet_btagUParTAK4QvG",
+    "leading_jet_btagUParTAK4QvG"   ,
     "leading_jet_btagDeepFlavQG",
     "leading_jet_chEmEF",
     "leading_jet_chHEF",
@@ -176,10 +176,6 @@ variables = [
 
 
 # eras = ["2022EE", "2022", "2023", "2023BPix", "2024"]#, "2025"]
-# eras = ["2022", "2022EE", "2023", "2023BPix", "2024", "2025", "Combined"]
-# eras = ["2022", "2022EE"]
-# eras = ["2023", "2023BPix"]
-#eras = ["2023BPix"]
 # eras = ["2025","2024", "Combined"]
 # eras = ["Combined", "2025", "2024"]
 eras = ["Combined"]

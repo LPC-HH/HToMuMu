@@ -13,11 +13,12 @@ def run_command(command):
     subprocess.run(command, check=True)
 
 
-if len(sys.argv) != 8:
+if len(sys.argv) != 10:
     print(
         "Usage: python3 append_bdt_systematic_job.py "
         "<channel> <era> <model_era> <tuple_type> "
-        "<systematic> <bkg_subset> <sig_subset>"
+        "<systematic> <bkg_subset> <sig_subset> "
+        "<version> <user>"
     )
     sys.exit(1)
 
@@ -29,17 +30,24 @@ tuple_type = sys.argv[4]
 systematic = sys.argv[5]
 background_subset = sys.argv[6]
 signal_subset = sys.argv[7]
+version = sys.argv[8]
+user = sys.argv[9]
 
 
 DO_STANDARDIZATION = True
 USE_BSCONSTRAIN = True
 
-ANALYZER_VERSION = "v2.0"
-TUPLES_VERSION = "v2.0.0"
+version_parts = version.split(".")
+
+if len(version_parts) < 2:
+    raise ValueError(
+        f"Invalid version '{version}'. Expected something like 2.2.1"
+    )
+
+ANALYZER_VERSION = f"v{version_parts[0]}.{version_parts[1]}"
+TUPLES_VERSION = f"v{version}"
 
 subset_title = f"B{background_subset}_S{signal_subset}"
-
-user = os.environ["USER"]
 
 XROOTD = "root://cmseos.fnal.gov"
 
