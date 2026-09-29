@@ -85,12 +85,78 @@ for dataset_name in list_datasets:
         continue
     
     with uproot.recreate(FILESDIR + "/SumGenWeight.root") as f:
-        totalGenWeight = 0
-        for analyzer_file in analyzer_output_files:
-            with uproot.open(FILESDIR + "/" + analyzer_file + ":h_sumOfgenWeight") as h:
-                totalGenWeight += h.values()[0]
-                edges = h.axis().edges()
 
-        print(f"Total generator weight for {dataset_name}: {totalGenWeight}")
-        f["h_sumOfgenWeight"] = np.histogram(np.array([0.5]), bins=[0,1], weights=[totalGenWeight])
-        print(FILESDIR + "/SumGenWeight.root" + " CREATED")
+        totalGenWeight = 0.0
+
+        totalLHEPdfWeight = None
+        totalLHEScaleWeight = None
+
+        pdf_edges = None
+        scale_edges = None
+
+        for analyzer_file in analyzer_output_files:
+
+            file_path = FILESDIR + "/" + analyzer_file
+
+            with uproot.open(file_path) as input_file:
+
+                h_gen = input_file["h_sumOfgenWeight"]
+                totalGenWeight += h_gen.values()[0]
+
+                h_pdf = input_file["h_sumOfLHEPdfWeight"]
+                pdf_values = h_pdf.values()
+
+                if totalLHEPdfWeight is None:
+                    totalLHEPdfWeight = np.zeros_like(
+                        pdf_values,
+                        dtype=np.float64
+                    )
+                    pdf_edges = h_pdf.axis().edges()
+
+                totalLHEPdfWeight += pdf_values
+
+                h_scale = input_file["h_sumOfLHEScaleWeight"]
+
+                scale_values = h_scale.values()
+
+                if totalLHEScaleWeight is None:
+                    totalLHEScaleWeight = np.zeros_like(
+                        scale_values,
+                        dtype=np.float64
+                    )
+                    scale_edges = h_scale.axis().edges()
+
+                totalLHEScaleWeight += scale_values
+
+
+        print(
+            f"Total generator weight for {dataset_name}: {totalGenWeight}"
+        )
+
+        print(
+            f"Number of PDF weights: {len(totalLHEPdfWeight)}"
+        )
+
+        print(
+            f"Number of scale weights: {len(totalLHEScaleWeight)}"
+        )
+
+
+        f["h_sumOfgenWeight"] = np.histogram(
+            np.array([0.5]),
+            bins=[0, 1],
+            weights=[totalGenWeight]
+        )
+
+        f["h_sumOfLHEPdfWeight"] = (
+            totalLHEPdfWeight,
+            pdf_edges
+        )
+
+        f["h_sumOfLHEScaleWeight"] = (
+            totalLHEScaleWeight,
+            scale_edges
+        )
+
+
+        print(FILESDIR + "/SumGenWeight.root CREATED")

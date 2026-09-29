@@ -1,18 +1,24 @@
 #!/usr/bin/env python3
 
+import json
 from pathlib import Path
+
 import numpy as np
 import uproot
-
 from systematics_config import (
     BDT_CUTS,
-    MASS_MIN,
-    MASS_MAX,
     CHANNELS,
-    PROCESSES,
     DATACARD_CATEGORY_ORDER,
+    FLASHGG_PATH,
+    MASS_MAX,
+    MASS_MIN,
+    PROCESSES,
     SUBSET,
     TREE_NAME,
+)
+
+OUTPUT_JSON = (
+    FLASHGG_PATH + "Datacard/experimental_systematics/muon_eff_systematics.json"
 )
 
 OUTPUT_PROC_KEYS = {
@@ -20,9 +26,7 @@ OUTPUT_PROC_KEYS = {
     "VBF": "qqH",
 }
 
-TUPLE_BASE = Path(
-    "./root_io/tuples"
-)
+TUPLE_BASE = Path("./root_io/tuples")
 NOMINAL_BASE = TUPLE_BASE / "BDT_score"
 
 SYSTEMATICS = {
@@ -45,6 +49,38 @@ SYSTEMATICS = {
         "down": "mu_ISO_eff_SF_down",
     },
 }
+
+
+def save_json(ratios, output_path=OUTPUT_JSON):
+    output = {
+        "ggH": {"categories": {}},
+        "qqH": {"categories": {}},
+    }
+
+    for syst in SYSTEMATICS:
+        for cat in category_order():
+            for process in PROCESSES:
+                proc_key = OUTPUT_PROC_KEYS[process]
+
+                if cat not in ratios[syst] or process not in ratios[syst][cat]:
+                    continue
+
+                r = ratios[syst][cat][process]
+
+                output[proc_key]["categories"].setdefault(cat, {})
+
+                output[proc_key]["categories"][cat][syst] = [
+                    round(r["down"], 6),
+                    round(r["up"], 6),
+                ]
+
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(output_path, "w") as f:
+        json.dump(output, f, indent=4)
+
+    print(f"\nSaved JSON: {output_path}")
 
 
 def get_categories(channel):
@@ -89,12 +125,7 @@ def make_mask(bdt, topology, mass, weight, category):
 
 
 def nominal_file(channel, process):
-    return (
-        NOMINAL_BASE
-        / channel
-        / SUBSET
-        / f"{process}_Combined_{SUBSET}.root"
-    )
+    return NOMINAL_BASE / channel / SUBSET / f"{process}_Combined_{SUBSET}.root"
 
 
 def calculate_file(channel, process):
@@ -116,10 +147,7 @@ def calculate_file(channel, process):
         results[category["name"]] = {
             "events": 0,
             "nominal": 0.0,
-            **{
-                syst: {"up": 0.0, "down": 0.0}
-                for syst in SYSTEMATICS
-            },
+            **{syst: {"up": 0.0, "down": 0.0} for syst in SYSTEMATICS},
         }
 
     for arrays in uproot.iterate(
@@ -147,9 +175,7 @@ def calculate_file(channel, process):
             )
             if not np.all(valid_sf):
                 n_bad = np.count_nonzero(~valid_sf)
-                raise RuntimeError(
-                    f"{path}: {syst} has {n_bad} invalid SF entries"
-                )
+                raise RuntimeError(f"{path}: {syst} has {n_bad} invalid SF entries")
 
             varied_weights[syst] = {
                 "up": weight * sf_up / sf_nom,
@@ -264,6 +290,7 @@ def print_python_dictionary(ratios):
 
     print("]")
 
+
 def print_google_sheets(ratios):
     print("\n" + "#" * 100)
     print("# GOOGLE SHEETS — TAB-SEPARATED")
@@ -315,6 +342,7 @@ def main():
 
     ratios = calculate_all()
     # print_detailed(ratios)
+    save_json(ratios)
     print_python_dictionary(ratios)
     print_google_sheets(ratios)
     print_datacard_lines(ratios)

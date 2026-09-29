@@ -87,3 +87,218 @@ Look at python/xgboost/README.md
 
 ## Plotting 
 All plotting codes are located at plot_macros/
+
+
+## How to Run the Complete Analysis
+
+This section describes the complete workflow, from producing the analyzer tuples to calculating the final systematic uncertainties.
+
+### 1. Set the analysis version
+
+Go to the `condor/` directory:
+
+```bash
+cd ./condor/
+```
+
+Edit:
+
+```text
+./condor/utils/version.py
+```
+
+and set the version name you want to use to tag your tuples.
+
+---
+
+### 2. Produce the analyzer tuples
+
+From the `condor/` directory, run:
+
+```bash
+python3 create_analyzer_jobs_LPC.py
+bash condor_job_sender.sh
+```
+
+This creates and submits the analyzer jobs. The resulting tuples will be stored in the EOS space defined by the configuration.
+
+#### Optional: produce muon \(p_T\) systematic tuples
+
+If you also want to produce the muon \(p_T\) systematic variations, run:
+
+```bash
+python3 create_analyzer_jobs_LPC_muonsys.py
+bash condor_ctuple_job_sender_syst.sh
+```
+
+---
+
+### 3. Check the analyzer jobs
+
+Once the jobs have finished, check for failed or missing jobs with:
+
+```bash
+bash analyzer_job_checker_rerun.sh version
+```
+
+Replace `"version"` with the analysis version you are using. For example:
+
+```bash
+bash analyzer_job_checker_rerun.sh 2.2
+```
+
+The script will check the submitted jobs and rerun the ones that failed.
+
+---
+
+### 4. Compute the sum of generated weights
+
+To produce the histograms containing the sum of generated weights, go to the `scripts/` directory:
+
+```bash
+cd ../scripts/
+```
+
+Run:
+
+```bash
+python3 ComputeWeights.py
+python3 ComputeWeights_muon_sys.py
+```
+
+`ComputeWeights.py` computes the nominal generated-weight information, while `ComputeWeights_muon_sys.py` does the same for the muon systematic samples.
+
+---
+
+### 5. Produce the tuples
+
+Return to the `condor/` directory:
+
+```bash
+cd ../condor/
+```
+
+Create and submit the nominal ctuple jobs:
+
+```bash
+python3 create_ctuples_jobs_LPC.py
+bash condor_ctuple_job_sender.sh
+```
+
+#### Optional: produce muon and jet \(p_T\) systematic ctuples
+
+To produce the ctuples for the muon and jet \(p_T\) systematic variations, run:
+
+```bash
+python3 create_ctuples_jobs_LPC_syst.py
+bash condor_ctuple_job_sender_syst.sh
+```
+
+---
+
+### 6. Check the tuple jobs
+
+After the jobs have finished, check for failed jobs with:
+
+```bash
+bash ctuple_job_checker_rerun.sh version
+```
+
+For example:
+
+```bash
+bash ctuple_job_checker_rerun.sh 2.2.2
+```
+
+---
+
+### 7. Merge (`hadd`) the nominal tuples
+
+Go to the tuple directory:
+
+```bash
+cd ../root_io/tuples/
+```
+
+Run:
+
+```bash
+bash hadd_tuples_EOS.sh -eos
+bash hadd_tuples
+```
+
+This merges the nominal tuples required for the analysis.
+
+---
+
+### 8. Merge the systematic tuples
+
+To merge the systematic tuples using Condor jobs, return to the `condor/` directory:
+
+```bash
+cd ../../condor/
+```
+
+Then run:
+
+```bash
+bash submit_hadd_systematics.sh
+```
+
+---
+
+### 9. Add the BDT scores to the systematic tuples
+
+Go to the XGBoost directory:
+
+```bash
+cd ../python/xgboost/
+```
+
+Submit the jobs that add the BDT scores to the systematic tuples:
+
+```bash
+bash submit_bdt_systematics.sh
+```
+
+---
+
+### 10. Calculate the systematic uncertainties
+
+Finally, return to the initial project directory and run:
+
+```bash
+bash ./scripts/calculate_all_systematics.sh
+```
+c
+This calculates the systematic uncertainties from the nominal and systematic tuples.
+
+---
+
+### Workflow summary
+
+The complete workflow is:
+
+```text
+Set version
+    ↓
+Produce analyzer tuples
+    ↓
+Check analyzer jobs
+    ↓
+Compute generated-weight histograms
+    ↓
+Produce ctuples
+    ↓
+Check ctuple jobs
+    ↓
+Hadd nominal tuples
+    ↓
+Hadd systematic tuples
+    ↓
+Add BDT scores to systematic tuples
+    ↓
+Calculate systematic uncertainties
+```
+
+The muon and jet systematic steps are optional if only the nominal analysis is needed.

@@ -46,7 +46,7 @@
   },
   "2025": {
     "jvmFilePath": "./data/jetCorrections/jetvetomaps.json.gz",
-    "jvmTagName": "Winter25Prompt25_RunCDEFG_V1",
+    "jvmTagName": "Summer24Prompt25_RunCDEFG_V1",
     "jvmKeyName": "jetvetomap"
   }
 }
