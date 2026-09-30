@@ -15,7 +15,7 @@ Stages:
   final   train the five analysis models on all MC (model i holds out fold i = event % 5)
           and make the out-of-fold (OOF) plots
   apply   append the fold-matched BDT scores to the nominal (and, with --do-systematics,
-          the systematic) tuples
+          the systematic) tuples; with --use-optuna they go to BDT_score/<channel>optimized/
   all     final + apply (default)
   legacy  the pre-K-fold single 60/40 split model, compared with the K-fold models on the
           same held-out 40%, then scored into BDT_score/<channel>legacy/ (needs `final`)
@@ -129,16 +129,20 @@ names = [v[0] for v in variables[:-3]]
 file_append = "reCat" if useRecategorization else ""
 subset_title = f"B{background_subset}_S{signal_subset}"
 run_tag = "_smoke" if OPTS["smoke"] else ""
-test_name = f"{channel_US}{file_append}_{era}_{subset_title}{run_tag}"
-plot_path = f"../../plots/xgboost/{channel_US}{file_append}/{subset_title}{run_tag}/"
+# --use-optuna outputs (models, plots, scored tuples) get their own names so they never
+# overwrite the DEFAULT_PARAMS ones; the dev config and test marker are shared (base_name)
+opt_append = "optimized" if OPTS["use_optuna"] else ""
+base_name = f"{channel_US}{file_append}_{era}_{subset_title}{run_tag}"
+test_name = base_name + (f"_{opt_append}" if opt_append else "")
+plot_path = f"../../plots/xgboost/{channel_US}{file_append}{opt_append}/{subset_title}{run_tag}/"
 data_directory = f"../../root_io/skim/{channel_US}{file_append}/"
 signal_file_name = f"{data_directory}signal_{era}_skim_{signal_subset}.root"
 bkg_file_name = f"{data_directory}background_{era}_skim_{background_subset}.root"
 mass_var_name = variables[-3][0]
 DEV_DIR = "models/dev"
 # Optuna config: written by --stage dev, read only with --use-optuna (tracked in git)
-optuna_config_path = f"{DEV_DIR}/config_optuna_{test_name}.json"
-test_marker_path = f"{DEV_DIR}/test_evaluated_{test_name}.json"
+optuna_config_path = f"{DEV_DIR}/config_optuna_{base_name}.json"
+test_marker_path = f"{DEV_DIR}/test_evaluated_{base_name}.json"
 
 for subdir in ["training", "results", "scores", "variables", "comparison", "kFold"]:
     os.makedirs(plot_path + subdir, exist_ok=True)
@@ -320,7 +324,7 @@ def stage_dev():
                              max_estimators, esr, progress_every=PROGRESS_EVERY)
     report_peak_memory("after the Optuna study")
 
-    optuna_plot_path = f"optunaPlots/{channel_US}{file_append}/{test_name}/"
+    optuna_plot_path = f"optunaPlots/{channel_US}{file_append}/{base_name}/"
     os.makedirs(optuna_plot_path, exist_ok=True)
     try:
         import optuna.visualization as vis
@@ -493,7 +497,7 @@ def stage_legacy():
                                        variables[:-3], legacy_bundle, USE_BSCONSTRAIN, useRecategorization,
                                        legacy=True)
         print(f"[INFO] next: `bash scripts/hadd_bdt.sh {channel_US} legacy` then "
-              f"`python3 plot_BDT_Categories.py {channel_US} {era} legacy`")
+              f"`python3 plot_BDT_Categories.py {channel_US} {era} --legacy`")
 
 
 def stage_apply():
@@ -504,11 +508,16 @@ def stage_apply():
         return
     for file_type in NOMINAL_TUPLES:
         xgb_utils.append_BDT_score(file_type, channel_US, era, signal_subset, background_subset,
-                                   variables[:-3], bundle, USE_BSCONSTRAIN, useRecategorization)
+                                   variables[:-3], bundle, USE_BSCONSTRAIN, useRecategorization,
+                                   dir_suffix=opt_append)
     if doSystematics:
         for file_type in NOMINAL_TUPLES[1:]:  # no Data variations
             xgb_utils.append_BDT_score_to_sys(file_type, channel_US, era, signal_subset, background_subset,
-                                              variables[:-3], bundle, USE_BSCONSTRAIN)
+                                              variables[:-3], bundle, USE_BSCONSTRAIN,
+                                              dir_suffix=opt_append)
+    if opt_append:
+        print(f"[INFO] next: `bash scripts/hadd_bdt.sh {channel_US} {opt_append}` then "
+              f"`python3 plot_BDT_Categories.py {channel_US} {era} --{opt_append}`")
 
 
 def stage_all():

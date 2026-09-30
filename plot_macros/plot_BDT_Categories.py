@@ -14,6 +14,23 @@ from utils.helper import get_canvas, save_figure, get_histograms_ratio
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "python"))
 from bdt_categories_io import save_bdt_category
 
+# directory-suffix flags, stripped so the positional arguments below are unaffected:
+#   --legacy     the pre-K-fold single-model scores (train.py --stage legacy). Reads
+#                BDT_score/<channel>legacy/ and saves its boundaries under the key "<channel>legacy",
+#                so the fold-matched boundaries under "<channel>" are left untouched. Those MC
+#                scores are in-sample for 60% of the MC, so the resulting significance is
+#                optimistically biased -- for comparison only.
+#   --optimized  the Optuna-configured K-fold scores (train.py --stage apply --use-optuna), read
+#                from BDT_score/<channel>optimized/ and saved under the key "<channel>optimized"
+dir_suffix = ""
+for suffix_flag in ("--legacy", "--optimized"):
+    if suffix_flag in sys.argv:
+        sys.argv.remove(suffix_flag)
+        if dir_suffix:
+            print("--legacy and --optimized are mutually exclusive")
+            exit()
+        dir_suffix = suffix_flag[2:]
+
 if len(sys.argv) < 3:
     print(
         "Arguments missing: Channel_under_study, era, bdt/kin categorization, background_subset, signal_subset"
@@ -22,10 +39,10 @@ if len(sys.argv) < 3:
 channel_US = sys.argv[1]
 era_input = sys.argv[2]
 
-ifKfold = False
-if "--legacy" in sys.argv:
+if dir_suffix == "legacy":
     print("Not using k-fold BDT")
-    ifKfold = True
+elif dir_suffix == "optimized":
+    print("Using k-fold BDT with the Optuna configuration")
 else:
     print("Using k-fold BDT")
 
@@ -67,13 +84,6 @@ elif len(sys.argv) == 4:
         file_append = "reCat"
     elif flag == "kin":
         category_var = "category"
-    if ifKfold:
-        # the pre-K-fold single-model scores (train.py --stage legacy). Reads
-        # BDT_score/<channel>legacy/ and saves its boundaries under the key "<channel>legacy",
-        # so the fold-matched boundaries under "<channel>" are left untouched. Those MC scores
-        # are in-sample for 60% of the MC, so the resulting significance is optimistically
-        # biased -- for comparison only.
-        file_append += "legacy"
     else:
         print("Set production categorization to be:")
         print(" > bdt, kin")
@@ -85,6 +95,7 @@ elif len(sys.argv) == 6:
 else:
     print("Include subset of background AND signal only.")
     exit()
+file_append += dir_suffix
 
 print("Channel under study: ", channel_US)
 print("Eras: ", eras)

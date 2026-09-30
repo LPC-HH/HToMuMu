@@ -168,7 +168,7 @@ The tuples with the BDT score added are saved in root_io/tuples/BDT_score/(ggH/V
 Again, we need to hadd these tuples. To do this, run the following
 
 ```bash
-bash scripts/hadd_bdt.sh (ggH/VBF) (reCat/legacy)
+bash scripts/hadd_bdt.sh (ggH/VBF) (reCat/legacy/optimized)
 ```
 
 This will copy the hadd_template.sh file in the directories where the tuples are, so the next time you can just do.

@@ -262,13 +262,15 @@ def score_tuple_into(source_dir, source_name, out_dir, out_name, channel_US, cat
 
 
 def scoring_paths(file_type, channel_US, era, signal_subset, background_subset, use_reCategorization,
-                  legacy=False):
-    """Input tuple and output BDT_score file of one nominal sample."""
+                  legacy=False, dir_suffix=""):
+    """Input tuple and output BDT_score file of one nominal sample. `dir_suffix` is appended to
+    the BDT_score/<channel> directory (e.g. "optimized") so it does not overwrite the default."""
     subset_title = f"B{background_subset}_S{signal_subset}"
     file_append, category_var, root_append = ("reCat", "_categoryBDT", "_categorized") \
         if use_reCategorization else ("", "_category", "")
     if legacy:
         file_append += "legacy"  # a sibling BDT_score/<channel>legacy/ tree
+    file_append += dir_suffix
     tuple_path = "../../root_io/tuples/"
     return dict(
         subset_title=subset_title, category_var=category_var, tuple_path=tuple_path,
@@ -286,22 +288,23 @@ def _check_variables(variables, bundle):
 
 
 def append_BDT_score(file_type, channel_US, era, signal_subset, background_subset, variables,
-                     bundle, use_bsConstrain, use_reCategorization, legacy=False):
+                     bundle, use_bsConstrain, use_reCategorization, legacy=False, dir_suffix=""):
     """Score one nominal tuple into root_io/tuples/BDT_score/..."""
     names = _check_variables(variables, bundle)
     p = scoring_paths(file_type, channel_US, era, signal_subset, background_subset,
-                      use_reCategorization, legacy=legacy)
+                      use_reCategorization, legacy=legacy, dir_suffix=dir_suffix)
     score_tuple_into(p["tuple_path"], p["tuple_name"], p["BDT_path"], p["BDT_name"], channel_US,
                      p["category_var"], use_bsConstrain, names, bundle, tag=f"{file_type}_{era}",
                      legacy=legacy)
 
 
 def append_BDT_score_to_sys(file_type, channel_US, era, signal_subset, background_subset, variables,
-                            bundle, use_bsConstrain, systematics_dir=SYSTEMATICS_TUPLE_DIR):
+                            bundle, use_bsConstrain, systematics_dir=SYSTEMATICS_TUPLE_DIR,
+                            dir_suffix=""):
     """Score every systematic tuple of one sample. A varied event keeps its `event`, so it
     lands in the same fold -- and is scored by the same model -- as its nominal self."""
     names = _check_variables(variables, bundle)
-    out_dir = f"{systematics_dir}BDT_score/{channel_US}/B{background_subset}_S{signal_subset}/"
+    out_dir = f"{systematics_dir}BDT_score/{channel_US}{dir_suffix}/B{background_subset}_S{signal_subset}/"
     systematics = systematic_names()
     done, missing, failed = [], [], []
     for i, systematic in enumerate(systematics, start=1):
