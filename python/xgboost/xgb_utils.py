@@ -22,7 +22,16 @@ plt.style.use(hep.style.CMS)
 root.gROOT.SetBatch(True)
 root.gStyle.SetOptStat(0)
 
-luminosity = {
+utils_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "plot_macros", "utils")
+if utils_dir not in sys.path:
+    sys.path.append(utils_dir)
+
+import labels
+try:
+    luminosity = labels.luminosity
+except ImportError as e:
+    print(f"[WARNING] plot_macros/utils/labels.py lumi info not importable ({e}); using predefined set")
+    luminosity = {
     "2022": 7.9804,
     "2022EE": 26.6717,
     "2022Combined": 34.6521,
@@ -31,7 +40,7 @@ luminosity = {
     "2023Combined": 27.245,
     "2024": 109.08,
     "Combined": 170.905,
-}
+    }
 
 # ---------------------------------------------------------------------------
 # Input variables
@@ -604,11 +613,7 @@ LOG_Y_VARIABLES = frozenset({
 
 def _variable_labels():
     """(x_labels, n_bins, x_range) from plot_macros/utils/labels.py, or empty dicts."""
-    utils_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "plot_macros", "utils")
-    if utils_dir not in sys.path:
-        sys.path.append(utils_dir)
     try:
-        import labels
         return labels.x_labels, labels.n_bins, labels.x_range
     except ImportError as e:
         print(f"[WARNING] plot_macros/utils/labels.py not importable ({e}); using auto-ranges")
