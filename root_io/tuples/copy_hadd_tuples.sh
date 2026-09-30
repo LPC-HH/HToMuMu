@@ -13,6 +13,7 @@ if [[ ! "$TUPLES_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     echo "Error: tuples_version must be of the form a.b.c (e.g. 2.2.0)"
     exit 1
 fi
+ANALYZER_VERSION="${TUPLES_VERSION%.*}"
 
 # Validate era if provided
 if [ -n "$ERA" ]; then
@@ -27,7 +28,7 @@ if [ -n "$ERA" ]; then
     esac
 fi
 
-SOURCE_DIR="/store/group/lpchmumu/mbarrial/analyzer_HiggsMuMu_v2.2/tuples_v${TUPLES_VERSION}/haddTuples/"
+SOURCE_DIR="/store/group/lpchmumu/mbarrial/analyzer_HiggsMuMu_v${ANALYZER_VERSION}/tuples_v${TUPLES_VERSION}/haddTuples/"
 
 echo "Copying tuples version v${TUPLES_VERSION}"
 echo "Source: ${SOURCE_DIR}"
