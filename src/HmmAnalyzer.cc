@@ -464,7 +464,7 @@ void HmmAnalyzer::EventLoop() {
         bool trig_match_mu2 = false;
         for (int trigger_index = 0; trigger_index < nTrigObj; trigger_index++) {
             //  float dR_TrigObj = 999.;
-            if (TrigObj_id[trigger_index] != 13)
+            if (TrigObj_id[trigger_index] != 13 || !(TrigObj_filterBits[trigger_index] & (1 << 1))) 
                 continue;
             float dR_TrigObj;
             if (!trig_match_mu1){

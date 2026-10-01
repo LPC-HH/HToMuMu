@@ -8,7 +8,7 @@ from bdt_categories_io import load_bdt_categories, get_bdt_cuts
 production_channel = ""
 bdt_subset = ""
 use_categories = False
-version = "2.1.0"
+version = "2.4.2"
 
 if len(sys.argv) >= 2:
     production_channel = sys.argv[1]
@@ -101,12 +101,12 @@ variables = [
     #"HT_pt10",
 ]
 
-# variables = ["leading_jet_eta", "subleading_jet_eta", "diMuon_bsConstrainedMass"]
-variables = ["diMuon_bsConstrainedMass"]
+variables = ["leading_jet_eta", "subleading_jet_eta", "diMuon_bsConstrainedMass"]
+# variables = ["diMuon_bsConstrainedMass"]
 
 # eras = ["2022EE", "2022", "2023", "2023BPix", "2024"]#, "2025"]
 # eras = ["2025","2024", "Combined"]
-eras = ["Combined"]
+eras = ["2025", "2026", "Combined"]
 #eras = ["2025"]
 
 for era in eras:
