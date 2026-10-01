@@ -8,9 +8,9 @@
 
 int main(int argc, char *argv[]) {
 
-    if (argc != 6) {
+    if (argc != 7) {
         std::cerr << "Please give 5 arguments: input file, output file, era, "
-                     "channel, is_data(T/F)"
+                     "channel, is_data(T/F), categorization(bdt/kin)"
                   << std::endl;
         return -1;
     }
@@ -20,8 +20,23 @@ int main(int argc, char *argv[]) {
     TString era(argv[3]);
     TString channel(argv[4]);
     const bool is_data = *argv[5] == 'T';
+    TString categorization(argv[6]);
     std::cout << "era: " << era << std::endl;
     std::cout << "channel: " << channel << std::endl;
+
+    TString category_var;
+    TString output_append;
+
+    if (categorization == "bdt") {
+        category_var = "categoryBDT";
+        output_append = "reCat";
+    } else if (categorization == "kin") {
+        category_var = "category";
+    } else {
+        std::cerr << "Invalid categorization: " << categorization
+                  << ". Must be 'bdt' or 'kin'." << std::endl;
+        return -1;
+    }
 
     // Open the input ROOT file and get the TTree
     TFile inputFile(input, "READ");
@@ -55,6 +70,10 @@ int main(int argc, char *argv[]) {
                               "subleading_jet_pt",
                               "leading_jet_eta",
                               "subleading_jet_eta",
+                              "leading_jet_btagPNetQvG",
+                              "subleading_jet_btagPNetQvG",
+                              "leading_jet_nConstituents",
+                              "subleading_jet_nConstituents",
                               "diJet_mass",
                               "delta_eta_diJet",
                               "delta_phi_diJet",
@@ -62,21 +81,27 @@ int main(int argc, char *argv[]) {
                               "min_delta_eta_diMuon_jet",
                               "min_delta_phi_diMuon_jet",
                               //"weight_no_lumi",
+                              "event",
+                              "mc_campaign",
                               "weight",
-                              "is_ggH_category",
 			                  "relative_diMuon_mass_error",
                               "relative_diMuon_bsConstrainedMass_error",
                   })
         tree_input->SetBranchStatus(ggh_branches, 1);
+    
+    TString ggh_category_branch = "is_ggH_" + category_var;
+    std::cout << "Category branch: " << ggh_category_branch << std::endl;
+    tree_input->SetBranchStatus(ggh_category_branch.Data(), 1);
 
     gROOT->cd();
     // Open the output ROOT file and create a new TTree
-    TFile output_file("./root_io/skim/ggH/" + channel + "_" + era + "_skim.root",
+    //std::cout << "./root_io/skim/ggH" + output_append + "/" + channel + "_" + era + "_skim.root" << std::endl;
+    TFile output_file("./root_io/skim/ggH" + output_append + "/" + channel + "_" + era + "_skim.root",
                       "RECREATE");
     TTree *tree_output = tree_input->CloneTree(0); // Clone the structure only
 
-    tree_output = tree_input->CopyTree("(is_ggH_category == 1) && (diMuon_bsConstrainedMass >= 115. && diMuon_bsConstrainedMass <= 135.)");
-
+    //std::cout << "(" + ggh_category_branch + " == 1) && (diMuon_bsConstrainedMass >= 115. && diMuon_bsConstrainedMass <= 135.)" << std::endl;
+    tree_output = tree_input->CopyTree("(" + ggh_category_branch + " == 1) && (diMuon_bsConstrainedMass >= 115. && diMuon_bsConstrainedMass <= 135.)");
     // Write the selected tree to the output file
 
     output_file.cd();

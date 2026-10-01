@@ -4,6 +4,19 @@ import sys
 import matplotlib
 import os
 
+
+
+
+###########################################################################################
+# DEPRECATED: uses `python3 train.py ... --stage apply`
+###########################################################################################
+
+
+
+
+sys.exit("[ERROR] append_xgboost_discriminator_to_tree.py is deprecated: use "
+         "`python3 train.py <channel> <era> ... --stage apply` (fold-matched out-of-fold scoring).")
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
@@ -138,6 +151,10 @@ with uproot.open(FileName) as file:
         file["tree_output"].arrays([row[0] for row in variables], library="np"),
         # flatten=False,
     )
+
+# NOTE: legacy path -- if revived, this needs the same preprocessing as
+# xgb_utils.append_BDT_score (xgb_utils.mask_undefined_jet_features(df) plus the
+# standardization loop); it currently feeds raw, non-standardized branches.
 
 # getting a numpy array from two pandas data frames
 x_test = df.values

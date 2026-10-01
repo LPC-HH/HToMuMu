@@ -62,10 +62,8 @@ hadd -f background_Combined_skim_Full.root DY_Combined_skim.root EWK_Combined_sk
 #hadd -f signal_combined_skim_notth.root signal_2022combined_skim_notth.root signal_2023combined_skim_notth.root signal_2024_skim_notth.root
 
 
-hadd -f signal_Combined_skim_Full.root ggH_Combined_skim.root VBF_Combined_skim.root ttH_Combined_skim.root
+hadd -f signal_Combined_skim_Full.root ggH_Combined_skim.root VBF_Combined_skim.root #ttH_Combined_skim.root
 hadd -f signal_Combined_skim_NottH.root ggH_Combined_skim.root VBF_Combined_skim.root
 
 
 #hadd -f Data_Combined_skim.root Data_2022Combined_skim.root Data_2023Combined_skim.root Data_2024_skim.root Data_2025_skim.root
-
-

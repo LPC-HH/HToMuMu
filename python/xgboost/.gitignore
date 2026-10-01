@@ -1,6 +1,11 @@
 *.txt
 *.png
 /models/*
+# keep the frozen Optuna configs so --use-optuna works on a fresh checkout without --stage dev
+!/models/dev/
+/models/dev/*
+!/models/dev/config_optuna_*.json
+/models/dev/config_optuna_*_smoke.json
 /modelsOld/*
 optunaPlots
 *.db

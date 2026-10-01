@@ -1,665 +1,533 @@
 #!/usr/bin/env python
-# coding: utf-8
-import xgboost as xgb
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, roc_curve, roc_auc_score
-import xgb_utils
+"""K-fold BDT training for H->mumu.
+
+Usage:
+  python3 train.py <channel> <era> [--stage dev|test|final|apply|all|legacy]
+                   [--do-systematics] [--use-recategorization]
+                   [--bkg-subset Full] [--sig-subset NottH]
+                   [--plots-only] [--no-apply] [--use-optuna] [--force-retest] [--smoke]
+                   [--device cuda|cpu] [--optuna-trials N]
+
+Stages:
+  dev     split off an untouched 20% test sample, run Optuna with 5-fold CV on the other 80%
+          and write the best configuration to models/dev/config_optuna_<name>.json
+  test    refit on the 80% and evaluate on the untouched test sample -- run it ONCE
+  final   train the five analysis models on all MC (model i holds out fold i = event % 5)
+          and make the out-of-fold (OOF) plots
+  apply   append the fold-matched BDT scores to the nominal (and, with --do-systematics,
+          the systematic) tuples; with --use-optuna they go to BDT_score/<channel>optimized/
+  all     final + apply (default)
+  legacy  the pre-K-fold single 60/40 split model, compared with the K-fold models on the
+          same held-out 40%, then scored into BDT_score/<channel>legacy/ (needs `final`)
+
+test/final/legacy train with DEFAULT_PARAMS unless --use-optuna is given.
+--plots-only draws the input and standardization plots and stops.
+--no-apply skips writing scored tuples. --smoke is a quick run on 5% of the events.
+"""
+import argparse
+import json
+import math
+import os
+import resource
+import shutil
+import sys
+from types import SimpleNamespace
+
 import numpy as np
 import pandas as pd
-import math
-import pickle as pickle
-import os
-import shutil
 import uproot
-import sys
-# import optuna
-# import optuna.visualization as vis
-import matplotlib.pyplot as plt
-import mplhep as hep
-# import plotly.io as pio
-# from plotly.io import show
+from sklearn.metrics import roc_auc_score, roc_curve
 
-if len(sys.argv) not in [6, 8]:
-    print(
-        "[ERROR] python3 train.py <Channel_under_study> <era> "
-        "<ifRetrain T/F> <ifOptimize T/F> <doSystematics T/F> "
-        "[bkg_subset sig_subset]"
-    )
-    exit()
+import xgb_kfold as kf
+import xgb_utils
 
-channel_US, era = sys.argv[1], sys.argv[2]
-ifRetrain = True if sys.argv[3] == "T" else False
-ifOptimize = True if sys.argv[4] == "T" else False
-doSystematics = True if sys.argv[5] == "T" else False
-background_subset = sys.argv[6] if len(sys.argv) == 8 else "Full"
-signal_subset = sys.argv[7] if len(sys.argv) == 8 else "NottH"
-
-
-print("Channel under study: ", channel_US)
-print("Era: ", era)
-print("Retrain: ", ifRetrain)
-print("Do systematics: ", doSystematics)
-print("Background subset: ", background_subset)
-print("Signal subset: ", signal_subset)
-
-
-DRAW_CORRELATIONS = False
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+DRAW_CORRELATIONS = False  # slow
+PLOT_INPUT_COMPARISON = True  # signal vs background shape of every input
+PLOT_STANDARDIZATION = True  # train vs held-out, before and after standardization
 DO_STANDARDIZATION = True
 USE_WEIGHT = False
-USE_WEIGHT_MASS_RES = True
+USE_WEIGHT_MASS_RES = True  # mutually exclusive with USE_WEIGHT
 APPEND_VARIABLES = True
-USE_BSCONSTRAIN = True 
+USE_BSCONSTRAIN = True
 PLOT_LOSS = True
-READ_STANDARIZATION = False
-if not ifRetrain: 
-    READ_STANDARIZATION = True
 SEED = 7
-TEST_SIZE = 0.4
-SAMPLE_SIZE = 1.0
-SIGNAL_REGION = (121, 129)
+TEST_FRACTION = 0.2
+SIGNAL_REGION = (121., 129.)
 
-variables = xgb_utils.get_variables(channel_US, USE_BSCONSTRAIN)
-print("number of variables", len(variables) - 3)
+# hyperparameters used unless --use-optuna
+DEFAULT_PARAMS = dict(max_depth=3, learning_rate=0.1, reg_lambda=1.0)
+DEFAULT_N_ROUNDS = 400
+
+N_OPTUNA_TRIALS = 50
+MAX_ESTIMATORS = 2000  # cap on rounds in the CV (early stopping on the validation fold)
+EARLY_STOPPING_ROUNDS = 50
+N_ROUNDS_SCALE = 1.0  # final rounds = median(best_iteration + 1) * scale
+
+PROGRESS_EVERY = 10  # print boosting progress every N rounds (0 = silent)
+MONITOR_MAX_ROWS = 1_000_000  # events per loss-monitoring curve during training
+IN_SAMPLE_MAX_ROWS = 1_000_000  # training events kept for the train-vs-held-out plots
+
+LEGACY_TEST_FRACTION = 0.4
+LEGACY_SEED = 7
+LOSS_CURVE_ROUND_STEP = 10  # legacy loss curves: evaluate every N trees...
+LOSS_CURVE_MAX_ROWS = 250_000  # ...on at most this many events per curve
+LOSS_CURVE_SEED = 900
+
+SMOKE_FRACTION = 0.05
+SMOKE_TRIALS = 3
+SMOKE_ROUNDS = 20
+
+STAGES = ("dev", "test", "final", "apply", "all", "legacy")
+NOMINAL_TUPLES = ["Data", "DY", "EWK", "TT", "DiBoson", "ggH", "VBF"]
 
 
-test_name = f"{channel_US}_{era}_B{background_subset}_S{signal_subset}"
-plot_path = f"../../plots/xgboost/{channel_US}/B{background_subset}_S{signal_subset}/"
-data_directory = f"../../root_io/skim/{channel_US}/"
+def parse_cli(argv):
+    p = argparse.ArgumentParser(description="K-fold BDT training for H->mumu (see module docstring).")
+    p.add_argument("channel", help="channel under study, e.g. ggH or VBF")
+    p.add_argument("era", help="e.g. Combined")
+    p.add_argument("--stage", default="all", choices=STAGES)
+    p.add_argument("--do-systematics", action="store_true",
+                   help="with --stage apply/all: also score the systematic tuples")
+    p.add_argument("--use-recategorization", action="store_true", help="use the reCat skims/outputs")
+    p.add_argument("--bkg-subset", default="Full", help="background subset (default: Full)")
+    p.add_argument("--sig-subset", default="NottH", help="signal subset (default: NottH)")
+    p.add_argument("--device", default="cuda", choices=("cuda", "cpu"))
+    p.add_argument("--optuna-trials", type=int, default=None)
+    for flag in ("--force-retest", "--smoke", "--use-optuna", "--plots-only", "--no-apply"):
+        p.add_argument(flag, action="store_true")
+    opts = vars(p.parse_args(argv[1:]))
+    if opts["no_apply"] and opts["stage"] == "apply":
+        sys.exit("[ERROR] --no-apply with --stage apply leaves nothing to do.")
+    if opts["smoke"] and opts["stage"] in ("apply", "all") and not opts["plots_only"]:
+        # smoke models would overwrite the real BDT_score tuples
+        sys.exit("[ERROR] --smoke cannot be combined with --stage apply/all.")
+    return opts
+
+
+OPTS = parse_cli(sys.argv)
+channel_US, era = OPTS["channel"], OPTS["era"]
+doSystematics = OPTS["do_systematics"]
+useRecategorization = OPTS["use_recategorization"]
+background_subset = OPTS["bkg_subset"]
+signal_subset = OPTS["sig_subset"]
+if OPTS["plots_only"]:
+    PLOT_INPUT_COMPARISON = PLOT_STANDARDIZATION = True
+if OPTS["no_apply"]:
+    APPEND_VARIABLES = False
+if USE_WEIGHT and USE_WEIGHT_MASS_RES:
+    sys.exit("[ERROR] USE_WEIGHT and USE_WEIGHT_MASS_RES are mutually exclusive")
+
+variables = xgb_utils.get_variables(channel_US, USE_BSCONSTRAIN)  # inputs + (mass, mass error, weight)
+names = [v[0] for v in variables[:-3]]
+
+# ---------------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------------
+file_append = "reCat" if useRecategorization else ""
+subset_title = f"B{background_subset}_S{signal_subset}"
+run_tag = "_smoke" if OPTS["smoke"] else ""
+# --use-optuna outputs (models, plots, scored tuples) get their own names so they never
+# overwrite the DEFAULT_PARAMS ones; the dev config and test marker are shared (base_name)
+opt_append = "optimized" if OPTS["use_optuna"] else ""
+base_name = f"{channel_US}{file_append}_{era}_{subset_title}{run_tag}"
+test_name = base_name + (f"_{opt_append}" if opt_append else "")
+plot_path = f"../../plots/xgboost/{channel_US}{file_append}{opt_append}/{subset_title}{run_tag}/"
+data_directory = f"../../root_io/skim/{channel_US}{file_append}/"
 signal_file_name = f"{data_directory}signal_{era}_skim_{signal_subset}.root"
 bkg_file_name = f"{data_directory}background_{era}_skim_{background_subset}.root"
+mass_var_name = variables[-3][0]
+DEV_DIR = "models/dev"
+# Optuna config: written by --stage dev, read only with --use-optuna (tracked in git)
+optuna_config_path = f"{DEV_DIR}/config_optuna_{base_name}.json"
+test_marker_path = f"{DEV_DIR}/test_evaluated_{base_name}.json"
 
-os.makedirs(plot_path, exist_ok=True)
-for subdir in ["training", "results", "scores", "variables"]:
-    os.makedirs(os.path.join(plot_path, subdir), exist_ok=True)
-    shutil.copy("../index.php", os.path.join(plot_path, subdir))
-os.makedirs("models", exist_ok=True)
-os.makedirs("roc", exist_ok=True)
+for subdir in ["training", "results", "scores", "variables", "comparison", "kFold"]:
+    os.makedirs(plot_path + subdir, exist_ok=True)
+    shutil.copy("../index.php", plot_path + subdir)
+for directory in ("models", DEV_DIR, "roc"):
+    os.makedirs(directory, exist_ok=True)
 
-##Getting ROOT files into pandas
-print("[INFO]: Creating data frames")
-with uproot.open(signal_file_name) as file:
-    df_signal = pd.DataFrame(
-        file["tree_output"].arrays([var[0] for var in variables], library="np"),
-    )
-with uproot.open(bkg_file_name) as file:
-    df_bkg = pd.DataFrame(
-        file["tree_output"].arrays([var[0] for var in variables], library="np"),
-    )
-print("[INFO]: Data frames created successfully")
-
-if USE_BSCONSTRAIN:
-    mass_var_name = "diMuon_bsConstrainedMass"
-else:
-    mass_var_name = "diMuon_mass"
-
-bkg_events = df_bkg["weight"][
-    (df_bkg[mass_var_name] > SIGNAL_REGION[0])
-    & (df_bkg[mass_var_name] < SIGNAL_REGION[1])
-].sum()
-signal_events = df_signal["weight"][
-    (df_signal[mass_var_name] > SIGNAL_REGION[0])
-    & (df_signal[mass_var_name] < SIGNAL_REGION[1])
-].sum()
-
-####  weight Normalization
-signal_weight_sum = df_signal["weight"].sum()
-bkg_weight_sum = df_bkg["weight"].sum()
-df_signal["weight"] = df_signal["weight"] * (bkg_weight_sum / signal_weight_sum)
-
-s_over_sqrt_b = signal_events / math.sqrt(bkg_events)
-print(
-    f"[INFO]: S = {signal_events:.3f}; B = {bkg_events:.3f}; S/sqrt(B) = {s_over_sqrt_b:.3f}"
-)
-print(f"[INFO]: Signal sample size: {len(df_signal.values)}")
-print(f"[INFO]: Bkg sample size: {len(df_bkg.values)}")
-
-x = np.concatenate([df_bkg.values, df_signal.values])
-y = np.concatenate([np.zeros(len(df_bkg)), np.ones(len(df_signal))])
-
-### Apply dimuon mass cut
-print("len y pred cut:", len(y))
-y = y[(x[:, -3] > 115) & (x[:, -3] < 135)]
-x = x[(x[:, -3] > 115) & (x[:, -3] < 135)]
-print("len y post cut:", len(y))
-
-if DRAW_CORRELATIONS:
-    xgb_utils.draw_correlation_matrix(
-        signal_file_name, bkg_file_name, variables[:-2], plot_path, test_name
-    )
-
-# split data into train and test sets
-SEED = 7
-TEST_SIZE = 0.4
-SAMPLE_SIZE = 1.0
-x_train_p, x_test_p, y_train, y_test = train_test_split(
-    x,
-    y,
-    train_size=SAMPLE_SIZE * (1 - TEST_SIZE),
-    test_size=SAMPLE_SIZE * TEST_SIZE,
-    random_state=SEED,
-)
-
-x_train = x_train_p[:, :-3]
-x_test = x_test_p[:, :-3]
-sample_weights_train = x_train_p[:, -1]
-sample_weights_test = x_test_p[:, -1]
-
-print("-inf position (by index):", np.isneginf(x_train)[np.isneginf(x_train)])
-print("inf position (by index):", np.isinf(x_train)[np.isinf(x_train)])
-print("nan position (by index):", np.isnan(x_train)[np.isnan(x_train)])
-x_train[np.isneginf(x_train)] = np.nan
-x_train[np.isinf(x_train)] = np.nan
-x_train[np.isnan(x_train)] = 0.0
-
-print("x_train:", x_train)
-mean_map = {}
-std_map = {}
-mean_map = {}
-std_map = {}
-
-if DO_STANDARDIZATION:
-
-    preprocessing_file = f"models/preprocessing_{test_name}"
-
-    if USE_BSCONSTRAIN:
-        preprocessing_file += "_bsC"
-
-    preprocessing_file += ".pkl"
-
-    if READ_STANDARIZATION:
-
-        print(f"[INFO] Reading standardization from {preprocessing_file}")
-
-        if not os.path.exists(preprocessing_file):
-            raise FileNotFoundError(
-                f"[ERROR] Preprocessing file not found: {preprocessing_file}"
-            )
-
-        with open(preprocessing_file, "rb") as f:
-            preprocessing_info = pickle.load(f)
-
-        mean_map = preprocessing_info["mean_map"]
-        std_map = preprocessing_info["std_map"]
-
-        saved_variables = preprocessing_info["variables"]
-        current_variables = [var[0] for var in variables[:-3]]
-
-        if saved_variables != current_variables:
-            raise ValueError(
-                "[ERROR] Variables in preprocessing file do not match "
-                "the variables used by the current BDT.\n"
-                f"Saved:   {saved_variables}\n"
-                f"Current: {current_variables}"
-            )
-
-        print("[INFO] Standardization information loaded successfully")
-
-    else:
-        print("[INFO] Calculating standardization from training sample")
-
-        for i, var in enumerate(variables[:-3]):
-
-            null_value = 0
-            if var[0] in ["delta_phi_diJet", "pt_balance"]:
-                null_value = -1
-
-            mask_train = x_train[:, i] != null_value
-
-            mean_map[var[0]] = x_train[mask_train, i].mean()
-            std_map[var[0]] = x_train[mask_train, i].std()
-
-            print("standarizing : ", var[0])
-            print("Iterator : ", i)
-            print("[Info]: Train Sample Mean: ", mean_map[var[0]])
-            print("[Info]: Train Sample std: ", std_map[var[0]])
-
-        # Save standardization
-        preprocessing_info = {
-            "mean_map": mean_map,
-            "std_map": std_map,
-            "variables": [var[0] for var in variables[:-3]],
-        }
-
-        with open(preprocessing_file, "wb") as f:
-            pickle.dump(preprocessing_info, f)
-
-        print(f"[INFO] Saved preprocessing information to {preprocessing_file}")
-
-    for i, var in enumerate(variables[:-3]):
-
-        null_value = 0
-        if var[0] in ["delta_phi_diJet", "pt_balance"]:
-            null_value = -1
-
-        mask_train = x_train[:, i] != null_value
-        mask_test = x_test[:, i] != null_value
-
-        x_train[mask_train, i] = (
-            x_train[mask_train, i] - mean_map[var[0]]
-        ) / std_map[var[0]]
-
-        x_test[mask_test, i] = (
-            x_test[mask_test, i] - mean_map[var[0]]
-        ) / std_map[var[0]]
+print(f"[INFO] channel {channel_US}, era {era}, {subset_title}, stage {OPTS['stage']}, "
+      f"device {OPTS['device']}, smoke {OPTS['smoke']}, recategorization {useRecategorization}, "
+      f"systematics {doSystematics}")
+print(f"[INFO] {len(names)} input variables: {', '.join(names)}")
 
 
-print("x_train standaried:", x_train)
+# ---------------------------------------------------------------------------
+# Data loading
+# ---------------------------------------------------------------------------
+def load_training_data():
+    """Background + signal skims as training arrays (background rows first, y = 0 / 1).
 
-w_train = np.absolute(sample_weights_train) / np.array(x_train_p[:, -2])
-w_test = np.absolute(sample_weights_test) / np.array(x_test_p[:, -2])
+    Signal weights are scaled so both classes have the same total weight. `w_phys` keeps the
+    physics weights; `w_fit` is what the BDT trains with (see USE_WEIGHT*)."""
+    frames = []
+    for path in (bkg_file_name, signal_file_name):
+        print(f"[INFO] reading {path}")
+        with uproot.open(path) as f:
+            df = pd.DataFrame(f["tree_output"].arrays([v[0] for v in variables], library="np"))
+        frames.append(xgb_utils.mask_undefined_jet_features(df))
+    df_bkg, df_sig = frames
+    print(f"[INFO] {len(df_sig)} signal and {len(df_bkg)} background rows")
 
-if ifRetrain:    
-    def objective(trial):
-    
-        params = {
-            "max_depth": trial.suggest_int("max_depth", 2, 5),
-            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.2, log=True),
-            "n_estimators": 2000,
-            "device": "cuda",
-    
-            "min_child_weight": trial.suggest_float("min_child_weight", 1.0, 20.0, log=True),
-            "subsample": trial.suggest_float("subsample", 0.6, 1.0),
-            "colsample_bytree": trial.suggest_float("colsample_bytree", 0.6, 1.0),
-    
-            "reg_lambda": trial.suggest_float("reg_lambda", 0.1, 10.0, log=True),
-            "reg_alpha": trial.suggest_float("reg_alpha", 1e-4, 1.0, log=True),
-    
-            "objective": "binary:logistic",
-            "eval_metric": "logloss",
-            "n_jobs": 4,
-            "verbosity": 0,
-            "early_stopping_rounds": 50,
-        }
-    
-        model = xgb.XGBClassifier(**params)
-    
-        model.fit(
-            x_train,
-            y_train,
-            sample_weight=w_train,
-            eval_set=[(x_train, y_train), (x_test, y_test)],
-            sample_weight_eval_set=[w_train, w_test],
-            verbose=False,
-        )
-    
-        y_pred = model.predict_proba(x_test)[:, 1]
-        
-        #Z = compute_significance(y_test, y_pred, w_test)
-    
-        auc = roc_auc_score(
-            y_test,
-            y_pred,
-            sample_weight=w_test,
-        )
-    
-        return auc
-    
-    nTrials = 1000
-    if(ifOptimize):
-        optimization_plot_path = "optunaPlots/" + channel_US + "/"
-        os.makedirs(optimization_plot_path, exist_ok=True)
-        study = optuna.create_study(direction="maximize")
-        study.optimize(objective, n_trials=nTrials)
-    
-        print("Best AUC:", study.best_value)
-        print("Best parameters:")
-        print(study.best_params)
-    
-        fig = vis.plot_optimization_history(study)
-        fig.write_html(optimization_plot_path + "optimization_history.html")
-        #fig.show()
-    
-        fig = vis.plot_param_importances(study)
-        fig.write_html(optimization_plot_path + "param_importance.html")
-        #fig.show()
-    
-        fig = vis.plot_slice(
-        study,
-        params=[
-            "max_depth",
-            "learning_rate",
-            "min_child_weight",
-            "subsample",
-            "colsample_bytree",
-            "reg_lambda",
-            "reg_alpha",
-        ],
-        )
-    
-        fig.write_html(optimization_plot_path + "optuna_slice.html")
-        best_params = study.best_params   
-        model = xgb.XGBClassifier(
-            **best_params,
-            n_estimators=2000,
-            verbosity=2,
-            n_jobs=4,
-            eval_metric=["logloss", "auc"],
-            early_stopping_rounds=50,
-        )
-    
-        model.fit(
-            x_train,
-            y_train,
-            sample_weight=w_train,
-            eval_set=[(x_train, y_train), (x_test, y_test)],
-            sample_weight_eval_set=[w_train, w_test],
-        )
-    
-        results = model.evals_result()
-    
-        train_loss = results["validation_0"]["logloss"]
-        test_loss  = results["validation_1"]["logloss"]
-    
-        xgb_utils.plot_loss(test_loss, train_loss, test_name, optimization_plot_path, era)
-        
-    # fit model no training data
-    if(ifOptimize):
-        model = xgb.XGBClassifier(
-            **best_params,
-            n_estimators=2000,
-            verbosity=2,
-            n_jobs=4,
-            eval_metric=["logloss", "auc"],
-            early_stopping_rounds=50,
-        )
+    # fold = event % N_FOLDS, read from the same rows (as integers, never as a feature)
+    events = np.concatenate([kf.read_event_ids(bkg_file_name), kf.read_event_ids(signal_file_name)])
+    if len(events) != len(df_bkg) + len(df_sig):
+        raise RuntimeError(f"{len(events)} event ids for {len(df_bkg) + len(df_sig)} skim rows")
+    folds = kf.fold_of_event(events)
 
-    else:
-        '''if(channel_US == 'ggH'):
-            print("USING GGH OPTIMIZED BDT PARAMETERS")
-            opted_params = {'max_depth': 5, 'learning_rate': 0.17065960988185175, 'min_child_weight': 1.258974431208238,
-                            'subsample': 0.9799252299722975, 'colsample_bytree': 0.9857090292326347, 
-                            'reg_lambda': 0.17418443431820596, 'reg_alpha': 0.03970459451078197}
-        else:
-            print("USING VBF OPTIMIZED BDT PARAMETERS")
-            opted_params = {'max_depth': 5, 'learning_rate': 0.019748925259387092, 'min_child_weight': 1.936502069113041,
-                        'subsample': 0.8625503812499821, 'colsample_bytree': 0.822627756256343, 'reg_lambda': 1.45659504748671,
-                        'reg_alpha': 0.010136874339606281}
-        model = xgb.XGBClassifier(
-            **opted_params,
-            n_estimators=2000,
-            verbosity=2,
-            n_jobs=4,
-            eval_metric=["logloss", "auc"],
-            early_stopping_rounds=50
-        )'''
+    def signal_region_yield(df):
+        return df["weight"][(df[mass_var_name] > SIGNAL_REGION[0]) & (df[mass_var_name] < SIGNAL_REGION[1])].sum()
 
-        model = xgb.XGBClassifier(
-            max_depth=3,
-            learning_rate=0.1,
-            n_estimators=400,
-            verbosity=2,
-            n_jobs=4,
-            reg_lambda=1.0,
-            device='cuda',
-        )
-        # model = xgb.XGBClassifier(
-            # max_depth=4,
-            # learning_rate=0.1,
-            # n_estimators=1000,
-            # verbosity=2,
-            # n_jobs=4,
-            # reg_lambda=1.0,
-            # eval_metric=["logloss", "auc"],
-            # early_stopping_rounds=50,
-            # tree_method="hist",
-            # device="cuda",
-        # )
+    signal_events, bkg_events = signal_region_yield(df_sig), signal_region_yield(df_bkg)
+    print(f"[INFO] S = {signal_events:.3f}; B = {bkg_events:.3f}; "
+          f"S/sqrt(B) = {signal_events / math.sqrt(bkg_events):.3f}")
+    signal_scale = df_bkg["weight"].sum() / df_sig["weight"].sum()
+    df_sig["weight"] *= signal_scale
 
-    print("weights: ", sample_weights_train)
-    print("abs(weights): ", np.absolute(sample_weights_train[y_train == 1]))
-    print("abs(weights) mean: ", sample_weights_train[y_train == 1].mean())
-    print("relative_diMuon_mass_error: ", x_test_p[:, -2])
-    print("new error : ", np.absolute(sample_weights_train) / np.array(x_train_p[:, -2]))
+    # features as float32 (their type in the skim); mass, mass error and weight as float64
+    service = [v[0] for v in variables[-3:]]
+    x = np.concatenate([df[names].to_numpy(dtype=np.float32) for df in frames])
+    mass, rel_err, w_norm = np.concatenate([df[service].to_numpy(dtype=np.float64) for df in frames]).T
+    y = np.concatenate([np.zeros(len(df_bkg)), np.ones(len(df_sig))]).astype(np.int8)
+    del frames, df_bkg, df_sig
 
-    if not USE_WEIGHT and not USE_WEIGHT_MASS_RES:
-        print("[Info]: Training without weights")
-        model.fit(x_train, y_train)
-    if USE_WEIGHT:
-        print("[Info]: Training with regular  weights")
-        model.fit(x_train, y_train, sample_weight=np.absolute(sample_weights_train))
+    keep = np.flatnonzero(kf.training_region_mask(mass))
+    if OPTS["smoke"]:
+        rng = np.random.default_rng(SEED)
+        keep = keep[np.sort(rng.choice(len(keep), size=int(SMOKE_FRACTION * len(keep)), replace=False))]
+    x, y, folds = x[keep], y[keep], folds[keep]
+    mass, rel_err, w_norm = mass[keep], rel_err[keep], w_norm[keep]
+    print(f"[INFO] {len(y)} rows in the training region" + (" (smoke subsample)" if OPTS["smoke"] else ""))
+
+    w_phys = np.where(y == 1, w_norm / signal_scale, w_norm)
     if USE_WEIGHT_MASS_RES:
-        print("[Info]: Training with mass_res weights")
-        model.fit(
-            x_train,
-            y_train,
-            sample_weight=w_train,
-            eval_set=[(x_train, y_train), (x_test, y_test)],
-            sample_weight_eval_set=[w_train, w_test],
-        )
+        w_fit = np.abs(w_norm) / rel_err
+    elif USE_WEIGHT:
+        w_fit = np.abs(w_norm)
+    else:
+        w_fit = np.ones(len(y))
 
-    y_pred = model.predict_proba(x_test)[:, 1]
-    y_pred_train = model.predict_proba(x_train)[:, 1]
+    if DRAW_CORRELATIONS:
+        xgb_utils.draw_correlation_matrix(signal_file_name, bkg_file_name, variables[:-2], plot_path, test_name)
+    if PLOT_INPUT_COMPARISON:
+        xgb_utils.plot_input_comparison(x, y, np.abs(w_norm), variables[:-3], channel_US, era, plot_path)
+    xgb_utils.plot_fold_balance(y, w_fit, folds, plot_path, test_name, era, kf.N_FOLDS)
+    report_peak_memory("after loading the training data")
+    return SimpleNamespace(x=x, y=y, folds=folds, mass=mass, w_fit=w_fit, w_phys=w_phys,
+                           signal_events=signal_events, bkg_events=bkg_events)
 
-    print("y_pred:", y_pred)
-    print("y_test:", y_test)
-    print("y_pred_train:", y_pred_train)
-    predictions = [round(value) for value in y_pred]
-    # evaluate predictions
-    accuracy = accuracy_score(y_test, predictions)
-    print("Accuracy: %.2f%%" % (accuracy * 100.0))
 
-    AUC = roc_auc_score(y_test, y_pred)
-    AUC_weighted = roc_auc_score(y_test, y_pred, sample_weight=w_test)
-    print("AUC: " + str(AUC))
-    print("Weighted AUC: " + str(AUC_weighted))
-    diMuon_mass_test = x_test_p[:, -3]
-    print(
-        "diMuon_mass: ",
-        diMuon_mass_test[(diMuon_mass_test < 130) & (diMuon_mass_test > 120)],
-    )
+def report_peak_memory(label):
+    print(f"[MEM  ] {label}: peak RSS {resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6:.2f} GB")
 
-    ## Go back to the normal signal weight
-    sample_weights_test[y_test == 1] = sample_weights_test[y_test == 1] * (
-        signal_weight_sum / bkg_weight_sum
-    )
-    sample_weights_train[y_train == 1] = sample_weights_train[y_train == 1] * (
-        signal_weight_sum / bkg_weight_sum
-    )
 
-    signal_region_test_cuts = (x_test_p[:, -3] > SIGNAL_REGION[0]) & (
-        x_test_p[:, -3] < SIGNAL_REGION[1]
-    )
-    fpr, tpr, thr = roc_curve(
-        y_test[signal_region_test_cuts],
-        y_pred[signal_region_test_cuts],
-        sample_weight=sample_weights_test[signal_region_test_cuts],
-    )
+def frozen_config():
+    """DEFAULT_PARAMS, or the Optuna configuration with --use-optuna."""
+    if not OPTS["use_optuna"]:
+        print(f"[INFO] using DEFAULT_PARAMS {DEFAULT_PARAMS}, {DEFAULT_N_ROUNDS} rounds")
+        return kf.make_config(OPTS["device"], DEFAULT_PARAMS, DEFAULT_N_ROUNDS, "default_fixed")
+    if not os.path.exists(optuna_config_path):
+        sys.exit(f"[ERROR] --use-optuna given but {optuna_config_path} does not exist: run "
+                 "`--stage dev` first, or `git pull` the committed config.")
+    with open(optuna_config_path) as f:
+        config = json.load(f)
+    print(f"[INFO] using {optuna_config_path}: {config['params']}, {config['n_rounds']} rounds")
+    return config
 
-    significance, effSignal, effBkg, thresholds = (
-        xgb_utils.extrac_information_from_roc_curve(
-            fpr, tpr, thr, test_name, signal_events, bkg_events
-        )
-    )
 
-    idx_max_significance = np.argmax(np.array(significance))
-    print(
-        f"[INFO]: S = {signal_events:.3f}; B = {bkg_events:.3f}; S/sqrt(B) = {signal_events / math.sqrt(bkg_events):.3f}"
-    )
-    print(f"[INFO]: Max: Significance = {significance[idx_max_significance]}")
-    print(f"[INFO]: Max: Threshold = {thresholds[idx_max_significance]}")
-    print(f"[INFO]: Max: Signal Efficiency = {effSignal[idx_max_significance]}")
-    print(f"[INFO]: Max: Background Efficiency ={effBkg[idx_max_significance]}")
+def training_setup():
+    """(config, params, n_rounds) for the fixed-round stages."""
+    config = frozen_config()
+    n_rounds = SMOKE_ROUNDS if OPTS["smoke"] else int(config["n_rounds"])
+    return config, kf.params_from_config(config, OPTS["device"]), n_rounds
 
-    for wp in [0.90, 0.80]:
-        idx = np.argmin(np.abs(np.array(effSignal) - wp))
-        s_wp = signal_events * wp
-        b_wp = bkg_events * effBkg[idx]
-        print(f"[INFO]: WP{int(wp*100)}: Significance = {significance[idx]}")
-        print(f"[INFO]: WP{int(wp*100)}: Threshold = {thresholds[idx]}")
-        print(f"[INFO]: WP{int(wp*100)}: Signal Efficiency = {effSignal[idx]}")
-        print(f"[INFO]: WP{int(wp*100)}: Background Efficiency ={effBkg[idx]}")
-        print(
-            f"[INFO]: WP{int(wp*100)}: S = {signal_events:.3f}; B = {bkg_events:.3f}; S/sqrt(B) = {signal_events / math.sqrt(bkg_events):.3f}"
-        )
 
-    xgb_utils.plot_discriminator(
-        y_test,
-        y_pred,
-        y_train,
-        y_pred_train,
-        sample_weights_test,
-        sample_weights_train,
-        era,
-        plot_path,
-        scale="log",
-    )
-    xgb_utils.plot_discriminator(
-        y_test,
-        y_pred,
-        y_train,
-        y_pred_train,
-        sample_weights_test,
-        sample_weights_train,
-        era,
-        plot_path,
-        scale="linear",
-    )
-    
-    xgb_utils.plot_BDT_sculpting(
-        y_pred,
-        y_test,
-        x_test_p,
-        channel_US,
-        era,
-        plot_path,
-        bdt_divisions=6
-    )
-    # xgb_utils.plot_BDT_sculpting(
-        # y_pred, 
-        # y_pred_train,
-        # y_test,
-        # y_train,
-        # x_test_p,
-        # x_train_p,
-        # channel_US,
-        # era,
-        # plot_path,
-        # bdt_divisions=6
-    # )
+# ---------------------------------------------------------------------------
+# Shared reporting
+# ---------------------------------------------------------------------------
+def report_working_points(y, p, w_phys, mass, name, d):
+    """Signal-region ROC with physics weights: maximum S/sqrt(B) and the 90%/80% signal
+    efficiency working points."""
+    sr = (mass > SIGNAL_REGION[0]) & (mass < SIGNAL_REGION[1])
+    fpr, tpr, thr = roc_curve(y[sr], p[sr], sample_weight=w_phys[sr])
+    significance, eff_sig, eff_bkg, thresholds = xgb_utils.significance_scan(
+        fpr, tpr, thr, name, d.signal_events, d.bkg_events)
+    points = [("Max", np.argmax(significance))]
+    points += [(f"WP{int(100 * wp)}", np.argmin(np.abs(eff_sig - wp))) for wp in (0.90, 0.80)]
+    for label, i in points:
+        print(f"[INFO] {label}: significance = {significance[i]:.4f}, threshold = {thresholds[i]:.4f}, "
+              f"signal eff = {eff_sig[i]:.4f}, background eff = {eff_bkg[i]:.4f}")
+    return fpr, tpr
 
-    results = model.evals_result()
 
-    train_loss = results["validation_0"]["logloss"]
-    test_loss  = results["validation_1"]["logloss"]
+def make_oof_plots(y, p, w_fit, w_phys, mass, in_sample, tag, eval_name, d, models,
+                   train_name="in-fold (train)"):
+    """ROC, discriminator, sculpting and feature importance from held-out predictions.
+    `in_sample` = (y, p, w) of training events, for the train-vs-held-out overlay."""
+    auc, auc_w = roc_auc_score(y, p), roc_auc_score(y, p, sample_weight=w_fit)
+    print(f"[INFO] {tag}: AUC = {auc:.5f}; weighted AUC = {auc_w:.5f}")
+    fpr, tpr = report_working_points(y, p, w_phys, mass, f"{test_name}_{tag}", d)
+    xgb_utils.draw_roc_curve(fpr, tpr, f"{tag}_{test_name}", plot_path, era, auc)
+    xgb_utils.draw_roc_curve(fpr, tpr, f"weighted_{tag}_{test_name}", plot_path, era, auc_w)
+    for scale in ("log", "linear"):
+        xgb_utils.plot_discriminator(y, p, *in_sample[:2], w_phys, in_sample[2], era, plot_path,
+                                     scale=scale, eval_name=eval_name, train_name=train_name,
+                                     file_tag=f"_{tag}")
+    bkg = y == 0
+    xgb_utils.plot_BDT_sculpting(p[bkg], mass[bkg], w_phys[bkg], channel_US, era, plot_path,
+                                 bdt_divisions=6, tag=tag)
+    xgb_utils.plot_feature_importance_kfold(models, variables, f"{tag}_{test_name}", plot_path)
+    return dict(auc=auc, auc_w=auc_w)
 
-    xgb_utils.draw_roc_curve(fpr, tpr, test_name, plot_path, era, AUC)
-    xgb_utils.draw_roc_curve(fpr, tpr, "weighted_" + test_name, plot_path, era, AUC_weighted)
-    xgb_utils.save_model(model, test_name, USE_BSCONSTRAIN)
-    xgb_utils.plot_feature_importances(model, variables, test_name, plot_path)
-    xgb_utils.plot_xgb_tree(model, variables, test_name, plot_path)
+
+def make_standardization_plots(x, folds):
+    """Model 0's actual standardization (fitted on fold != 0), before any training."""
+    if PLOT_STANDARDIZATION and DO_STANDARDIZATION:
+        train, heldout = folds != 0, folds == 0
+        mean_map, std_map = kf.fit_standardizer(x[train], names)
+        xgb_utils.plot_standardization_check(x[train], x[heldout], names, mean_map, std_map,
+                                             plot_path, era, eval_label="held-out fold 0")
+
+
+# ---------------------------------------------------------------------------
+# Stages
+# ---------------------------------------------------------------------------
+def stage_plots():
+    d = load_training_data()
+    kf.fold_summary(d.y, d.w_fit, d.folds)
+    make_standardization_plots(d.x, d.folds)
+    print(f"[INFO] --plots-only: done, nothing trained. Plots are under {plot_path}")
+
+
+def stage_dev():
+    """Optuna with 5-fold CV on the development sample (the test sample is never touched)."""
+    d = load_training_data()
+    dev_idx, test_idx = kf.split_dev_test(d.y, TEST_FRACTION, SEED)
+    print(f"[INFO] development sample {len(dev_idx)} events; untouched test sample {len(test_idx)}")
+    x, y, w = d.x[dev_idx], d.y[dev_idx], d.w_fit[dev_idx]
+    del d
+    cv_folds = kf.cv_fold_indices(y, SEED)
+    validation_fold = np.empty(len(y), dtype=np.int8)
+    for k, (_, va) in enumerate(cv_folds):
+        validation_fold[va] = k
+    kf.fold_summary(y, w, validation_fold, label="CV validation fold")
+
+    device = OPTS["device"]
+    n_trials = OPTS["optuna_trials"] or (SMOKE_TRIALS if OPTS["smoke"] else N_OPTUNA_TRIALS)
+    max_estimators = SMOKE_ROUNDS if OPTS["smoke"] else MAX_ESTIMATORS
+    esr = 5 if OPTS["smoke"] else EARLY_STOPPING_ROUNDS
+    study = kf.run_optuna_cv(x, y, w, cv_folds, names, DO_STANDARDIZATION, n_trials, SEED, device,
+                             max_estimators, esr, progress_every=PROGRESS_EVERY)
+    report_peak_memory("after the Optuna study")
+
+    optuna_plot_path = f"optunaPlots/{channel_US}{file_append}/{base_name}/"
+    os.makedirs(optuna_plot_path, exist_ok=True)
+    try:
+        import optuna.visualization as vis
+        vis.plot_optimization_history(study).write_html(optuna_plot_path + "optimization_history.html")
+        vis.plot_param_importances(study).write_html(optuna_plot_path + "param_importance.html")
+        vis.plot_slice(study).write_html(optuna_plot_path + "optuna_slice.html")
+    except Exception as e:  # plotly is optional
+        print(f"[WARNING] Optuna plots skipped: {e}")
+
+    best = study.best_trial
+    n_rounds = kf.choose_n_rounds(best.user_attrs["fold_best_iteration"], N_ROUNDS_SCALE)
+    config = kf.make_config(device, study.best_params, n_rounds, "optuna")
+    config.update(
+        n_folds=kf.N_FOLDS, seed=SEED, test_fraction=TEST_FRACTION,
+        n_rounds_policy=f"median(best_iteration+1) over the CV folds * {N_ROUNDS_SCALE}",
+        cv=dict(mean_auc_w=best.value, **{k: best.user_attrs[k] for k in
+                                          ("fold_auc_w", "fold_logloss_w", "fold_best_iteration")}),
+        training_weights="mass_res" if USE_WEIGHT_MASS_RES else ("weight" if USE_WEIGHT else "none"),
+        standardization=DO_STANDARDIZATION, variables=names, smoke=OPTS["smoke"])
+    with open(optuna_config_path, "w") as f:
+        json.dump(config, f, indent=2, default=float)
+    print(f"[INFO] best mean weighted validation AUC {best.value:.5f} with {study.best_params}, "
+          f"{n_rounds} rounds")
+    print(f"[INFO] written to {optuna_config_path} (used by test/final only with --use-optuna). "
+          "Next: run `--stage test` ONCE, then `--stage final`.")
+
+
+def stage_test():
+    """Refit the frozen configuration on the development sample and evaluate it on the
+    untouched test sample. Do not change anything based on the result."""
+    if os.path.exists(test_marker_path) and not OPTS["force_retest"]:
+        sys.exit(f"[ERROR] {test_marker_path} exists: the test sample was already evaluated. "
+                 "Use --force-retest only if the configuration did NOT change because of it.")
+    config, params, n_rounds = training_setup()
+    d = load_training_data()
+    dev_idx, test_idx = kf.split_dev_test(d.y, TEST_FRACTION, SEED)  # the split --stage dev used
+    member, p_test, _ = kf.train_model(d.x, d.y, d.w_fit, dev_idx, test_idx, names, DO_STANDARDIZATION,
+                                       params, n_rounds, label="refit on the development sample",
+                                       progress_every=PROGRESS_EVERY, monitor_max_rows=MONITOR_MAX_ROWS,
+                                       monitor_heldout=False)  # the test sample never enters fit()
+    metrics = member["heldout_metrics"]
+    print(f"\n[TEST] untouched test sample ({len(test_idx)} events), {n_rounds} rounds:")
+    for k, v in metrics.items():
+        print(f"[TEST]   {k:10s} = {v:.5f}")
+    cv = config.get("cv")
+    if cv:
+        print(f"[CV  ] cross-validation: weighted AUC {np.mean(cv['fold_auc_w']):.5f} +/- "
+              f"{np.std(cv['fold_auc_w']):.5f}, weighted logloss {np.mean(cv['fold_logloss_w']):.5f}")
+    with open(f"{plot_path}results/test_evaluation_{test_name}.json", "w") as f:
+        json.dump(dict(test=metrics, cv=cv, n_test=len(test_idx), n_rounds=n_rounds,
+                       config_source=config["source"]), f, indent=2, default=float)
+    with open(test_marker_path, "w") as f:
+        json.dump(dict(evaluated=True, test=metrics), f, default=float)
+    fpr, tpr, _ = roc_curve(d.y[test_idx], p_test, sample_weight=d.w_fit[test_idx])
+    xgb_utils.draw_roc_curve(fpr, tpr, f"test_{test_name}", plot_path, era, metrics["auc_w"])
+
+
+def stage_final():
+    """The five analysis models on all MC, and the OOF plots."""
+    config, params, n_rounds = training_setup()
+    d = load_training_data()
+    kf.fold_summary(d.y, d.w_fit, d.folds, label="final fold")
+    make_standardization_plots(d.x, d.folds)
+
+    def save_model(member):  # right after each fit, so a later crash cannot lose it
+        kf.save_fold_models([member], test_name, USE_BSCONSTRAIN, params, SEED,
+                            extra_meta=dict(config_source=config["source"]))
+
+    members, oof, in_sample = kf.train_final_kfold(
+        d.x, d.y, d.w_fit, d.folds, names, DO_STANDARDIZATION, params, n_rounds, on_model_done=save_model,
+        progress_every=PROGRESS_EVERY, monitor_max_rows=MONITOR_MAX_ROWS, in_sample_max_rows=IN_SAMPLE_MAX_ROWS)
+    print(f"[INFO] saved {kf.N_FOLDS} models: models/model_{test_name}_fold<k>"
+          f"{'_bsC' if USE_BSCONSTRAIN else ''}.{{pkl,json}}")
+
+    # each training event appears in N_FOLDS-1 models' training sets
+    idx = np.concatenate([s["idx"] for s in in_sample])
+    in_p = np.concatenate([s["p"] for s in in_sample])
+    summary = make_oof_plots(d.y, oof, d.w_fit, d.w_phys, d.mass,
+                             (d.y[idx], in_p, d.w_phys[idx] / (kf.N_FOLDS - 1)),
+                             "OOF", "OOF (held-out fold)", d, [m["model"] for m in members])
+    xgb_utils.plot_roc_per_fold(d.y, oof, d.folds, d.w_fit, era, plot_path, test_name)
+    xgb_utils.plot_discriminator_per_fold(d.y, oof, d.folds, d.w_phys, era, plot_path, test_name)
     if PLOT_LOSS:
-        xgb_utils.plot_loss(test_loss, train_loss, test_name, plot_path, era)
+        xgb_utils.plot_fold_loss_curves(members, plot_path, test_name, era,
+                                        second_label="held-out fold (monitoring only)")
+    try:
+        xgb_utils.plot_xgb_tree(members[0]["model"], variables, f"{test_name}_fold0", plot_path)
+    except Exception as e:  # graphviz is optional
+        print(f"[WARNING] tree plot skipped: {e}")
+
+    per_fold = [dict(fold=m["fold"], **m["heldout_metrics"]) for m in members]
+    aucs = np.array([r["auc_w"] for r in per_fold])
+    print(f"[INFO] per-fold held-out weighted AUC: {np.round(aucs, 5).tolist()} "
+          f"(mean {aucs.mean():.5f} +/- {aucs.std():.5f})")
+    with open(f"{plot_path}results/kfold_final_{test_name}.json", "w") as f:
+        json.dump(dict(oof=summary, folds=per_fold, n_rounds=n_rounds, config_source=config["source"]),
+                  f, indent=2, default=float)
+    np.savez(f"models/oof_{test_name}.npz", oof=oof, y=d.y, fold=d.folds, mass=d.mass, w_phys=d.w_phys)
 
 
+def stage_legacy():
+    """The pre-K-fold approach (one unstratified 60/40 split, one model), compared with the
+    K-fold OOF scores on the identical held-out 40%, where both are out-of-sample."""
+    config, params, n_rounds = training_setup()
+    try:
+        bundle = kf.load_fold_bundle(test_name, USE_BSCONSTRAIN)
+    except FileNotFoundError:
+        sys.exit(f"[ERROR] no K-fold models for {test_name}: run `--stage final` first.")
+    d = load_training_data()
+    train_idx, test_idx = kf.legacy_split(len(d.y), LEGACY_TEST_FRACTION, LEGACY_SEED)
+
+    member, p_legacy, in_sample = kf.train_model(
+        d.x, d.y, d.w_fit, train_idx, test_idx, names, DO_STANDARDIZATION, params, n_rounds,
+        label="legacy model", progress_every=PROGRESS_EVERY, monitor_max_rows=MONITOR_MAX_ROWS,
+        in_sample_max_rows=IN_SAMPLE_MAX_ROWS)
+    kf.save_fold_models([member], f"{test_name}_legacy", USE_BSCONSTRAIN, params, LEGACY_SEED, n_folds=1,
+                        extra_meta=dict(config_source=config["source"], legacy_split=True))
+    p_kfold = kf.predict_by_fold(d.x[test_idx], d.folds[test_idx], bundle)
+
+    y, w_fit, w_phys, mass = d.y[test_idx], d.w_fit[test_idx], d.w_phys[test_idx], d.mass[test_idx]
+    m_legacy, m_kfold = kf.weighted_metrics(y, p_legacy, w_fit), kf.weighted_metrics(y, p_kfold, w_fit)
+    print(f"\n[COMPARE] both approaches on the same {len(test_idx)} held-out events")
+    print(f"[COMPARE] {'metric':12s} {'no k-fold 60/40':>16s} {'K-fold OOF':>14s}")
+    for k in m_legacy:
+        print(f"[COMPARE] {k:12s} {m_legacy[k]:16.5f} {m_kfold[k]:14.5f}")
+
+    make_oof_plots(y, p_legacy, w_fit, w_phys, mass,
+                   (d.y[in_sample["idx"]], in_sample["p"], d.w_phys[in_sample["idx"]]),
+                   "noKfold", "no k-fold (held-out 40%)", d, [member["model"]],
+                   train_name="no k-fold (train 60%)")
+    report_working_points(y, p_kfold, w_phys, mass, f"{test_name}_kfoldOOF", d)
+    xgb_utils.plot_legacy_vs_kfold(y, w_phys, p_legacy, p_kfold, m_legacy["auc_w"], m_kfold["auc_w"],
+                                   era, plot_path)
+
+    loss_curves = None
+    if PLOT_LOSS:
+        # Every curve is recomputed from the trained models on a common round grid.
+        # Out-of-sample curves share the held-out 40%; in-sample curves share one
+        # subsample of the train 60%, so each pair is a like-for-like comparison.
+        rounds = kf.round_grid(n_rounds, LOSS_CURVE_ROUND_STEP)
+        s60 = kf.subsample(train_idx, LOSS_CURVE_MAX_ROWS, LOSS_CURVE_SEED)
+        legacy_in = kf.curve_on_rows(member, d.x, d.y, d.w_fit, s60, rounds, label="no k-fold in-sample")
+        legacy_out = kf.curve_on_rows(member, d.x, d.y, d.w_fit, test_idx, rounds,
+                                      label="no k-fold out-of-sample")
+        kfold = kf.kfold_logloss_curves(bundle, d.x, d.y, d.w_fit, d.folds, oof_idx=test_idx,
+                                        in_fold_idx=s60, rounds=rounds, max_rows=LOSS_CURVE_MAX_ROWS,
+                                        seed=LOSS_CURVE_SEED)
+        print(f"\n[COMPARE] weighted log loss at round {rounds[-1]}: in-sample / out-of-sample")
+        print(f"[COMPARE]   no k-fold (60% train):    {legacy_in[-1]:.5f} / {legacy_out[-1]:.5f}")
+        print(f"[COMPARE]   K-fold (mean of {len(bundle)} models): {kfold['in_fold'][:, -1].mean():.5f} / "
+              f"{kfold['oof'][:, -1].mean():.5f}")
+        xgb_utils.plot_loss_noKfold_vs_kfold(rounds, legacy_in, legacy_out, kfold["in_fold"], kfold["oof"],
+                                             era, plot_path)
+        loss_curves = dict(rounds=rounds.tolist(), legacy_train=legacy_in.tolist(),
+                           legacy_heldout=legacy_out.tolist(), kfold_in_fold=kfold["in_fold"].tolist(),
+                           kfold_oof=kfold["oof"].tolist())
+
+    with open(f"{plot_path}comparison/legacy_vs_kfold_{test_name}.json", "w") as f:
+        json.dump(dict(n_test=len(test_idx), n_legacy_train=len(train_idx), legacy=m_legacy,
+                       kfold_oof=m_kfold, n_rounds=n_rounds, config_source=config["source"],
+                       legacy_split=dict(seed=LEGACY_SEED, test_fraction=LEGACY_TEST_FRACTION),
+                       loss_curves=loss_curves), f, indent=2, default=float)
+
+    if APPEND_VARIABLES:
+        # NOT fold-matched: in-sample for the 60% the legacy model trained on -- comparison only
+        print(f"\n[INFO] scoring the tuples with the legacy model -> BDT_score/{channel_US}legacy/")
+        legacy_bundle = kf.load_fold_bundle(f"{test_name}_legacy", USE_BSCONSTRAIN)
+        for file_type in NOMINAL_TUPLES:
+            xgb_utils.append_BDT_score(file_type, channel_US, era, signal_subset, background_subset,
+                                       variables[:-3], legacy_bundle, USE_BSCONSTRAIN, useRecategorization,
+                                       legacy=True)
+        print(f"[INFO] next: `bash scripts/hadd_bdt.sh {channel_US} legacy` then "
+              f"`python3 plot_BDT_Categories.py {channel_US} {era} --legacy`")
 
 
+def stage_apply():
+    """Fold-matched scores (event in fold i -> model i) for the nominal and systematic tuples."""
+    bundle = kf.load_fold_bundle(test_name, USE_BSCONSTRAIN)
+    if not APPEND_VARIABLES:
+        print("[INFO] --no-apply: BDT score was not added to the trees")
+        return
+    for file_type in NOMINAL_TUPLES:
+        xgb_utils.append_BDT_score(file_type, channel_US, era, signal_subset, background_subset,
+                                   variables[:-3], bundle, USE_BSCONSTRAIN, useRecategorization,
+                                   dir_suffix=opt_append)
+    if doSystematics:
+        for file_type in NOMINAL_TUPLES[1:]:  # no Data variations
+            xgb_utils.append_BDT_score_to_sys(file_type, channel_US, era, signal_subset, background_subset,
+                                              variables[:-3], bundle, USE_BSCONSTRAIN,
+                                              dir_suffix=opt_append)
+    if opt_append:
+        print(f"[INFO] next: `bash scripts/hadd_bdt.sh {channel_US} {opt_append}` then "
+              f"`python3 plot_BDT_Categories.py {channel_US} {era} --{opt_append}`")
 
 
-if not APPEND_VARIABLES:
-    print("[INFO]: BDT score was not added to the trees")
-else: 
-    print("[INFO]: Adding BDT score to the nominal tuples")
-    tuples = ["Data", "DY", "EWK", "TT", "DiBoson", "ggH", "VBF"]
-    # tuples = ["Data", "ggH", "VBF"]
-    for file_type in tuples:
-        xgb_utils.append_BDT_score(
-            file_type,
-            channel_US,
-            era,
-            "Combined",
-            signal_subset,
-            background_subset,
-            variables[:-3],
-            mean_map,
-            std_map,
-            DO_STANDARDIZATION,
-            USE_BSCONSTRAIN,
-        )
-        '''xgb_utils.append_BDT_score(
-            file_type,
-            channel_US,
-            "2024",
-            "Combined",
-            signal_subset,
-            background_subset,
-            variables[:-3],
-            mean_map,
-            std_map,
-            DO_STANDARDIZATION,
-            USE_BSCONSTRAIN,
-            )
-        
-        xgb_utils.append_BDT_score(
-            file_type,
-            channel_US,
-            "2022",
-            "Combined",
-            signal_subset,
-            background_subset,
-            variables[:-3],
-            mean_map,
-            std_map,
-            DO_STANDARDIZATION,
-            USE_BSCONSTRAIN,
-        )
+def stage_all():
+    stage_final()
+    stage_apply()
 
-        xgb_utils.append_BDT_score(
-            file_type,
-            channel_US,
-            "2022EE",
-            "Combined",
-            signal_subset,
-            background_subset,
-            variables[:-3],
-            mean_map,
-            std_map,
-            DO_STANDARDIZATION,
-            USE_BSCONSTRAIN,
-        )
 
-        xgb_utils.append_BDT_score(
-            file_type,
-            channel_US,
-            "2023",
-            "Combined",
-            signal_subset,
-            background_subset,
-            variables[:-3],
-            mean_map,
-            std_map,
-            DO_STANDARDIZATION,
-            USE_BSCONSTRAIN,
-        )
-
-        xgb_utils.append_BDT_score(
-            file_type,
-            channel_US,
-            "2023BPix",
-            "Combined",
-            signal_subset,
-            background_subset,
-            variables[:-3],
-            mean_map,
-            std_map,
-            DO_STANDARDIZATION,
-            USE_BSCONSTRAIN,
-        )
-        
-        '''
-
-if doSystematics:
-    print("[INFO]: Addeding BDT score to the systematic tuples")
-    for tuple_type in ["ggH", "VBF"]:
-        xgb_utils.append_BDT_score_to_sys(
-            tuple_type,
-            channel_US,
-            era,
-            "Combined",
-            signal_subset,
-            background_subset,
-            variables[:-3],
-            mean_map,
-            std_map,
-            DO_STANDARDIZATION,
-            USE_BSCONSTRAIN,
-        )
+if __name__ == "__main__":
+    if OPTS["plots_only"]:
+        stage_plots()
+    else:
+        dict(dev=stage_dev, test=stage_test, final=stage_final, apply=stage_apply, all=stage_all,
+             legacy=stage_legacy)[OPTS["stage"]]()

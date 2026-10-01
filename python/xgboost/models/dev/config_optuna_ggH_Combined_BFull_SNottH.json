@@ -1,0 +1,100 @@
+{
+  "source": "optuna",
+  "params": {
+    "objective": "binary:logistic",
+    "eval_metric": [
+      "auc",
+      "logloss"
+    ],
+    "device": "cuda",
+    "n_jobs": 4,
+    "verbosity": 0,
+    "missing": "nan",
+    "max_depth": 5,
+    "learning_rate": 0.18153384589682756,
+    "min_child_weight": 6.460971966013315,
+    "subsample": 0.9838006781028988,
+    "colsample_bytree": 0.9815184724820738,
+    "reg_lambda": 0.370338376633383,
+    "reg_alpha": 0.0008205378918478714
+  },
+  "n_rounds": 1994,
+  "n_folds": 5,
+  "seed": 7,
+  "test_fraction": 0.2,
+  "n_rounds_policy": "median(best_iteration+1) over the CV folds * 1.0",
+  "cv": {
+    "mean_auc_w": 0.7149624163787204,
+    "std_auc_w": 0.0007128356401778853,
+    "best_iterations": {
+      "best_iterations": [
+        1998,
+        1993,
+        1999,
+        1988,
+        1992
+      ],
+      "mean": 1994.0,
+      "median": 1993.0,
+      "min": 1988,
+      "max": 1999
+    },
+    "fold_auc_w": [
+      0.7136814735593636,
+      0.7151826992418902,
+      0.7156368051735335,
+      0.7147543467428116,
+      0.715556757176003
+    ],
+    "fold_logloss_w": [
+      0.6193505442603867,
+      0.6180714213988909,
+      0.6178282242140036,
+      0.6185555681921487,
+      0.617893033036378
+    ],
+    "fold_auc": [
+      0.7532414293937568,
+      0.7530648131088014,
+      0.7534036525455371,
+      0.7524383805292881,
+      0.7530936793539392
+    ],
+    "fold_logloss": [
+      0.628822295399526,
+      0.6288738409105443,
+      0.6284384095170226,
+      0.6292933568114923,
+      0.6285872510520969
+    ]
+  },
+  "training_weights": "mass_res",
+  "standardization": true,
+  "variables": [
+    "diMuon_rapidity",
+    "mu1_eta",
+    "mu2_eta",
+    "phi_CS",
+    "cos_theta_CS",
+    "n_jet",
+    "leading_jet_pt",
+    "leading_jet_eta",
+    "subleading_jet_pt",
+    "subleading_jet_eta",
+    "diJet_mass",
+    "delta_eta_diJet",
+    "delta_phi_diJet",
+    "z_zeppenfeld",
+    "min_delta_eta_diMuon_jet",
+    "min_delta_phi_diMuon_jet",
+    "leading_jet_btagPNetQvG",
+    "subleading_jet_btagPNetQvG",
+    "leading_jet_nConstituents",
+    "subleading_jet_nConstituents",
+    "mc_campaign",
+    "diMuon_bsConstrainedPt",
+    "mu1_bsConstrainedPt_mass_ratio",
+    "mu2_bsConstrainedPt_mass_ratio"
+  ],
+  "smoke": false
+}

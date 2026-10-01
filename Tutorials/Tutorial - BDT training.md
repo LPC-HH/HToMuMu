@@ -89,7 +89,18 @@ bash hadd_tuples.sh
 
 If you want to add a variable to the tuples, you just need to go to ./lib/CreateTuple.h add the variable to the CreateTuple class, and to the CreateTuple::setBranchesAddressesInput() method.
 
+### Copy tuples
+If instead you want to copy tuples over from EOS:
+```bash
+cd root_io/tuples/
+bash copy_hadd_tuples.sh <tuples_version (eg: 1.0.0)> <era (eg: 2022, 2022EE, 2023, 2023BPix, 2024, 2025, Combined)>
+``` 
+If the era argument left out, all tuples will be copied
+
 # Plotting 
+
+## Recategorize ggH/VBF
+In the standard approach, the ggH and VBF events are categorized kinemetically (called kin in future reference). This recategorization is a WIP so assume kinematic use in all future septs
 
 ## BDT Training 
 
@@ -102,18 +113,27 @@ BDT does not like big files, so we need to generate a tuples that contain just t
 To this use src/SkimTuples_VBF.cc  src/SkimTuplesggH.cc and the scripts ./scripts/run_skim_ggH.py ./scripts/run_skim_VBF.py
 You can change the datasets by changing the lists `eras`, `background_datasets`, and `signal_datasets` in the script.
 
+
 Run
+```bash
+python3 ./scripts/run_skim_ggH.py (bdt/kin)
+python3 ./scripts/run_skim_VBF.py (bdt/kin)
 ```
-python3 ./scripts/run_skim_ggH.py
-python3 ./scripts/run_skim_VBF.py
-```
+
 
 Once we have the skim tuples, you must hadd to have one background tuple and one signal sample, you can just do
 
-```
+```bash
 cd ./root_io/skim/(ggH/VBF)
 bash hadd_skim.sh
 ```
+
+
+You can also run the skimming, hadd, and removal of previous tuples at once with:
+```bash
+bash scripts/run_skim.sh (bdt/kin/both)
+```
+This logs the scripts for the skimming and hadd in scripts/logs/
 
 Once you have this, you can run the BDT training, look at ./python/xboost/README.md to see how to do it.
 
@@ -140,16 +160,19 @@ If you use **USE_WEIGHT_MASS_RES=True**, then the training weight will be *weigh
 ## After training
 
 The training ```run_train.sh {category}``` code will generate one file containing the model (python/xgboost/models/model_ggH_Combined_BFull_SNottH.xgb), one file containing the roc curve (python/xgboost/roc/ggH_Combined_BFull_SNottH_roc.txt), and will add the BDT score to the tuples.
+
+**Note (K-fold training) WIP:** the training now produces *five* fold models (`python/xgboost/models/model_ggH_Combined_BFull_SNottH_fold<k>_bsC.json`, k = 0..4) instead of a single one, and each MC event is scored by the model that did not train on it (out-of-fold). The fold is `event % 5`, so an event keeps its fold across the skim, the nominal tuple and every systematic variation, and the development/test/final stages are described in `python/xgboost/README.md` ("K-fold training and out-of-fold scoring"). The scored tuples additionally contain the integer branch `BDT_fold`.
 The tuples with the BDT score added are saved in root_io/tuples/BDT_score/(ggH/VBF)/BFull_SNottH/ 
 
 
-Again, we need to hadd these tuples. To do this, do 
+Again, we need to hadd these tuples. To do this, run the following
 
-```
-bash scripts/hadd_bdt.sh (ggH/VBF)
+```bash
+bash scripts/hadd_bdt.sh (ggH/VBF) (reCat/legacy/optimized)
 ```
 
 This will copy the hadd_template.sh file in the directories where the tuples are, so the next time you can just do.
+The reCat/legacy options are optional reCat for the BDT ggH/VBF seperation and legacy for no k-folding
 
 ```
 cd root_io/tuples/BDT_score/(ggH/VBF)/BFull_SNottH/
@@ -173,6 +196,8 @@ Categories:  [0.0, 0.19184615384615372, 0.44615384615384546, 1.0]
 Once you have this list, it is automatically saved to a json file in root_io and read by the tuple splitting code and plot_sim_vs_data
 
 Inside the code, there is a variable called use_bsConstrain. If you train the BDT model using bsConstrain variable, set it to True, if you don't want to use bsConstrain variables set it to False. <span style="color:Orange"> Would be nice to add this as an input parameter.
+
+When the BDT categorization is run, a CSV file of the signal/background yields and S/sqrt(B) is created in yields/
 
 
 # Mass fits
