@@ -8,7 +8,7 @@ from bdt_categories_io import load_bdt_categories, get_bdt_cuts
 production_channel = ""
 bdt_subset = ""
 use_categories = False
-version = "2.2.2"
+version = "2.4.2"
 
 if len(sys.argv) >= 2:
     production_channel = sys.argv[1]
@@ -125,12 +125,12 @@ variables = [
     "leading_jet_mass",
     "leading_jet_area",
     "leading_jet_btagPNetQvG",
-    "leading_jet_btagUParTAK4QvG"   ,
-    "leading_jet_btagDeepFlavQG",
-    "leading_jet_chEmEF",
-    "leading_jet_chHEF",
-    "leading_jet_neEmEF",
-    "leading_jet_neHEF",
+    #"leading_jet_btagUParTAK4QvG"   ,
+    #"leading_jet_btagDeepFlavQG",
+    #"leading_jet_chEmEF",
+    #"leading_jet_chHEF",
+    #"leading_jet_neEmEF",
+    #"leading_jet_neHEF",
     "leading_jet_nConstituents",
     "leading_jet_chMultiplicity",
     "leading_jet_neMultiplicity",
@@ -140,12 +140,12 @@ variables = [
     "subleading_jet_mass",
     "subleading_jet_area",
     "subleading_jet_btagPNetQvG",
-    "subleading_jet_btagUParTAK4QvG",
-    "subleading_jet_btagDeepFlavQG",
-    "subleading_jet_chEmEF",
-    "subleading_jet_chHEF",
-    "subleading_jet_neEmEF",
-    "subleading_jet_neHEF",
+    #"subleading_jet_btagUParTAK4QvG",
+    #"subleading_jet_btagDeepFlavQG",
+    #"subleading_jet_chEmEF",
+    #"subleading_jet_chHEF",
+    #"subleading_jet_neEmEF",
+    #"subleading_jet_neHEF",
     "subleading_jet_nConstituents",
     "subleading_jet_chMultiplicity",
     "subleading_jet_neMultiplicity",

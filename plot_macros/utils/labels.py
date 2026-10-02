@@ -383,9 +383,11 @@ luminosity = {
     "2023Combined": "27.24",
     "2024": "109.08",
     "2025": "110.73",
+    "2026": "25.84",
     # "Combined": "61.89",
     # "Combined": "170.97",
-    "Combined": "281.7"
+    # "Combined": "281.7"
+    "Combined": "307.54",
 }
 
 variables_type = {
