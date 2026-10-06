@@ -12,24 +12,46 @@ from utils.labels import luminosity, x_range, n_bins, x_labels
 from utils.helper import get_canvas, save_figure, get_histograms_ratio
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "python"))
-from bdt_categories_io import save_bdt_category
+from bdt_categories_io import save_bdt_category, variant_dir_suffix
 
 # directory-suffix flags, stripped so the positional arguments below are unaffected:
-#   --legacy     the pre-K-fold single-model scores (train.py --stage legacy). Reads
-#                BDT_score/<channel>legacy/ and saves its boundaries under the key "<channel>legacy",
-#                so the fold-matched boundaries under "<channel>" are left untouched. Those MC
-#                scores are in-sample for 60% of the MC, so the resulting significance is
+#   --legacy     the pre-K-fold single-model scores 
 #                optimistically biased -- for comparison only.
-#   --optimized  the Optuna-configured K-fold scores (train.py --stage apply --use-optuna), read
-#                from BDT_score/<channel>optimized/ and saved under the key "<channel>optimized"
+#   --optimized  the Optuna-configured K-fold scores 
+#   --compare    the six-variant tuples of train.py --stage compare
+#   --variant <label>  the K-fold scores of any train.py --stage apply variant, by its variant
+#                label (train.py's VARIANT.label, e.g. asimovFit_flatMassRes). 
+
 dir_suffix = ""
-for suffix_flag in ("--legacy", "--optimized"):
+for suffix_flag in ("--legacy", "--optimized", "--compare", "--variant"):
     if suffix_flag in sys.argv:
-        sys.argv.remove(suffix_flag)
+        i = sys.argv.index(suffix_flag)
         if dir_suffix:
-            print("--legacy and --optimized are mutually exclusive")
+            print("--legacy, --optimized, --compare and --variant are mutually exclusive")
             exit()
-        dir_suffix = suffix_flag[2:]
+        if suffix_flag == "--variant":
+            if i + 1 >= len(sys.argv):
+                print("--variant needs a variant label (e.g. asimovFit_flatMassRes)")
+                exit()
+            dir_suffix = variant_dir_suffix(sys.argv[i + 1])
+            del sys.argv[i:i + 2]
+        else:
+            dir_suffix = suffix_flag[2:]
+            del sys.argv[i]
+
+score_variant = None
+if "--score" in sys.argv:
+    i = sys.argv.index("--score")
+    if i + 1 >= len(sys.argv):
+        print("--score needs a variant name")
+        exit()
+    score_variant = sys.argv[i + 1]
+    del sys.argv[i:i + 2]
+    if dir_suffix != "compare":
+        print("--score only applies with --compare")
+        exit()
+elif dir_suffix == "compare":
+    score_variant = "base"
 
 if len(sys.argv) < 3:
     print(
@@ -43,6 +65,10 @@ if dir_suffix == "legacy":
     print("Not using k-fold BDT")
 elif dir_suffix == "optimized":
     print("Using k-fold BDT with the Optuna configuration")
+elif dir_suffix == "compare":
+    print(f"Using the k-fold BDT variant '{score_variant}' of the compare tuples")
+elif dir_suffix:
+    print(f"Using the k-fold BDT variant with dir suffix '{dir_suffix}'")
 else:
     print("Using k-fold BDT")
 
@@ -104,7 +130,12 @@ print("Signal subset: ", signal_subset)
 print("Production category: " + category_var)
 
 subset_title = "B" + background_subset + "_S" + signal_subset
-BDT_var = "BDT_" + channel_US
+# n_bins/x_range in utils/labels.py are keyed on the base branch name
+BDT_label_var = "BDT_" + channel_US
+BDT_var = BDT_label_var if score_variant in (None, "base") else f"{BDT_label_var}_{score_variant}"
+print("BDT score branch: " + BDT_var)
+# outputs (plots, yields, category key) of the compare variants are kept apart
+output_tag = channel_US + file_append + (f"_{score_variant}" if score_variant else "")
 
 # The hadded BDT_score files are tens of GB. uproot's default source memory-maps the whole
 # file, which alone exhausts the 16 GiB per-process virtual-memory limit on the LPC login
@@ -394,7 +425,7 @@ def find_bdt_categories(era, bkg_branches, signal_branches, bdt_categories, bdt_
     ax.set_ylabel(r"S/$\sqrt{B}$", loc="center")
     ax.set_xlabel("BTD Cut")
 
-    output_directory = "../plots/" + channel_US + file_append + "_category/BDT_categories/cuts/"
+    output_directory = "../plots/" + output_tag + "_category/BDT_categories/cuts/"
     save_name = "BDT_cuts_" + era + "_Cat" + str(iteration) + "_" + subset_title
     save_figure(fig, output_directory, save_name)
 
@@ -424,8 +455,8 @@ def draw_bdt_categories(era):
         bkg_hist, bkg_bins = np.histogram(
             #np.arctanh(bkg_branches[BDT_var][bkg_bool_list]),
             bkg_branches[BDT_var][bkg_bool_list],
-            bins=n_bins[BDT_var],
-            #range=x_range[BDT_var],
+            bins=n_bins[BDT_label_var],
+            #range=x_range[BDT_label_var],
             range=(0,1),
             weights=bkg_branches["weight"][bkg_bool_list],
         )
@@ -447,12 +478,12 @@ def draw_bdt_categories(era):
             data_hist, data_bins = np.histogram(
                 #np.arctanh(data_branches[BDT_var][data_bool_list]),
                 data_branches[BDT_var][data_bool_list],
-                bins=n_bins[BDT_var],
-                #range=x_range[BDT_var],
+                bins=n_bins[BDT_label_var],
+                #range=x_range[BDT_label_var],
                 range=(0,1),
             )
 
-    print("BDT bins: ", n_bins[BDT_var])
+    print("BDT bins: ", n_bins[BDT_label_var])
     with ur.open(
         BDT_score_path + "signal_" + era + ".root:tree_output", **UPROOT_OPEN
     ) as file:
@@ -467,8 +498,8 @@ def draw_bdt_categories(era):
         signal_hist, signal_bins = np.histogram(
             #np.arctanh(signal_branches[BDT_var][signal_bool_list]),
             signal_branches[BDT_var][signal_bool_list],
-            bins=n_bins[BDT_var],
-            #range=x_range[BDT_var],
+            bins=n_bins[BDT_label_var],
+            #range=x_range[BDT_label_var],
             range=(0,1),
             weights=signal_branches["weight"][signal_bool_list],
         )
@@ -480,7 +511,7 @@ def draw_bdt_categories(era):
     bdt_categories.append(1.0)
     bdt_categories.append(0.0)
     bdt_categories.sort()
-    save_bdt_category(channel_US + file_append, era, subset_title, diMuon_mass_name, bdt_categories)
+    save_bdt_category(output_tag, era, subset_title, diMuon_mass_name, bdt_categories)
     log_y = False
 
     print("Era: ", era)
@@ -503,7 +534,7 @@ def draw_bdt_categories(era):
         [df_yields, pd.DataFrame([combined_row])],
         ignore_index=True
     )
-    csv_file = f"../yields/BDTcatYields{channel_US}{file_append}.csv"
+    csv_file = f"../yields/BDTcatYields{output_tag}.csv"
     print(f"Creating CSV file: {csv_file}")
     df_yields.to_csv(csv_file, index=False)
 
@@ -642,9 +673,9 @@ def draw_bdt_output_plot(era, bkg_hist, bkg_bins, data_hist, data_bins, signal_h
     axs[1].set_ylim(0.0, 2.000)
     axs[1].set_xlim(signal_bins[0], signal_bins[-1])
     #axs[1].set_xlim(0, 2)
-    axs[1].set_xlabel(x_labels[BDT_var])
+    axs[1].set_xlabel(x_labels[BDT_label_var])
 
-    output_directory = "../plots/" + channel_US + file_append + "_category/BDT_categories/"
+    output_directory = "../plots/" + output_tag + "_category/BDT_categories/"
     save_name = ("BDT_output_" if normalize else "BDT_output_raw_") + era + "_" + subset_title
     save_figure(fig, output_directory, save_name)
 

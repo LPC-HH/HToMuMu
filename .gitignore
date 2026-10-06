@@ -15,3 +15,5 @@ yields/
 *.out
 /*.md 
 !/*README*.md
+python/xgboost/optunaStudies/
+Tutorials/AsimovOptuna/
