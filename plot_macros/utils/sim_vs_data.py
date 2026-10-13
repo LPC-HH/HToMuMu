@@ -1,8 +1,4 @@
 import uproot as ur
-
-# Read the (tens of GB) BDT_score files in chunks rather than memory-mapping them whole:
-# the whole-file map alone exceeds the 16 GiB per-process limit on the LPC login nodes.
-UPROOT_OPEN = dict(file_handler=ur.MultithreadedFileSource)
 import mplhep as hep
 import numpy as np
 import matplotlib.pyplot as plt
@@ -36,6 +32,152 @@ def get_background_label_list(background_sources):
     return labels_list
 
 
+# def get_histograms_from_tuple(
+    # sources,
+    # era,
+    # variables,
+    # is_background,
+    # use_puweight,
+    # production_channel,
+    # bdt_cuts=[],
+    # bdt_subset="",
+    # lumi_rescale=False,
+    # Z_study=False,
+    # jet_pT_study=False,
+    # version="2.0.0",
+# ):
+    
+    # if not use_puweight:
+        # variables.append("pileup_weight")
+    # # variables.append("pileup_weight")
+    # # variables.append("pileup_weight_down")
+
+
+    # histograms_list = []
+    # bins_list = []
+
+    # # For 2025 data there is not simulations yet!!!
+    # # so in the case we re escale the luminosity
+    # era_reweight = 1
+    # # if lumi_rescale:
+        # # if era == "2024":
+            # # era_reweight = float(luminosity["2024"]) / (float(luminosity["2024"]) + float(luminosity["2025"]))
+            # # print("Re scaling lumi")
+        # # if era == "2025":
+            # # era_reweight = float(luminosity["2025"]) / (float(luminosity["2024"]) + float(luminosity["2025"]))
+            # # era = "2024"
+            # # print("Re scaling lumi")
+
+    # variable_bin = variables[0]
+
+    # if variable_bin + "_" + production_channel in x_range:
+        # variable_bin += "_" + production_channel
+
+    # # tuple_path = "../root_io/tuples/"
+    # user = os.getenv("USER")
+    # tuple_version = f"tuples_v{version}"
+    # analyzer_version = ".".join(version.split(".")[:2])
+    # analyzer_version = f"analyzer_HiggsMuMu_v{analyzer_version}"
+
+    # tuple_path = (
+        # f"/eos/uscms/store/group/lpchmumu/{user}/"
+        # f"{analyzer_version}/{tuple_version}/haddTuples/"
+    # )
+    # if bdt_subset != "" or variables[0] == "BDT_" + production_channel:
+        # tuple_path = "../root_io/tuples/"
+        # tuple_path += "BDT_score/" + production_channel + "/" + bdt_subset + "/"
+
+    # for source in sources:
+        # file_name = source + "_" + era + "_tuples.root:tree_output"
+        # if bdt_subset != "" or variables[0] == "BDT_" + production_channel:
+            # file_name = source + "_" + era + "_" + bdt_subset + ".root:tree_output"
+
+        # if ((variables[0] == "diMuon_mass") | (variables[0] == "diMuon_bsConstrainedMass")) and Z_study:
+                # number_of_bins = 80; 
+                # x_range_histos = (85,100)
+        # else:
+            # number_of_bins = n_bins[variable_bin]
+            # x_range_histos = x_range[variable_bin]
+
+        # histogram, bins = np.histogram(
+                # [],
+                # bins=number_of_bins,
+                # range=x_range_histos,
+        # )
+
+        # for branches in ur.iterate(tuple_path + file_name, variables, library="np", step_size="500 MB"):
+            # #print("TUPLE PATH in get Hist from tup_____: " + tuple_path)
+            # bool_list = np.ones(len(branches[variables[0]]), dtype=bool)
+
+            # if variables[0] != "diMuon_bsConstrainedMass" and ("bsConstrained" in variables[0]) and is_background:
+                # bool_list = (bool_list) & (branches["diMuon_bsConstrainedMass"] > 130) | (
+                    # branches["diMuon_bsConstrainedMass"] < 120
+                # )
+                # if not Z_study:
+                    # bool_list = (bool_list) & (branches["diMuon_bsConstrainedMass"] > 110) & (
+                        # branches["diMuon_bsConstrainedMass"] < 150
+                    # )
+
+
+            # elif variables[0] != "diMuon_mass" and ("bsConstrained" not in variables[0]) and is_background:
+                # bool_list = (bool_list) & (
+                    # ((branches["diMuon_mass"] > 130) | (branches["diMuon_mass"] < 120))
+                # )
+                # if not Z_study:
+                    # bool_list = (bool_list) & (branches["diMuon_mass"] > 110) & (
+                        # branches["diMuon_mass"] < 150
+                    # )
+
+            # if production_channel != "":
+                # bool_list = (bool_list) & (
+                    # branches["is_" + production_channel + "_category"] == 1
+                # )
+
+            # if len(bdt_cuts) > 1:
+                # bdt_bool = (branches["BDT_" + production_channel] > bdt_cuts[0]) & (
+                    # branches["BDT_" + production_channel] < bdt_cuts[1]
+                # )
+                # bool_list = (bool_list) & (bdt_bool)
+
+            # if ("jet_pt" in variables[0]) and jet_pT_study:
+                # etaVar = variables[0].split("_")[0] + "_jet_eta"
+                # bool_list = (bool_list) & (branches[etaVar] >= 2.5) & (branches[etaVar] < 3)
+
+            # for var in variables:
+                # branches[var] = branches[var][bool_list]
+
+            # clean_null_values(branches, variables, variables_type)
+
+            # if "delta_phi" in variables[0]:
+                # branches[variables[0]] = np.absolute(branches[variables[0]])
+
+            # TempHistogram, bins = np.histogram(
+                # branches[variables[0]],
+                # bins=number_of_bins,
+                # range=x_range_histos,
+                # weights=(
+                    # branches["weight"] * era_reweight
+                    # # branches["weight"] * (branches["pileup_weight_down"] / branches["pileup_weight"])
+                    # if use_puweight
+                    # else branches["weight"] / branches["pileup_weight"]
+                # ),
+            # )
+            # x = branches[variables[0]]
+            # w = branches["weight"]
+
+            # histogram = histogram + TempHistogram
+        # histograms_list.append(histogram)
+        # bins_list.append(bins)
+
+    # return histograms_list, bins_list
+
+
+def _join_cuts(cuts):
+    if not cuts:
+        return None
+    return " & ".join(f"({cut})" for cut in cuts)
+
+
 def get_histograms_from_tuple(
     sources,
     era,
@@ -49,38 +191,37 @@ def get_histograms_from_tuple(
     Z_study=False,
     jet_pT_study=False,
     version="2.0.0",
-    recategorize=False,
 ):
-    
-    if not use_puweight:
-        variables.append("pileup_weight")
-    # variables.append("pileup_weight")
-    # variables.append("pileup_weight_down")
 
+    # Do NOT modify the original variables list
+    variables = list(dict.fromkeys(variables))
 
-    histograms_list = []
-    bins_list = []
+    variable = variables[0]
 
-    # For 2025 data there is not simulations yet!!!
-    # so in the case we re escale the luminosity
-    era_reweight = 1
-    # if lumi_rescale:
-        # if era == "2024":
-            # era_reweight = float(luminosity["2024"]) / (float(luminosity["2024"]) + float(luminosity["2025"]))
-            # print("Re scaling lumi")
-        # if era == "2025":
-            # era_reweight = float(luminosity["2025"]) / (float(luminosity["2024"]) + float(luminosity["2025"]))
-            # era = "2024"
-            # print("Re scaling lumi")
+    # ------------------------------------------------------------
+    # Histogram configuration
+    # ------------------------------------------------------------
 
-    variable_bin = variables[0]
+    variable_bin = variable
 
     if variable_bin + "_" + production_channel in x_range:
         variable_bin += "_" + production_channel
 
-    # tuple_path = "../root_io/tuples/"
+    if (
+        variable in ["diMuon_mass", "diMuon_bsConstrainedMass"]
+        and Z_study
+    ):
+        number_of_bins = 80
+        x_range_histos = (85, 100)
+    else:
+        number_of_bins = n_bins[variable_bin]
+        x_range_histos = x_range[variable_bin]
+
+
     user = os.getenv("USER")
+
     tuple_version = f"tuples_v{version}"
+
     analyzer_version = ".".join(version.split(".")[:2])
     analyzer_version = f"analyzer_HiggsMuMu_v{analyzer_version}"
 
@@ -89,100 +230,168 @@ def get_histograms_from_tuple(
         f"{analyzer_version}/{tuple_version}/haddTuples/"
     )
 
-    file_append = ""
-    bdt_append = ""
-    if recategorize:
-        file_append = "_categorized"
-        bdt_append = "BDT"
-
-    tuple_path = "../root_io/tuples/"
-    if bdt_subset != "" or variables[0] == "BDT_" + production_channel:
-        tuple_path = "../root_io/tuples/"
-        if recategorize:
-            tuple_path += "BDT_score/" + production_channel + "reCat/" + bdt_subset + "/"
-        else: 
-            tuple_path += "BDT_score/" + production_channel + "/" + bdt_subset + "/"
-
-    for source in sources:
-        file_name = source + "_" + era + f"_tuples{file_append}.root:tree_output"
-        if bdt_subset != "" or variables[0] == "BDT_" + production_channel:
-            file_name = source + "_" + era + "_" + bdt_subset + ".root:tree_output"
-
-        if ((variables[0] == "diMuon_mass") | (variables[0] == "diMuon_bsConstrainedMass")) and Z_study:
-                number_of_bins = 80; 
-                x_range_histos = (85,100)
-        else:
-            number_of_bins = n_bins[variable_bin]
-            x_range_histos = x_range[variable_bin]
-
-        histogram, bins = np.histogram(
-                [],
-                bins=number_of_bins,
-                range=x_range_histos,
+    if bdt_subset != "" or variable == "BDT_" + production_channel:
+        tuple_path = (
+            "../root_io/tuples/"
+            f"BDT_score/{production_channel}/{bdt_subset}/"
         )
 
-        for branches in ur.iterate(tuple_path + file_name, variables, library="np", step_size="500 MB",
-                                **UPROOT_OPEN):
-            #print("TUPLE PATH in get Hist from tup_____: " + tuple_path)
-            bool_list = np.ones(len(branches[variables[0]]), dtype=bool)
+    # ------------------------------------------------------------
+    # Build event selection ONCE
+    # ------------------------------------------------------------
 
-            if variables[0] != "diMuon_bsConstrainedMass" and ("bsConstrained" in variables[0]) and is_background:
-                bool_list = (bool_list) & (branches["diMuon_bsConstrainedMass"] > 130) | (
-                    branches["diMuon_bsConstrainedMass"] < 120
-                )
-                if not Z_study:
-                    bool_list = (bool_list) & (branches["diMuon_bsConstrainedMass"] > 110) & (
-                        branches["diMuon_bsConstrainedMass"] < 150
-                    )
+    cuts = []
 
+    # Background sideband selection
+    if is_background:
 
-            elif variables[0] != "diMuon_mass" and ("bsConstrained" not in variables[0]) and is_background:
-                bool_list = (bool_list) & (
-                    ((branches["diMuon_mass"] > 130) | (branches["diMuon_mass"] < 120))
-                )
-                if not Z_study:
-                    bool_list = (bool_list) & (branches["diMuon_mass"] > 110) & (
-                        branches["diMuon_mass"] < 150
-                    )
+        if variable != "diMuon_bsConstrainedMass" and "bsConstrained" in variable:
 
-            if production_channel != "":
-                bool_list = (bool_list) & (
-                    branches["is_" + production_channel + f"_category{bdt_append}"] == 1
-                )
-
-            if len(bdt_cuts) > 1:
-                bdt_bool = (branches["BDT_" + production_channel] > bdt_cuts[0]) & (
-                    branches["BDT_" + production_channel] < bdt_cuts[1]
-                )
-                bool_list = (bool_list) & (bdt_bool)
-
-            if ("jet_pt" in variables[0]) and jet_pT_study:
-                etaVar = variables[0].split("_")[0] + "_jet_eta"
-                bool_list = (bool_list) & (branches[etaVar] >= 2.5) & (branches[etaVar] < 3)
-
-            for var in variables:
-                branches[var] = branches[var][bool_list]
-
-            clean_null_values(branches, variables, variables_type)
-
-            if "delta_phi" in variables[0]:
-                branches[variables[0]] = np.absolute(branches[variables[0]])
-
-            TempHistogram, bins = np.histogram(
-                branches[variables[0]],
-                bins=number_of_bins,
-                range=x_range_histos,
-                weights=(
-                    branches["weight"] * era_reweight
-                    # branches["weight"] * (branches["pileup_weight_down"] / branches["pileup_weight"])
-                    if use_puweight
-                    else branches["weight"] / branches["pileup_weight"]
-                ),
+            cuts.append(
+                "(diMuon_bsConstrainedMass > 130) | "
+                "(diMuon_bsConstrainedMass < 120)"
             )
-            x = branches[variables[0]]
-            w = branches["weight"]
 
-            histogram = histogram + TempHistogram
+            if not Z_study:
+                cuts.append(
+                    "(diMuon_bsConstrainedMass > 110) & "
+                    "(diMuon_bsConstrainedMass < 150)"
+                )
+
+        elif variable != "diMuon_mass" and "bsConstrained" not in variable:
+
+            cuts.append(
+                "(diMuon_mass > 130) | "
+                "(diMuon_mass < 120)"
+            )
+
+            if not Z_study:
+                cuts.append(
+                    "(diMuon_mass > 110) & "
+                    "(diMuon_mass < 150)"
+                )
+
+    # Production category
+    if production_channel != "":
+        cuts.append(
+            f"is_{production_channel}_category == 1"
+        )
+
+    # BDT selection
+    if len(bdt_cuts) > 1:
+        cuts.append(
+            f"(BDT_{production_channel} > {bdt_cuts[0]}) & "
+            f"(BDT_{production_channel} < {bdt_cuts[1]})"
+        )
+
+    # Jet eta selection
+    if ("jet_pt" in variable) and jet_pT_study:
+        eta_var = variable.split("_")[0] + "_jet_eta"
+
+        cuts.append(
+            f"({eta_var} >= 2.5) & ({eta_var} < 3)"
+        )
+
+    cut = _join_cuts(cuts)
+
+    # ------------------------------------------------------------
+    # Only return branches actually needed by histogram
+    # ------------------------------------------------------------
+
+    read_variables = [variable, "weight"]
+
+    if not use_puweight:
+        read_variables.append("pileup_weight")
+
+    read_variables = list(dict.fromkeys(read_variables))
+
+    # ------------------------------------------------------------
+    # Loop over samples
+    # ------------------------------------------------------------
+
+    histograms_list = []
+    bins_list = []
+
+    era_reweight = 1.0
+
+    if lumi_rescale:
+        if era == "2025":
+            era_reweight = float(luminosity["2025"]) / (float(luminosity["2025"]) + float(luminosity["2026"]))
+            print("Re scaling lumi")
+        if era == "2026":
+            #era_reweight = float(luminosity["2026"]) / (float(luminosity["2025"]) + float(luminosity["2026"]))
+            era_reweight = 25.8433 / (float(luminosity["2025"]) + float(luminosity["2026"]))
+            era = "2025"
+            print("Re scaling lumi")
+    for source in sources:
+
+        if bdt_subset != "" or variable == "BDT_" + production_channel:
+
+            file_name = (
+                f"{source}_{era}_{bdt_subset}.root:tree_output"
+            )
+
+        else:
+
+            file_name = (
+                f"{source}_{era}_tuples.root:tree_output"
+            )
+
+        histogram = np.zeros(
+            number_of_bins,
+            dtype=np.float64,
+        )
+
+        bins = np.linspace(
+            x_range_histos[0],
+            x_range_histos[1],
+            number_of_bins + 1,
+        )
+
+        # --------------------------------------------------------
+        # Uproot now performs the event selection
+        # --------------------------------------------------------
+
+        for branches in ur.iterate(
+            tuple_path + file_name,
+            expressions=read_variables,
+            cut=cut,
+            library="np",
+            step_size="500 MB",
+        ):
+
+            # Only clean the arrays we actually need
+            clean_null_values(
+                branches,
+                read_variables,
+                variables_type,
+            )
+
+            x = branches[variable]
+
+            if "delta_phi" in variable:
+                x = np.abs(x)
+
+            if use_puweight:
+
+                weights = (
+                    branches["weight"]
+                    * era_reweight
+                )
+
+            else:
+
+                weights = (
+                    branches["weight"]
+                    / branches["pileup_weight"]
+                )
+
+            histogram += np.histogram(
+                x,
+                bins=bins,
+                weights=weights,
+            )[0]
+
         histograms_list.append(histogram)
         bins_list.append(bins)
 
@@ -190,6 +399,101 @@ def get_histograms_from_tuple(
 
 
 
+# def get_data_histograms_from_tuple(
+    # era,
+    # variables,
+    # production_channel,
+    # bdt_cuts,
+    # bdt_subset="",
+    # Z_study=False,
+    # jet_pT_study=False,
+    # version="2.0.0",
+# ):
+    # # tuple_path = "../root_io/tuples/"
+    # user = os.getenv("USER")
+    # tuple_version = f"tuples_v{version}"
+    # analyzer_version = ".".join(version.split(".")[:2])
+    # analyzer_version = f"analyzer_HiggsMuMu_v{analyzer_version}"
+
+    # tuple_path = (
+        # f"/eos/uscms/store/group/lpchmumu/{user}/"
+        # f"{analyzer_version}/{tuple_version}/haddTuples/"
+    # )
+    # file_name = "Data_" + era + "_tuples.root:tree_output"
+    # if bdt_subset != "" or variables[0] == "BDT_" + production_channel:
+        # tuple_path = "../root_io/tuples/"
+        # tuple_path += "BDT_score/" + production_channel + "/" + bdt_subset + "/"
+        # file_name = "Data_" + era + "_" + bdt_subset + ".root:tree_output"
+
+    # #with ur.open(tuple_path + file_name) as data_file:
+
+    # variable_bin = variables[0]
+
+    # if (( variables[0] == "diMuon_mass") | (variables[0] == "diMuon_bsConstrainedMass")) and Z_study:
+            # number_of_bins = 80; 
+            # x_range_histos = (85,100)
+    # else:
+        # number_of_bins = n_bins[variable_bin]
+        # x_range_histos = x_range[variable_bin]
+
+    # data_histogram = np.zeros(number_of_bins)
+
+    # for branches in ur.iterate(tuple_path + file_name, variables, step_size=9000000, library="np"):
+        # if variable_bin + "_" + production_channel in x_range:
+            # variable_bin += "_" + production_channel
+
+
+        # if "bsConstrained" in variables[0]:
+            # bool_list = ((branches["diMuon_bsConstrainedMass"] > 130) | (branches["diMuon_bsConstrainedMass"] < 120))
+            # if not Z_study:
+                # bool_list = (bool_list) & (branches["diMuon_bsConstrainedMass"] > 110) & (
+                    # branches["diMuon_bsConstrainedMass"] < 150
+                # )
+        # else:
+            # bool_list = ((branches["diMuon_mass"] > 130) | (branches["diMuon_mass"] < 120))
+            # if not Z_study:
+                # bool_list = (bool_list) & (branches["diMuon_mass"] > 110) & (
+                    # branches["diMuon_mass"] < 150
+                # )
+        
+        # if production_channel != "":
+            # bool_list = (bool_list) & (
+                # branches["is_" + production_channel + "_category"] == 1
+            # )
+
+        # if len(bdt_cuts) > 1:
+            # bdt_bool = (branches["BDT_" + production_channel] > bdt_cuts[0]) & (
+                # branches["BDT_" + production_channel] < bdt_cuts[1]
+            # )
+            # bool_list = (bool_list) & (bdt_bool)
+
+        # if ("jet_pt" in variables[0]) and jet_pT_study:
+            # #print("adding jet pt")
+            # etaVar = variables[0].split("_")[0] + "_jet_eta"
+            # bool_list = (bool_list) & (branches[etaVar] >= 2.5) & (branches[etaVar] < 3)
+        
+
+        # for var in variables:
+            # branches[var] = branches[var][bool_list]
+
+        # clean_null_values(branches, variables, variables_type)
+
+        # if "delta_phi" in variables[0]:
+            # branches[variables[0]] = np.absolute(branches[variables[0]])
+
+        
+        # #print("Total number of Data Events: " + str(len(branches[variables[0]])))
+        # data_histogram_chunk, data_bins = np.histogram(
+            # branches[variables[0]],
+            # bins=number_of_bins,
+            # range=x_range_histos,
+        # )
+
+        # data_histogram += data_histogram_chunk
+
+        # #print("Data events in the first bin: " + str(data_histogram[0]))
+
+    # return data_histogram, data_bins
 
 def get_data_histograms_from_tuple(
     era,
@@ -200,103 +504,158 @@ def get_data_histograms_from_tuple(
     Z_study=False,
     jet_pT_study=False,
     version="2.0.0",
-    recategorize=False,
 ):
-    # tuple_path = "../root_io/tuples/"
+
+    variable = variables[0]
+
+    # ------------------------------------------------------------
+    # Paths
+    # ------------------------------------------------------------
+
     user = os.getenv("USER")
+
     tuple_version = f"tuples_v{version}"
+
     analyzer_version = ".".join(version.split(".")[:2])
     analyzer_version = f"analyzer_HiggsMuMu_v{analyzer_version}"
 
-    #tuple_path = (
-    #    f"/eos/uscms/store/group/lpchmumu/{user}/"
-    #    f"{analyzer_version}/{tuple_version}/haddTuples/"
-    #)
-    file_append = ""
-    bdt_append = ""
-    if recategorize:
-        file_append = "_categorized"
-        bdt_append = "BDT"
-    tuple_path = "../root_io/tuples/"
-    file_name = "Data_" + era + f"_tuples{file_append}.root:tree_output"
-    if bdt_subset != "" or variables[0] == "BDT_" + production_channel:
-        tuple_path = "../root_io/tuples/"
-        if recategorize:
-            tuple_path += "BDT_score/" + production_channel + "reCat/" + bdt_subset + "/"
-        else:
-            tuple_path += "BDT_score/" + production_channel + "/" + bdt_subset + "/"
-        file_name = "Data_" + era + "_" + bdt_subset + ".root:tree_output"
+    tuple_path = (
+        f"/eos/uscms/store/group/lpchmumu/{user}/"
+        f"{analyzer_version}/{tuple_version}/haddTuples/"
+    )
 
-    #with ur.open(tuple_path + file_name) as data_file:
+    file_name = f"Data_{era}_tuples.root:tree_output"
 
-    variable_bin = variables[0]
+    if bdt_subset != "" or variable == "BDT_" + production_channel:
 
-    if (( variables[0] == "diMuon_mass") | (variables[0] == "diMuon_bsConstrainedMass")) and Z_study:
-            number_of_bins = 80; 
-            x_range_histos = (85,100)
+        tuple_path = (
+            "../root_io/tuples/"
+            f"BDT_score/{production_channel}/{bdt_subset}/"
+        )
+
+        file_name = (
+            f"Data_{era}_{bdt_subset}.root:tree_output"
+        )
+
+    # ------------------------------------------------------------
+    # Histogram configuration
+    # ------------------------------------------------------------
+
+    variable_bin = variable
+
+    if variable_bin + "_" + production_channel in x_range:
+        variable_bin += "_" + production_channel
+
+    if (
+        variable in ["diMuon_mass", "diMuon_bsConstrainedMass"]
+        and Z_study
+    ):
+
+        number_of_bins = 80
+        x_range_histos = (85, 100)
+
     else:
+
         number_of_bins = n_bins[variable_bin]
         x_range_histos = x_range[variable_bin]
 
-    data_histogram = np.zeros(number_of_bins)
+    bins = np.linspace(
+        x_range_histos[0],
+        x_range_histos[1],
+        number_of_bins + 1,
+    )
 
-    for branches in ur.iterate(tuple_path + file_name, variables, step_size=9000000, library="np",
-                                **UPROOT_OPEN):
-        if variable_bin + "_" + production_channel in x_range:
-            variable_bin += "_" + production_channel
+    data_histogram = np.zeros(
+        number_of_bins,
+        dtype=np.float64,
+    )
 
+    # ------------------------------------------------------------
+    # Build selection
+    # ------------------------------------------------------------
 
-        if "bsConstrained" in variables[0]:
-            bool_list = ((branches["diMuon_bsConstrainedMass"] > 130) | (branches["diMuon_bsConstrainedMass"] < 120))
-            if not Z_study:
-                bool_list = (bool_list) & (branches["diMuon_bsConstrainedMass"] > 110) & (
-                    branches["diMuon_bsConstrainedMass"] < 150
-                )
-        else:
-            bool_list = ((branches["diMuon_mass"] > 130) | (branches["diMuon_mass"] < 120))
-            if not Z_study:
-                bool_list = (bool_list) & (branches["diMuon_mass"] > 110) & (
-                    branches["diMuon_mass"] < 150
-                )
-        
-        if production_channel != "":
-            bool_list = (bool_list) & (
-                branches["is_" + production_channel + f"_category{bdt_append}"] == 1
-            )
+    cuts = []
 
-        if len(bdt_cuts) > 1:
-            bdt_bool = (branches["BDT_" + production_channel] > bdt_cuts[0]) & (
-                branches["BDT_" + production_channel] < bdt_cuts[1]
-            )
-            bool_list = (bool_list) & (bdt_bool)
+    # Data sidebands / blinding
+    if "bsConstrained" in variable:
 
-        if ("jet_pt" in variables[0]) and jet_pT_study:
-            #print("adding jet pt")
-            etaVar = variables[0].split("_")[0] + "_jet_eta"
-            bool_list = (bool_list) & (branches[etaVar] >= 2.5) & (branches[etaVar] < 3)
-        
-
-        for var in variables:
-            branches[var] = branches[var][bool_list]
-
-        clean_null_values(branches, variables, variables_type)
-
-        if "delta_phi" in variables[0]:
-            branches[variables[0]] = np.absolute(branches[variables[0]])
-
-        
-        #print("Total number of Data Events: " + str(len(branches[variables[0]])))
-        data_histogram_chunk, data_bins = np.histogram(
-            branches[variables[0]],
-            bins=number_of_bins,
-            range=x_range_histos,
+        cuts.append(
+            "(diMuon_bsConstrainedMass > 130) | "
+            "(diMuon_bsConstrainedMass < 120)"
         )
 
-        data_histogram += data_histogram_chunk
+        if not Z_study:
+            cuts.append(
+                "(diMuon_bsConstrainedMass > 110) & "
+                "(diMuon_bsConstrainedMass < 150)"
+            )
 
-        #print("Data events in the first bin: " + str(data_histogram[0]))
+    else:
 
-    return data_histogram, data_bins
+        cuts.append(
+            "(diMuon_mass > 130) | "
+            "(diMuon_mass < 120)"
+        )
+
+        if not Z_study:
+            cuts.append(
+                "(diMuon_mass > 110) & "
+                "(diMuon_mass < 150)"
+            )
+
+    if production_channel != "":
+        cuts.append(
+            f"is_{production_channel}_category == 1"
+        )
+
+    if len(bdt_cuts) > 1:
+
+        cuts.append(
+            f"(BDT_{production_channel} > {bdt_cuts[0]}) & "
+            f"(BDT_{production_channel} < {bdt_cuts[1]})"
+        )
+
+    if ("jet_pt" in variable) and jet_pT_study:
+
+        eta_var = variable.split("_")[0] + "_jet_eta"
+
+        cuts.append(
+            f"({eta_var} >= 2.5) & ({eta_var} < 3)"
+        )
+
+    cut = _join_cuts(cuts)
+
+    # ------------------------------------------------------------
+    # Read
+    # ------------------------------------------------------------
+
+    for branches in ur.iterate(
+        tuple_path + file_name,
+        expressions=[variable],
+        cut=cut,
+        step_size="500 MB",
+        library="np",
+    ):
+
+        clean_null_values(
+            branches,
+            [variable],
+            variables_type,
+        )
+
+        x = branches[variable]
+
+        if "delta_phi" in variable:
+            x = np.abs(x)
+
+        data_histogram += np.histogram(
+            x,
+            bins=bins,
+        )[0]
+
+    return data_histogram, bins
+
+
 
 
 def draw_data_and_simul_and_ratio(
@@ -314,23 +673,10 @@ def draw_data_and_simul_and_ratio(
 ):
     plt.style.use(hep.style.CMS)
     tuple_version = f"tuples_v{version}"
-    bdt_append = ""
-    output_append = ""
-    USE_CATEGORIZATION_BDT = False
-    if production_channel in ["ggHreCat", "VBFreCat"]:
-        production_channel = production_channel[:3]
-        USE_CATEGORIZATION_BDT = True
-        bdt_append = "BDT"
-        output_append = "reCat"
-        
-    if USE_CATEGORIZATION_BDT:
-        print("*" * len("****** PLOTTING " + variable + era + " RECATEGORIZED *****"))
-        print("****** PLOTTING " + variable + " ERA " + era + " RECATEGORIZED *****")
-        print("*" * len("****** PLOTTING " + variable + era + " RECATEGORIZED *****"))
-    else:
-        print("*" * len("****** PLOTTING " + variable + era + " *****"))
-        print("****** PLOTTING " + variable + " ERA " + era + " *****")
-        print("*" * len("****** PLOTTING " + variable + era + " *****"))
+    print("*" * len("****** PLOTTING " + variable + era + " *****"))
+    print("****** PLOTTING " + variable + " ERA " + era + " *****")
+    print("*" * len("****** PLOTTING " + variable + era + " *****"))
+
     variables = [variable, "weight"] 
     if (("bsConstrained" in variable) and variable != "diMuon_bsConstrainedMass"):
         variables.append("diMuon_bsConstrainedMass")
@@ -351,7 +697,7 @@ def draw_data_and_simul_and_ratio(
 
     # if variable != "diMuon_mass":
     if production_channel != "":
-        variables.append("is_" + production_channel + f"_category{bdt_append}")
+        variables.append("is_" + production_channel + "_category")
     if len(bdt_cuts) != 0:
         variables.append("BDT_" + production_channel)
 
@@ -364,7 +710,6 @@ def draw_data_and_simul_and_ratio(
         Z_study=Z_study,
         jet_pT_study=jet_pT_study,
         version=version,
-        recategorize=USE_CATEGORIZATION_BDT
     )
 
 
@@ -380,11 +725,10 @@ def draw_data_and_simul_and_ratio(
         production_channel,
         bdt_cuts,
         bdt_subset,
-        era in ["2024", "2025", "Combined"],
+        era in ["2026", "2025"],
         Z_study=Z_study,
         jet_pT_study=jet_pT_study,
         version=version,
-        recategorize=USE_CATEGORIZATION_BDT
     )
 
     signal_histograms_list, signal_bins_list = get_histograms_from_tuple(
@@ -396,14 +740,14 @@ def draw_data_and_simul_and_ratio(
         production_channel,
         bdt_cuts,
         bdt_subset,
-        era in ["2024", "2025", "Combined"],
+        era in ["2025", "2026"],
         Z_study=Z_study,
         jet_pT_study=jet_pT_study,
         version=version,
-        recategorize=USE_CATEGORIZATION_BDT
     )
 
     fig, axs = get_canvas(True)
+
     hep.histplot(
         bkg_histograms_list,
         bkg_bins_list[0],
@@ -452,7 +796,7 @@ def draw_data_and_simul_and_ratio(
     )
 
     axs[0].set_ylabel(r"Events")
-    axs[0].set_ylim(0.1, 1000 * max(np.max(data_histogram), 1))
+    axs[0].set_ylim(0.1, 1000 * np.max(data_histogram))
     axs[0].set_xlim(data_bins[0], data_bins[-1])
     axs[0].set_yscale("log")
     axs[0].legend(frameon=False, loc="upper right", ncols=2)
@@ -490,28 +834,27 @@ def draw_data_and_simul_and_ratio(
     axs[1].set_xlim(data_bins[0], data_bins[-1])
     axs[1].set_xlabel(x_labels[variable])
 
-    output_directory = f"../plots/ratio/{tuple_version}{output_append}/" + era + "/"
+    output_directory = f"../plots/ratio/{tuple_version}/" + era + "/"
     output_name = variable + "_" + era + "_MCData_ratio"
     if Z_study:
         output_name = variable + "_Z_included_" + era + "_MCData_ratio"
 
     if not use_puweight:
-        output_directory = f"../plots/ratio/{tuple_version}{output_append}/" + era + "/no_puWeight/"
+        output_directory = f"../plots/ratio/{tuple_version}/" + era + "/no_puWeight/"
     if production_channel != "":
         output_directory = (
-            f"../plots/ratio/{tuple_version}{output_append}/"
+            f"../plots/ratio/{tuple_version}/"
             + production_channel + "_category/" + era + "/"
         )
 
         if len(bdt_cuts) > 1:
             output_directory = (
-                f"../plots/ratio/{tuple_version}{output_append}/"
+                f"../plots/ratio/{tuple_version}/"
                 + production_channel + "_category/bdt_selections/" + era + "/"
             )
 
     output_directory = get_output_directory(variable, output_directory, variables_type)
-    if USE_CATEGORIZATION_BDT:
-        output_directory = output_directory[:-1] + "BDTSigCats/"
+
     save_figure(fig, output_directory, output_name + label + labelAdd)
 
     plt.close()
@@ -523,10 +866,11 @@ def draw_data_and_simul_and_ratio(
             background_sources,
             signal_sources,
             use_puweight=use_puweight,
-            production_channel=production_channel + "reCat" if USE_CATEGORIZATION_BDT else production_channel,
+            production_channel=production_channel,
             bdt_cuts=bdt_cuts[1:],
             bdt_subset=bdt_subset,
             Z_study=Z_study,
             jet_pT_study=jet_pT_study,
             version=version,
         )
+

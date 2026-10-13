@@ -32,7 +32,7 @@ x_labels = {
     "mu1_pt_mass_ratio": r"$p_T^{\mu 1}/m_{\mu\mu}$",
     "mu2_pt_mass_ratio": r"$p_T^{\mu 2}/m_{\mu\mu}$",
     "mu1_bsConstrainedPt_mass_ratio": r"$p_{T,BSC}^{\mu 1}/m_{\mu\mu,BSC}$",
-    "mu2_bsConstrainedPt_mass_ratio": r"$p_{T,BSC}^{\mu 2}/m_{\mu\mu,BSC}$",
+    "mu2_bsConstrainedPt_mass_ratio": r"$p_{T,BSC}^{\mu 1}/m_{\mu\mu,BSC}$",
     "mu1_eta": r"$\eta_{\mu_1}$",
     "mu2_eta": r"$\eta_{\mu_2}$",
     "phi_CS": r"$\phi_{CS} [rad]$",
@@ -386,8 +386,7 @@ luminosity = {
     "2026": "25.84",
     # "Combined": "61.89",
     # "Combined": "170.97",
-    # "Combined": "281.7"
-    "Combined": "307.54",
+    "Combined": "307.54"
 }
 
 variables_type = {

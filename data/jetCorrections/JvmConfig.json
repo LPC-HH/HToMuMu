@@ -48,6 +48,11 @@
     "jvmFilePath": "./data/jetCorrections/jetvetomaps.json.gz",
     "jvmTagName": "Summer24Prompt25_RunCDEFG_V1",
     "jvmKeyName": "jetvetomap"
+  },
+  "2026": {
+    "jvmFilePath": "./data/jetCorrections/jetvetomaps.json.gz",
+    "jvmTagName": "Summer24Prompt26_RunBCD_V1",
+    "jvmKeyName": "jetvetomap"
   }
 }
 
