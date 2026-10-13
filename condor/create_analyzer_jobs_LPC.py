@@ -18,7 +18,8 @@ golden_json = {
         '2023':'Cert_Collisions2023_366442_370790_Golden.json',
         '2023BPix':'Cert_Collisions2023_366442_370790_Golden.json',
         '2024':'Cert_Collisions2024_378981_386951_Golden.json',
-        '2025':'Cert_Collisions2025_391658_398903_Golden.json'
+        '2025':'Cert_Collisions2025_391658_398903_Golden.json',
+        '2026':'Cert_Collisions2026_401624_403937_golden.json'
         }
 
 # Skip these datasets
@@ -57,28 +58,30 @@ list_datasets = datasets_info.keys()
     #"Muon0_2024C",
     #"Muon0_2023C_v1",
     #"Muon0_2024I_v2",
-#    "Muon0_2025B",
+    #"Muon0_2025B",
     #"Muon0_2025G",
     #"TTto2L2Nu_Summer23",
-#    "TTtoLNu2Q_Summer22_ext1",
-#    "TTtoLNu2Q_Summer22",
-#    "TTtoLNu2Q_Summer24",
-#    "TTto2L2Nu_Summer24",
+    #"TTtoLNu2Q_Summer22_ext1",
+    #"TTtoLNu2Q_Summer22",
+    #"TTtoLNu2Q_Summer24",
+    #"TTto2L2Nu_Summer24",
     #"VBF_Summer22",
     #"WZZ_Summer23BPix",
     #"VBF_Summer22",
     #"VBF_Summer22EE",
     #"VBF_Summer23",
     #"VBF_Summer23BPix",
-#    "VBF_Summer24",
+    #"VBF_Summer24",
+    #"VBF_Summer25",
     #"ggH_Summer22",
     #"ggH_Summer22EE",
     #"ggH_Summer23",
     #"ggH_Summer23BPix",
     #"WWtoLNu2Q_Summer22",
     #"Muon_2022C",
-#    "Muon_2022D",
-#    "SingleMuon_2022C",
+    #"Muon_2022D",
+    #"SingleMuon_2022C",
+    #"Muon0_2026A",
 #]
 
 
