@@ -77,9 +77,16 @@ def mask_undefined_jet_features(df):
     return df
 
 
-def get_variables(channel_US, use_bsConstrain):
+# inputs added after the pre-K-fold (Matias's) BDT; --stage legacy trains without them
+LEGACY_EXCLUDED_INPUTS = ("subleading_jet_eta", "leading_jet_btagPNetQvG", "subleading_jet_btagPNetQvG",
+                          "leading_jet_nConstituents", "subleading_jet_nConstituents", "mc_campaign")
+
+
+def get_variables(channel_US, use_bsConstrain, legacy_inputs=False):
     """[[branch, branch, label], ...]: the BDT inputs, followed by exactly three service
-    columns (mass, relative mass error, weight) -- callers rely on `[:-3]` being the inputs."""
+    columns (mass, relative mass error, weight) -- callers rely on `[:-3]` being the inputs.
+    legacy_inputs: the input set of the pre-K-fold BDT (Matias's: 18 ggH / 22 VBF inputs, same
+    order), i.e. without LEGACY_EXCLUDED_INPUTS."""
     inputs = [
         ("diMuon_rapidity", r"$y_{\mu\mu}$"),
         ("mu1_eta", r"$\eta_{\mu 1}$"),
@@ -122,6 +129,8 @@ def get_variables(channel_US, use_bsConstrain):
             ("n_SoftJet_pt2", r"$N_{2}^{soft}$"),
             ("HT", r"$H_{T}^{2}(soft)$"),
         ]
+    if legacy_inputs:
+        inputs = [row for row in inputs if row[0] not in LEGACY_EXCLUDED_INPUTS]
     # service columns, in this order: mass, relative mass error, weight
     mass = "diMuon_bsConstrainedMass" if use_bsConstrain else "diMuon_mass"
     service = [mass, f"relative_{mass}_error", "weight"]
@@ -220,10 +229,11 @@ def copy_and_skim_tree(source_path, skim_path, cuts):
                 os.remove(out)
 
 
-def score_skim_in_chunks(file_name, names, bundle, legacy=False):
-    """Fold-matched scores for every row of `file_name`, read in SCORE_CHUNK_ROWS blocks.
+def score_skim_in_chunks(file_name, names, bundles, legacy=False):
+    """Fold-matched scores for every row of `file_name`, read in SCORE_CHUNK_ROWS blocks, for
+    each bundle of `bundles` ({branch name: bundle}, all scoring the same rows from one read).
     Each row's fold comes from its own `event` (read as an integer, never as a feature).
-    With legacy=True the single legacy model scores every row. Returns (scores, folds)."""
+    With legacy=True the single legacy model scores every row. Returns ({name: scores}, folds)."""
     with uproot.open(file_name, **kf.uproot_open_options()) as f:
         n_rows = f["tree_output"].num_entries
         if not legacy and kf.EVENT_ID not in f["tree_output"]:
@@ -231,7 +241,7 @@ def score_skim_in_chunks(file_name, names, bundle, legacy=False):
                                "with it, the fold of each row is unknown otherwise")
     branches = list(names) + ([] if legacy else [kf.EVENT_ID])
 
-    scores = np.empty(n_rows, dtype=np.float32)
+    scores = {name: np.empty(n_rows, dtype=np.float32) for name in bundles}
     folds = np.empty(n_rows, dtype=np.int8)
     start = 0
     for arrays in uproot.iterate({file_name: "tree_output"}, branches, library="np",
@@ -240,7 +250,8 @@ def score_skim_in_chunks(file_name, names, bundle, legacy=False):
         x = block.to_numpy(dtype=np.float32)
         stop = start + len(x)
         folds[start:stop] = 0 if legacy else kf.fold_of_event(arrays[kf.EVENT_ID])
-        scores[start:stop] = kf.predict_by_fold(x, folds[start:stop], bundle)
+        for name, bundle in bundles.items():
+            scores[name][start:stop] = kf.predict_by_fold(x, folds[start:stop], bundle)
         start = stop
     if start != n_rows:
         raise RuntimeError(f"{file_name}: scored {start} of {n_rows} rows")
@@ -248,24 +259,27 @@ def score_skim_in_chunks(file_name, names, bundle, legacy=False):
 
 
 def score_tuple_into(source_dir, source_name, out_dir, out_name, channel_US, category_var,
-                     use_bsConstrain, names, bundle, tag, legacy=False):
-    """Skim one tuple into out_dir/out_name and append BDT_<channel> and BDT_fold to it.
-    The single scoring path for the nominal and the systematic tuples. Legacy scores are
-    written with BDT_fold = -1 (not fold-matched: in-sample for the legacy model's train set)."""
+                     use_bsConstrain, names, bundles, tag, legacy=False):
+    """Skim one tuple into out_dir/out_name and append one score branch per entry of `bundles`
+    ({branch name, e.g. BDT_<channel>: bundle}) and BDT_fold, skimming and reading it once.
+    The single scoring path for the nominal and the systematic tuples. Every bundle is
+    fold-matched on the same `event % N_FOLDS`, so one BDT_fold serves all of them. Legacy
+    scores are written with BDT_fold = -1 (not fold-matched: in-sample for the legacy model's
+    train set)."""
     os.makedirs(out_dir, exist_ok=True)
     file_name = out_dir + out_name
     t0 = time.time()
     copy_and_skim_tree(source_dir + source_name, file_name,
                        skim_cut(channel_US, category_var, use_bsConstrain))
     t1 = time.time()
-    scores, folds = score_skim_in_chunks(file_name, names, bundle, legacy=legacy)
+    scores, folds = score_skim_in_chunks(file_name, names, bundles, legacy=legacy)
+    n_folds = max(len(b) for b in bundles.values())
     print(f"[INFO] {tag}: {len(folds)} events" + ("" if legacy else
-          f", per fold {np.bincount(folds, minlength=len(bundle)).tolist()}"))
+          f", per fold {np.bincount(folds, minlength=n_folds).tolist()}"))
     t2 = time.time()
-    append_branches(file_name, {
-        f"BDT_{channel_US}": ("F", scores),
-        "BDT_fold": ("I", (np.full(len(folds), -1) if legacy else folds).astype(np.int32)),
-    })
+    branches = {name: ("F", values) for name, values in scores.items()}
+    branches["BDT_fold"] = ("I", (np.full(len(folds), -1) if legacy else folds).astype(np.int32))
+    append_branches(file_name, branches)
     print(f"[TIME ] {tag}: skim {t1 - t0:.1f} s, score {t2 - t1:.1f} s, append {time.time() - t2:.1f} s")
     return file_name
 
@@ -303,8 +317,24 @@ def append_BDT_score(file_type, channel_US, era, signal_subset, background_subse
     p = scoring_paths(file_type, channel_US, era, signal_subset, background_subset,
                       use_reCategorization, legacy=legacy, dir_suffix=dir_suffix)
     score_tuple_into(p["tuple_path"], p["tuple_name"], p["BDT_path"], p["BDT_name"], channel_US,
-                     p["category_var"], use_bsConstrain, names, bundle, tag=f"{file_type}_{era}",
-                     legacy=legacy)
+                     p["category_var"], use_bsConstrain, names, {f"BDT_{channel_US}": bundle},
+                     tag=f"{file_type}_{era}", legacy=legacy)
+
+
+def append_BDT_scores_multi(file_type, channel_US, era, signal_subset, background_subset, variables,
+                            bundles, use_bsConstrain, use_reCategorization, dir_suffix="compare"):
+    """Score one nominal tuple with several fold-model sets ({branch name: bundle}) into a single
+    skimmed copy, root_io/tuples/BDT_score/<channel><dir_suffix>/..."""
+    names = None
+    for branch, bundle in bundles.items():
+        try:
+            names = _check_variables(variables, bundle)
+        except RuntimeError as error:
+            raise RuntimeError(f"{branch}: {error}") from None
+    p = scoring_paths(file_type, channel_US, era, signal_subset, background_subset,
+                      use_reCategorization, dir_suffix=dir_suffix)
+    score_tuple_into(p["tuple_path"], p["tuple_name"], p["BDT_path"], p["BDT_name"], channel_US,
+                     p["category_var"], use_bsConstrain, names, bundles, tag=f"{file_type}_{era}")
 
 
 def append_BDT_score_to_sys(file_type, channel_US, era, signal_subset, background_subset, variables,
@@ -325,7 +355,7 @@ def append_BDT_score_to_sys(file_type, channel_US, era, signal_subset, backgroun
             continue
         try:
             score_tuple_into(systematics_dir, tuple_name, out_dir, tuple_name, channel_US,
-                             "_category", use_bsConstrain, names, bundle,
+                             "_category", use_bsConstrain, names, {f"BDT_{channel_US}": bundle},
                              tag=f"{file_type}_{era}_{systematic}")
             done.append(systematic)
         except Exception as error:
@@ -390,6 +420,10 @@ def _save(fig, path):
     plt.close(fig)
 
 
+# CMS-recommended Petroff 6-colour palette
+CMS_COLORS = ["#5790fc", "#f89c20", "#e42536", "#964a8b", "#9c9ca1", "#7a21dd"]
+
+
 def _fold_colors(n):
     # hex strings: the CMSSW mplhep mistakes an RGBA array for a list of colours
     return [matplotlib.colors.to_hex(c) for c in plt.cm.viridis(np.linspace(0, 0.9, n))]
@@ -423,10 +457,27 @@ def draw_roc_curve(fpr, tpr, test_name, plot_path, era, auc):
     _save(fig, f"{plot_path}training/myroc_{test_name}")
 
 
+def plot_roc_train_test(curves, era, path, title=""):
+    """ROC curves of several samples in one plot (e.g. untouched test vs training sample).
+    curves = [(fpr, tpr, label, auc), ...]; title names the weights / region used."""
+    fig, ax = plt.subplots()
+    for (fpr, tpr, label, auc), color, ls in zip(curves, ("darkorange", "tab:purple", "tab:green"), ("-", "--", ":")):
+        ax.plot(fpr, tpr, color=color, lw=2, ls=ls, label=f"{label}: AUC = {auc:.4f}")
+    ax.plot([0, 1], [0, 1], color="navy", lw=1.5, linestyle="--")
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1.05)
+    ax.set_xlabel("Background Efficiency")
+    ax.set_ylabel("Signal Efficiency")
+    ax.legend(loc="lower right", fontsize=13, title=title, title_fontsize=13)
+    _cms_label(ax, era)
+    _save(fig, path)
+
+
 def plot_discriminator(y_eval, p_eval, y_train, p_train, w_eval, w_train, era, plot_path,
-                       scale="log", eval_name="test", train_name="train", file_tag=""):
+                       scale="log", eval_name="test", train_name="train", file_tag="", note=None):
     """BDT output for signal and background on an evaluation sample and on the training
-    sample. Only call the evaluation sample "test" if it is the untouched test sample."""
+    sample. Only call the evaluation sample "test" if it is the untouched test sample.
+    note: text shown as the legend title (e.g. the train-vs-test AUC and KS numbers)."""
     fig, ax = plt.subplots()
     for cls, cls_name in ((1, "Signal"), (0, "Bkg")):
         for y, p, w, name in ((y_eval, p_eval, w_eval, eval_name),
@@ -438,9 +489,11 @@ def plot_discriminator(y_eval, p_eval, y_train, p_train, w_eval, w_train, era, p
     if scale == "log":
         ax.set_ylim(0.001, 1000.0)
     ax.set_xlim(0, 1)
+    if scale == "linear" and note:  # room for the legend and its note above the histograms
+        ax.set_ylim(top=ax.get_ylim()[1] * 1.6)
     ax.set_xlabel("BDT response")
     ax.set_ylabel("Events")
-    ax.legend(loc="upper right")
+    ax.legend(loc="upper right", title=note, title_fontsize=11 if note else None, fontsize=12 if note else None)
     _cms_label(ax, era)
     _save(fig, f"{plot_path}training/mydiscriminator{file_tag}_{scale}Y")
 
@@ -463,6 +516,537 @@ def plot_BDT_sculpting(bdt_score, mass, weights, channel_US, era, plot_path, bdt
     ax.legend(bbox_to_anchor=(1.02, 1), loc="upper left")
     _cms_label(ax, era)
     _save(fig, f"{plot_path}training/BDTsculpting{'_' + tag if tag else ''}_{channel_US}_{era}")
+
+
+def plot_flat_reweighting(mass, w_before, w_after, edges, era, plot_path, tag):
+    """Background mass spectrum with the training weights before and after reweight_to_flat."""
+    fig, ax = plt.subplots()
+    for w, label, color in ((w_before, "before reweighting", CMS_COLORS[0]),
+                            (w_after, "after reweighting", CMS_COLORS[1])):
+        counts, _ = np.histogram(mass, bins=edges, weights=w)
+        var, _ = np.histogram(mass, bins=edges, weights=w ** 2)
+        hep.histplot(counts, bins=edges, ax=ax, yerr=np.sqrt(var), color=color, label=label)
+    ax.set_xlim(edges[0], edges[-1])
+    ax.set_ylim(bottom=0)
+    ax.set_xlabel(r"$M_{\mu\mu}$ [GeV]")
+    ax.set_ylabel("Background training weight / bin")
+    ax.legend(loc="lower left")
+    _cms_label(ax, era)
+    _save(fig, f"{plot_path}training/bkg_mass_flat_reweight_{tag}")
+
+
+def plot_mass_weight_comparison(mass, weights, edges, era, plot_path, tag, sample):
+    """Unit-area M_mumu shape under each weighting in `weights` ({label: w}), with a lower panel
+    of the per-bin relative error (sqrt(sum w^2) propagated through the normalization)."""
+    fig, (ax, ax_r) = plt.subplots(2, 1, sharex=True, gridspec_kw=dict(height_ratios=(3, 1), hspace=0.05))
+    for (label, w), color in zip(weights.items(), CMS_COLORS):
+        counts, err, _ = kf.normalized_hist(mass, w, bins=edges)
+        print(f"[INFO] {sample} M_mumu with {label} weights: N_eff = {kf.effective_entries(w):.0f}")
+        hep.histplot(counts, bins=edges, ax=ax, yerr=err, color=color, label=label)
+        rel = np.divide(err, np.abs(counts), out=np.zeros_like(err), where=counts != 0)
+        ax_r.stairs(rel, edges, color=color, lw=1.5)
+    ax.set_xlim(edges[0], edges[-1])
+    ax.set_ylim(bottom=0)
+    ax.set_ylabel(f"Normalized events / {edges[1] - edges[0]:g} GeV")
+    ax.set_xlabel("")
+    ax.legend(loc="lower left", fontsize=14, title=sample)
+    _cms_label(ax, era)
+    ax_r.set_ylim(bottom=0)
+    ax_r.set_xlabel(r"$M_{\mu\mu}$ [GeV]")
+    ax_r.set_ylabel("Rel. error")
+    _save(fig, f"{plot_path}training/mass_weight_comparison_{sample}_{tag}")
+
+
+def _variant_style(result):
+    """train.py --stage compare: colour by training weights, line style by parameter set
+    (solid DEFAULT_PARAMS, dashed AUC Optuna; the Asimov-Optuna variants are purple dotted (raw
+    background MC) and brown dash-dot (fitted background))."""
+    colors = {"mass_res": CMS_COLORS[0], "weight+flat": CMS_COLORS[1], "mass_res+flatMassRes": CMS_COLORS[2]}
+    if result.get("opt_tag") == "asimov":  # Asimov-Optuna config: its own colour, dotted
+        return dict(color=CMS_COLORS[3], ls=":", lw=2.5)
+    if result.get("opt_tag") == "asimovFit":
+        return dict(color="#a96b59", ls="-.", lw=2.5)
+    return dict(color=colors.get(result["training_weights"], CMS_COLORS[4]),
+                ls="--" if result["optimized"] else "-", lw=2)
+
+
+def plot_variant_roc_overlay(results, era, plot_path, channel_US):
+    """Signal-region ROC (physics weights) of every --stage compare variant: background vs
+    signal efficiency, log y."""
+    fig, ax = plt.subplots()
+    for r in results:
+        ax.plot(r["tpr"], r["fpr"], label=f"{r['label']} (AUC {r['auc_w_phys']:.4f})", **_variant_style(r))
+    ax.set_yscale("log")
+    ax.set_xlim(0, 1)
+    ax.set_ylim(1e-4, 1)
+    ax.set_xlabel("Signal efficiency")
+    ax.set_ylabel("Background efficiency")
+    ax.set_title(channel_US + r": OOF, $M_{\mu\mu}$ signal region", y=-0.2, fontsize=14)
+    ax.legend(loc="lower right", fontsize=12)
+    _cms_label(ax, era)
+    _save(fig, f"{plot_path}comparison/roc_variants_{channel_US}_{era}")
+
+
+def plot_variant_significance_scan(results, era, plot_path, channel_US, zoom_margin=0.1):
+    """S/sqrt(B) in the signal region vs signal efficiency for every --stage compare variant,
+    with each variant's maximum marked. The lower panel zooms on the maxima: signal efficiency
+    from the smallest to the largest maximum's, +- zoom_margin, and S/sqrt(B) from 90% of the
+    lowest maximum to just above the highest (the rising edge of the curves is cut off)."""
+    fig, (ax, ax_z) = plt.subplots(2, 1, figsize=(10, 12),
+                                   gridspec_kw=dict(height_ratios=(3, 2), hspace=0.08))
+    best_eff = [r["working_points"]["Max"]["eff_signal"] for r in results]
+    lo, hi = max(0.0, min(best_eff) - zoom_margin), min(1.0, max(best_eff) + zoom_margin)
+    best_sig = [r["working_points"]["Max"]["significance"] for r in results]
+    for r in results:
+        scan, best = r["scan"], r["working_points"]["Max"]
+        style = _variant_style(r)
+        for axis, label in ((ax, f"{r['label']} (max {best['significance']:.3f})"), (ax_z, None)):
+            axis.plot(scan["eff_signal"], scan["significance"], label=label, **style)
+            axis.plot(best["eff_signal"], best["significance"], marker="o", color=style["color"], ls="none")
+    ax.axvspan(lo, hi, color="grey", alpha=0.15, lw=0)
+    ax.set_xlim(0, 1)
+    ax.set_ylim(bottom=0)
+    ax.set_ylabel(r"$S/\sqrt{B}$")
+    ax.legend(loc="lower center", fontsize=12)
+    _cms_label(ax, era)
+    ax_z.set_xlim(lo, hi)
+    ax_z.set_ylim(0.9 * min(best_sig), max(best_sig) + 0.05 * (max(best_sig) - 0.9 * min(best_sig)))
+    ax_z.set_xlabel("Signal efficiency")
+    ax_z.set_ylabel(r"$S/\sqrt{B}$ (zoom)")
+    _save(fig, f"{plot_path}comparison/significance_variants_{channel_US}_{era}")
+
+
+def plot_variant_tight_mass(results, mass, weights, cut, era, plot_path, channel_US, bin_width=1.0):
+    """Unit-area background M_mumu in the tight category (BDT > cut) of every --stage compare
+    variant (`results[i]["oof_bkg"]`, row-aligned with `mass`/`weights`), against the inclusive
+    background shape, with the ratio to inclusive below (error: the tight-category one only)."""
+    edges = np.arange(kf.TRAIN_REGION[0], kf.TRAIN_REGION[1] + bin_width / 2, bin_width)
+    fig, (ax, ax_r) = plt.subplots(2, 1, sharex=True, figsize=(10, 11),
+                                   gridspec_kw=dict(height_ratios=(3, 1), hspace=0.05))
+    inclusive, _, _ = kf.normalized_hist(mass, weights, bins=edges)
+    hep.histplot(inclusive, bins=edges, ax=ax, color="grey", histtype="fill", alpha=0.35,
+                 label="inclusive")
+    for r in results:
+        passed = r["oof_bkg"] > cut
+        eff = weights[passed].sum() / weights.sum()
+        print(f"[INFO] {r['label']} BDT > {cut:g}: background eff {eff:.4f}, "
+              f"N_eff = {kf.effective_entries(weights[passed]):.0f}")
+        if weights[passed].sum() <= 0:
+            print(f"[WARNING] {r['label']}: no background weight above BDT {cut:g}, skipped in the plot")
+            continue
+        counts, err, _ = kf.normalized_hist(mass[passed], weights[passed], bins=edges)
+        style = _variant_style(r)
+        hep.histplot(counts, bins=edges, ax=ax, yerr=err, color=style["color"], ls=style["ls"], lw=2,
+                     label=f"{r['label']} (eff {eff:.3g})")
+        ok = inclusive > 0
+        ratio = np.divide(counts, inclusive, out=np.full_like(counts, np.nan), where=ok)
+        ratio_err = np.divide(err, inclusive, out=np.zeros_like(err), where=ok)
+        hep.histplot(ratio, bins=edges, ax=ax_r, yerr=ratio_err, color=style["color"], ls=style["ls"], lw=2)
+    ax_r.axhline(1, color="grey", lw=1)
+    ax.set_xlim(edges[0], edges[-1])
+    ax.set_ylim(bottom=0, top=ax.get_ylim()[1] * 1.3)
+    ax.set_ylabel(f"Normalized events / {bin_width:g} GeV")
+    ax.set_xlabel("")
+    ax.legend(loc="upper right", fontsize=12, ncol=2, title=f"{channel_US} background, BDT > {cut:g}",
+              title_fontsize=12)
+    _cms_label(ax, era)
+    ax_r.set_ylim(0.5, 1.5)
+    ax_r.set_xlabel(r"$M_{\mu\mu}$ [GeV]")
+    ax_r.set_ylabel("Tight / incl.")
+    cut_tag = f"{cut:.2f}".replace(".", "p")
+    _save(fig, f"{plot_path}comparison/tight_mass_variants_BDTgt{cut_tag}_{channel_US}_{era}")
+
+
+def plot_asimov_trial(number, params, infos, era, path, pruned_after=None, fitted=False, infeasible=False):
+    """One Optuna trial of --objective asimov: Asimov Z vs boosting round per CV validation fold
+    with the fold average and the chosen checkpoint (top), and the per-category Z of every fold
+    at that checkpoint (bottom; a fold that stopped earlier shows its last round). A pruned trial
+    shows the folds done before it was stopped. fitted: the Z of --objective asimov_fit;
+    infeasible: the trial failed the mass-sculpting constraint."""
+    best_round, best_z, mean_curve = kf.mean_z_curve(infos, full=True)
+    fig, (ax, ax_c) = plt.subplots(2, 1, figsize=(12, 13), gridspec_kw=dict(height_ratios=(3, 2)), layout="constrained")
+    colors = _fold_colors(kf.N_FOLDS)
+    for info in infos:
+        rounds = sorted(info["z_curve"])
+        ax.plot(rounds, [info["z_curve"][r] for r in rounds], marker="o", ms=3, lw=1.5,
+                color=colors[info["fold"]], label=f"fold {info['fold']}")
+    rounds = sorted(mean_curve)
+    ax.plot(rounds, [mean_curve[r] for r in rounds], color="black", lw=3, label="fold average")
+    ax.axvline(best_round, color="grey", ls="--", lw=1.5, label=f"chosen: round {best_round}")
+    ax.set_xlabel("Boosting round", fontsize=20)
+    ax.set_ylabel("Binned Asimov Z (validation fold" + (", fitted bkg)" if fitted else ")"), fontsize=20)
+    state = (f"pruned after fold {pruned_after}" if pruned_after is not None
+             else f"mean Z = {best_z:.4f} at round {best_round}")
+    ax.set_title(f"trial {number}: {state}" + (" -- INFEASIBLE (mass sculpting)" if infeasible else ""),
+                 fontsize=16, color="#e42536" if infeasible else "black")
+    ax.legend(loc="lower right", fontsize=11, ncol=2)
+    ax.text(0.02, 0.97, "\n".join(f"{k} = {v:.4g}" for k, v in params.items()), transform=ax.transAxes,
+            va="top", fontsize=10, family="monospace",
+            bbox=dict(boxstyle="round", facecolor="white", alpha=0.8, edgecolor="grey"))
+
+    def tightness(label):  # "0-2%" -> 0 ... "70-100%" -> 70; "cat<k>" fallbacks after them
+        return float(label.split("-")[0]) if label.endswith("%") else 1000 - float(label[3:])
+
+    per_fold = {}
+    for info in infos:
+        r = kf.fold_round(info, best_round)
+        per_fold[info["fold"]] = dict(info["z_categories"][r]) if r is not None else {}
+    labels = sorted({label for cats in per_fold.values() for label in cats}, key=tightness)
+    width = 0.8 / max(len(per_fold), 1)
+    for j, (fold, cats) in enumerate(sorted(per_fold.items())):
+        ax_c.bar(np.arange(len(labels)) + (j - (len(per_fold) - 1) / 2) * width,
+                 [cats.get(label, 0.0) for label in labels], width=width, color=colors[fold],
+                 label=f"fold {fold}")
+    ax_c.set_xticks(np.arange(len(labels)))
+    ax_c.set_xticklabels(labels, fontsize=20)
+    ax_c.set_xlabel("Category (top fraction of the signal)", fontsize=20)
+    ax_c.set_ylabel(f"Z at round {best_round}", fontsize=20)
+    ax_c.legend(fontsize=11, ncol=len(per_fold))
+    _save(fig, f"{path}trial_{number:03d}")
+    return best_round
+
+
+def _trial_names(number):
+    """(title, file stem) of a trial plot: an Optuna trial number, or a name such as "test"."""
+    if isinstance(number, (int, np.integer)):
+        return f"trial {number}", f"trial_{number:03d}"
+    return str(number), str(number)
+
+
+def _edge_labels(n_inner):
+    """Label of each inner category edge (ascending score): the signal fraction above it."""
+    fractions = kf.ASIMOV_SIGNAL_FRACTIONS[:-1][::-1]  # ascending score = decreasing fraction
+    return [f"{100 * f:g}%" for f in fractions] if n_inner == len(fractions) else [""] * n_inner
+
+
+def plot_asimov_trial_scores(number, infos, best_round, era, path, sample="validation folds, out-of-fold"):
+    """BDT probability of the CV validation folds together (out-of-fold) at the trial's chosen
+    round, signal and background each normalized to unit area, with the category edges (the mean
+    over the folds, the band their min-max; each fold's categories are its own signal quantiles).
+    The lower panel zooms on the tight categories (from the 20% edge up). number: the trial, or a
+    name (e.g. "test" with a single-sample `infos`, xgb_kfold.single_sample_info); sample: wording."""
+    title, stem = _trial_names(number)
+    hists, fold_edges = {0: 0.0, 1: 0.0}, []
+    for info in infos:
+        r = kf.fold_round(info, best_round)
+        if r is None:
+            continue
+        for cls in (0, 1):
+            hists[cls] = hists[cls] + info["score_hists"][r][cls]
+        fold_edges.append(np.asarray(info["cat_edges_prob"][r]))
+    n_bins = kf.SCORE_HIST_BINS
+    fine = np.linspace(0, 1, n_bins + 1)
+    norm = {cls: hists[cls] / hists[cls].sum() if np.sum(hists[cls]) > 0 else np.zeros(n_bins) for cls in (0, 1)}
+    n_inner = max(len(e) for e in fold_edges)
+    full = np.array([e for e in fold_edges if len(e) == n_inner])
+    mean_edges, lo_edges, hi_edges = full.mean(axis=0), full.min(axis=0), full.max(axis=0)
+    labels = _edge_labels(n_inner)
+
+    fig, (ax, ax_z) = plt.subplots(2, 1, figsize=(12, 13), gridspec_kw=dict(height_ratios=(1, 1)), layout="constrained")
+    styles = {1: dict(color=CMS_COLORS[2], label="signal"), 0: dict(color=CMS_COLORS[0], label="background")}
+
+    def draw(axis, x_lo, x_hi, max_bins, annotate):
+        first, last = int(np.floor(x_lo * n_bins)), int(np.ceil(x_hi * n_bins))
+        group = max(1, (last - first) // max_bins)
+        last = min(n_bins, first + group * -(-(last - first) // group))  # whole groups
+        first = last - group * ((last - first) // group)
+        edges = fine[first:last + 1:group]
+        for cls in (1, 0):
+            h = norm[cls][first:last].reshape(-1, group).sum(axis=1)
+            hep.histplot(h, edges, ax=axis, lw=2, **styles[cls])
+        top = axis.get_ylim()[1]
+        for j, (m, lo, hi) in enumerate(zip(mean_edges, lo_edges, hi_edges)):
+            if not edges[0] <= m <= edges[-1]:
+                continue
+            axis.axvspan(lo, hi, color="grey", alpha=0.25, lw=0)
+            axis.axvline(m, color="black", ls="--", lw=1.2)
+            if annotate:
+                axis.text(m, top * 0.98, labels[j], rotation=90, ha="right", va="top", fontsize=11)
+        axis.set_xlim(edges[0], edges[-1])
+        axis.set_ylabel(f"Fraction of events / {group / n_bins:.4g}")
+
+    draw(ax, 0.0, 1.0, 50, annotate=False)
+    ax.set_xlabel(f"BDT probability ({sample})", fontsize=20)
+    ax.set_title(f"{title}: round {best_round}", fontsize=16)
+    ax.legend(loc="upper center", fontsize=12, title_fontsize=11,
+              title="dashed: category edges" + (" (fold mean, band: fold min-max)" if len(fold_edges) > 1 else ""))
+    zoom_index = labels.index("20%") if "20%" in labels else max(n_inner - 4, 0)
+    filled = np.flatnonzero((hists[0] != 0) | (hists[1] != 0))
+    x_hi = fine[filled[-1] + 1] if len(filled) else 1.0  # up to the highest filled bin
+    x_lo = max(0.0, lo_edges[zoom_index] - 0.1 * (x_hi - lo_edges[zoom_index]))
+    draw(ax_z, x_lo, x_hi, 80, annotate=True)
+    ax_z.set_xlabel("BDT probability (zoom on the tight categories; labels: signal fraction above)", fontsize=20)
+    _save(fig, f"{path}{stem}_scores")
+
+
+def plot_asimov_trial_sculpting(number, sculpt, best_round, era, path, rebin=5, sample="validation folds"):
+    """Mass-sculpting check of one trial (xgb_kfold.combine_sculpt at its chosen round), one panel
+    per fixed category, validation folds summed, normalized to the category's background MC:
+    black = category background MC; grey = inclusive background (the prediction's reference shape);
+    blue dashed = sideband prediction (per fold: inclusive shape x exp(-lambda m), lambda fitted on
+    the category's 115-120 and 130-135 GeV MC, normalized to its sideband yield). Lower panel:
+    MC / prediction with the window prediction uncertainty. The text gives the numbers behind the
+    decision: window MC vs prediction (fold sums), the tilt, the per-fold pulls and their
+    combination sum/sqrt(n), which the constraint compares with SCULPT_MAX_PULL in the tight
+    categories (kf.sculpt_is_tight); the prediction, ratio and window numbers use only the folds
+    with enough sideband MC for a pull;
+    the KS p-value (category vs rest of the background) is information only. number: the trial, or
+    a name (e.g. "test" for a single sample); sample: wording of the footnote."""
+    from matplotlib.gridspec import GridSpec
+    title, stem = _trial_names(number)
+    edges = sculpt["hist_edges"]
+    cats = sculpt["categories"]
+    if edges is None or not cats:
+        return
+    n = (len(edges) - 1) // rebin * rebin
+    coarse = edges[:n + 1:rebin]
+    centres = (coarse[1:] + coarse[:-1]) / 2
+
+    def tightness(label):  # "a-b%" -> (a, b): tight first; merged ranges after their narrower ones
+        lo, hi = label.rstrip("%").split("-")
+        return float(lo), float(hi)
+
+    def rb(values):
+        return np.asarray(values, dtype=float)[:n].reshape(-1, rebin).sum(axis=1)
+
+    def steps(ax, values, **kwargs):  # step line over the full range, no drop to zero at the edges
+        ax.step(coarse, np.append(values, values[-1]), where="post", **kwargs)
+
+    red = "#e42536"
+    labels = sorted(cats, key=tightness)
+    handles = legend_labels = None
+    n_rows = max(1, -(-len(labels) // 4))  # merged categories (tied scores) can give more than 8
+    fig = plt.figure(figsize=(26, 7.5 * n_rows))
+    grid = GridSpec(3 * n_rows - 1, 4, figure=fig, height_ratios=([3, 1, 0.5] * n_rows)[:-1], hspace=0.06,
+                    wspace=0.22)
+    for i, label in enumerate(labels):
+        row, col = 3 * (i // 4), i % 4
+        ax, ax_r = fig.add_subplot(grid[row, col]), fig.add_subplot(grid[row + 1, col])
+        c = cats[label]
+        h, h2, incl = rb(c["hist"]), rb(c["hist2"]), rb(c["incl"])
+        total = h.sum()
+        if total <= 0:
+            ax.set_title(f"{label}: no background", fontsize=13)
+            continue
+        for a in (ax, ax_r):
+            a.axvspan(*kf.SCULPT_WINDOW, color="grey", alpha=0.12, lw=0)
+            a.set_xlim(coarse[0], coarse[-1])
+        if incl.sum() > 0:
+            steps(ax, incl / incl.sum(), color="grey", lw=1.8, label="inclusive background (reference shape)")
+        pred = rb(c["pred"]) if c["pred"] is not None else None
+        if pred is not None:
+            h_fit, h2_fit = rb(c["hist_fit"]), rb(c["hist2_fit"])  # the folds with a prediction
+            steps(ax, pred / h_fit.sum() if h_fit.sum() > 0 else pred * 0, color=CMS_COLORS[0], lw=2, ls="--",
+                  label=r"sideband fit: inclusive $\times e^{-\lambda m}$ (115-120, 130-135)")
+        err = np.sqrt(np.clip(h2, 0, None))
+        ax.errorbar(centres, h / total, yerr=err / total, fmt="o", ms=3.5, color="black",
+                    label="category background MC")
+        pull = c["pull"]
+        tight = kf.sculpt_is_tight(label)
+        flagged = tight and pull is not None and pull > kf.SCULPT_MAX_PULL
+        color = red if flagged else "black"
+        if pred is not None:  # ratio panel
+            ok = pred > 0
+            ratio = np.divide(h_fit, pred, out=np.full_like(h_fit, np.nan), where=ok)
+            err_fit = np.sqrt(np.clip(h2_fit, 0, None))
+            ax_r.errorbar(centres[ok], ratio[ok], yerr=err_fit[ok] / pred[ok], fmt="o", ms=3, color="black")
+            ax_r.axhline(1, color=CMS_COLORS[0], lw=1.5, ls="--")
+            if c["B_pred_sum"]:
+                rel = c["B_pred_err_sum"] / c["B_pred_sum"]
+                ax_r.fill_between(kf.SCULPT_WINDOW, 1 - rel, 1 + rel, color=CMS_COLORS[0], alpha=0.25, lw=0)
+            finite = ratio[ok & np.isfinite(ratio)]
+            lo = min(0.8, np.nanmin(finite) - 0.05) if len(finite) else 0.8
+            hi = max(1.2, np.nanmax(finite) + 0.05) if len(finite) else 1.2
+            ax_r.set_ylim(max(lo, 0.0), min(hi, 3.0))
+        ax_r.set_ylabel("MC / pred", fontsize=12)
+        ax_r.set_xlabel(r"$M_{\mu\mu}$ [GeV]", fontsize=13)
+        ax.tick_params(labelbottom=False, labelsize=11)
+        ax_r.tick_params(labelsize=11)
+        if pull is not None and c["n_folds_all"] == 1:  # a single sample: no fold combination
+            text = (f"window MC {c['B_win_sum']:.4g} vs pred {c['B_pred_sum']:.4g} $\\pm$ {c['B_pred_err_sum']:.2g}"
+                    f" ({100 * c['excess']:+.1f}%)\n"
+                    f"tilt $\\lambda$ = {c['fold_lam'][0]:+.4f} /GeV\n"
+                    f"pull = {pull:+.2f}")
+        elif pull is not None:
+            text = (f"window MC {c['B_win_sum']:.4g} vs pred {c['B_pred_sum']:.4g} $\\pm$ {c['B_pred_err_sum']:.2g}"
+                    f" ({100 * c['excess']:+.1f}%)\n"
+                    f"tilt $\\lambda$ = {np.mean(c['fold_lam']):+.4f} /GeV (fold mean)\n"
+                    "fold pulls: " + " ".join(f"{p:+.1f}" for p in c["fold_pulls"])
+                    + (f" ({c['n_folds']} of {c['n_folds_all']} folds)" if c["n_folds"] < c["n_folds_all"] else "")
+                    + "\n"
+                    f"combined pull $\\Sigma/\\sqrt{{n}}$ = {pull:+.2f}")
+        else:
+            text = "too few sideband MC events: no pull"
+        if c["ks_p"] is not None:
+            text += f"\nKS p (vs rest) = {c['ks_p']:.2g}"
+        ax.text(0.97, 0.96, text, transform=ax.transAxes, ha="right", va="top", fontsize=10.5, color=color,
+                bbox=dict(boxstyle="round", facecolor="white", alpha=0.85, edgecolor="grey"))
+        ax.set_title(label + (" (constraint)" if tight else ""), fontsize=14, color=color)
+        if flagged:
+            for a in (ax, ax_r):
+                for spine in a.spines.values():
+                    spine.set_edgecolor(red)
+                    spine.set_linewidth(3)
+        ax.set_ylim(bottom=0, top=ax.get_ylim()[1] * 1.45)
+        if col == 0:
+            ax.set_ylabel(f"Fraction / {rebin * kf.SCULPT_HIST_BIN:g} GeV", fontsize=13)
+        if handles is None:
+            handles, legend_labels = ax.get_legend_handles_labels()
+    single = all(c["n_folds_all"] == 1 for c in cats.values())
+    state = "INFEASIBLE" if sculpt["constraint"] > 0 else "feasible"
+    if single:  # e.g. the test sample: the constraint is only applied in the CV
+        checked = any(kf.sculpt_is_tight(l) and c["pull"] is not None for l, c in cats.items())
+        state = ("no tight-category pull (too few sideband MC events)" if not checked
+                 else "fails the CV constraint (information)" if sculpt["constraint"] > 0 else "passes the CV constraint")
+    if handles:
+        from matplotlib.patches import Patch
+        band = Patch(color=CMS_COLORS[0], alpha=0.25,
+                     label=r"ratio panel: window prediction uncertainty $\pm\sigma_{pred}/B_{pred}$")
+        fig.legend(list(handles) + [band], list(legend_labels) + [band.get_label()], loc="upper center",
+                   bbox_to_anchor=(0.5, 0.965), ncol=2, fontsize=13, frameon=False)
+    fig.suptitle(f"{title}, round {best_round}: mass sculpting {state}", fontsize=17, y=0.99,
+                 color=red if sculpt["constraint"] > 0 else "black")
+    fig.text(0.5, 0.055, f"{sample}{'' if single else ', per fold'}: pull = (MC - pred) / sqrt($\\Sigma w^2$ + $\\sigma_{{pred}}^2$) in "
+             f"{kf.SCULPT_WINDOW[0]:g}-{kf.SCULPT_WINDOW[1]:g} GeV;  constraint: $\\Sigma$ pulls / $\\sqrt{{n}}$ > "
+             f"{kf.SCULPT_MAX_PULL:g} in a category within the top {100 * kf.SCULPT_TIGHT_MAX_FRACTION:g}% of the signal -> infeasible."
+             + ("" if single else "  Window numbers are fold sums (display)."), ha="center", fontsize=13)
+    _save(fig, f"{path}{stem}_sculpting")
+
+
+def plot_asimov_trial_bkg_fit(number, infos, best_round, era, path, sample="validation-fold MC"):
+    """--objective asimov_fit: the tightest category's background MC of every validation fold at the
+    trial's chosen round, with the exponential fit that enters the Asimov Z (band: its fit
+    uncertainty) and the pulls. Unscaled validation-fold MC. number: the trial, or a name (e.g.
+    "test" with a single-sample `infos`: one panel); sample: wording."""
+    from matplotlib.gridspec import GridSpec
+    title, stem = _trial_names(number)
+    colors = _fold_colors(kf.N_FOLDS)
+    if len(infos) == 1:  # one sample: fit and pull panels with the description beside them
+        fig = plt.figure(figsize=(17, 9))
+        grid = GridSpec(2, 2, figure=fig, height_ratios=(3, 1), width_ratios=(2, 1), hspace=0.08, wspace=0.1)
+        slots, text_slot = [(0, 0)], grid[:, 1]
+    else:
+        fig = plt.figure(figsize=(21, 13))
+        grid = GridSpec(5, 3, figure=fig, height_ratios=(3, 1, 0.55, 3, 1), hspace=0.08, wspace=0.25)
+        slots, text_slot = [(0, 0), (0, 1), (0, 2), (3, 0), (3, 1)], grid[3:, 2]
+    for info, (row, col) in zip(sorted(infos, key=lambda i: i["fold"]), slots):
+        r = kf.fold_round(info, best_round)
+        if r is None or r not in info.get("tight_fit", {}):
+            continue
+        fit = info["tight_fit"][r]
+        ax, ax_p = fig.add_subplot(grid[row, col]), fig.add_subplot(grid[row + 1, col])
+        hist = fit["tight_hist"]
+        edges, sumw, err = hist["edges"], hist["sumw"], np.sqrt(hist["sumw2"])
+        centres = (edges[1:] + edges[:-1]) / 2
+        color = colors[info["fold"]]
+        ax.errorbar(centres, sumw, yerr=err, fmt="o", ms=4, color="black", label="background MC")
+        if "lam" in fit:
+            b, sigma = kf.fitted_background(fit["lam"], fit["B_raw"], np.asarray(fit["cov"]), edges)
+            ax.stairs(b, edges, color=color, lw=2.5, label="exponential fit")
+            ax.stairs(b + sigma, edges, baseline=b - sigma, fill=True, color=color, alpha=0.3, label="fit unc.")
+            # MC variance expected from the fit (b times the mean weight sum(w^2)/sum(w)), so that
+            # empty bins of sparse weighted MC get a sensible pull
+            mean_w = hist["sumw2"].sum() / sumw.sum() if sumw.sum() > 0 else 0.0
+            total = np.sqrt(np.clip(b, 0, None) * mean_w + sigma ** 2)
+            pulls = np.divide(sumw - b, total, out=np.zeros_like(b), where=total > 0)
+            ax_p.bar(centres, pulls, width=np.diff(edges), color=color, alpha=0.7)
+            text = (f"{fit['label']}: $\\lambda$ = {fit['lam']:.4f} $\\pm$ {fit['lam_err']:.4f} /GeV\n"
+                    f"MC events {fit['n_events']}, $N_{{eff}}$ = {fit['n_eff']:.1f}\n"
+                    f"B (unscaled) = {fit['B_raw']:.3g}, Z = {fit['Z']:.3f}")
+        else:
+            text = f"{fit['label']}: no fit"
+        ax.text(0.97, 0.96, text, transform=ax.transAxes, ha="right", va="top", fontsize=11,
+                bbox=dict(boxstyle="round", facecolor="white", alpha=0.85, edgecolor="grey"))
+        ax.set_title(f"fold {info['fold']}" if len(infos) > 1 else sample, fontsize=14)
+        ax.set_ylim(bottom=min(0, ax.get_ylim()[0]), top=ax.get_ylim()[1] * 1.35)
+        ax.set_ylabel(f"Events / {kf.ASIMOV_FIT_PLOT_BIN:g} GeV", fontsize=13)
+        ax.tick_params(labelbottom=False, labelsize=11)
+        ax_p.axhline(0, color="grey", lw=1)
+        ax_p.set_ylim(-3.5, 3.5)
+        ax_p.set_ylabel("Pull", fontsize=13)
+        ax_p.set_xlabel(r"$M_{\mu\mu}$ [GeV]", fontsize=13)
+        ax_p.tick_params(labelsize=11)
+        for a in (ax, ax_p):
+            a.set_xlim(edges[0], edges[-1])
+        if (row, col) == (0, 0):
+            ax.legend(loc="upper left", fontsize=11)
+    ax_t = fig.add_subplot(text_slot)
+    ax_t.axis("off")
+    ax_t.text(0.0, 0.9, f"{title}, round {best_round}\n\ntightest category after merging,\n"
+              f"{sample} (unscaled)\n\nfit: exp(-$\\lambda$ m), unbinned weighted ML\n"
+              f"on {kf.TRAIN_REGION[0]:g}-{kf.TRAIN_REGION[1]:g} GeV\n\npull = (MC - fit) / "
+              "$\\sqrt{\\sigma_{MC}^2 + \\sigma_{fit}^2}$,\n"
+              "$\\sigma_{MC}^2$ = fit $\\times$ $\\Sigma w^2 / \\Sigma w$", va="top", fontsize=15, transform=ax_t.transAxes)
+    _save(fig, f"{path}{stem}_bkgfit")
+
+
+def plot_test_vs_cv_z(test_asimov, cv, n_rounds, era, path):
+    """--stage test: binned Asimov Z per category and in total of the refit on the untouched test
+    sample (bars: the optimized metric filled, the other one hatched) next to the cross-validation
+    folds of the chosen configuration at its round (points: fold mean, bars: fold std). Both are
+    scaled to the full MC. The per-category CV values exist only for studies that recorded them
+    (cv["fold_z_categories"]); the CV total is the selected maximum over trials and checkpoints,
+    so it tends to lie above the test value."""
+    def tightness(label):  # "a-b%" -> (a, b); "cat<k>" fallbacks after them
+        try:
+            lo, hi = label.rstrip("%").split("-")
+            return 0, float(lo), float(hi)
+        except ValueError:
+            return 1, 0.0, 0.0
+
+    optimized = "fit" if test_asimov["objective"] == "asimov_fit" else "raw"
+    test = {key: {c["label"]: c["Z"] for c in test_asimov[f"categories_{key}"]} for key in ("raw", "fit")}
+    cv_cats = cv.get("fold_z_categories") if cv else None
+    labels = {label for values in test.values() for label in values}
+    if cv_cats:
+        labels |= {label for fold in cv_cats for label in fold}
+    labels = sorted(labels, key=tightness) + ["total"]
+    for key in ("raw", "fit"):
+        test[key]["total"] = test_asimov[f"z_{key}"]
+    cv_points = {}
+    if cv_cats:
+        for label in labels[:-1]:
+            values = [fold[label] for fold in cv_cats if label in fold]
+            if values:
+                cv_points[label] = (np.mean(values), np.std(values), len(values))
+    if cv and cv.get("fold_z_curves"):
+        totals = []
+        for curve in cv["fold_z_curves"]:
+            done = [int(r) for r in curve if int(r) <= n_rounds]
+            totals.append(curve[str(max(done))] if done else 0.0)
+        cv_points["total"] = (np.mean(totals), np.std(totals), len(totals))
+
+    x = np.arange(len(labels))
+    fig, ax = plt.subplots(figsize=(14, 8))
+    for key, offset in (("raw", -0.2), ("fit", 0.2)):
+        is_opt = key == optimized
+        ax.bar(x + offset, [test[key].get(label, np.nan) for label in labels], width=0.38,
+               color=CMS_COLORS[0] if key == "raw" else CMS_COLORS[1], alpha=0.85 if is_opt else 0.35,
+               hatch=None if is_opt else "//", edgecolor="black", lw=0.8,
+               label=f"test, {'raw' if key == 'raw' else 'fitted'} background" + (" (optimized)" if is_opt else ""))
+    if cv_points:
+        pts = [(j, *cv_points[label]) for j, label in enumerate(labels) if label in cv_points]
+        offset = 0.2 if optimized == "fit" else -0.2
+        ax.errorbar([j + offset for j, *_ in pts], [m for _, m, _, _ in pts], yerr=[s for _, _, s, _ in pts],
+                    fmt="o", ms=8, color="black", capsize=4, lw=2,
+                    label=f"cross-validation ({optimized}): fold mean $\\pm$ std")
+    ax.axvline(len(labels) - 1.5, color="grey", lw=1)
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, fontsize=14)
+    ax.set_xlabel("Category (top fraction of the signal)", fontsize=16)
+    ax.set_ylabel("Binned Asimov Z (scaled to the full MC)", fontsize=16)
+    ax.set_ylim(0, ax.get_ylim()[1] * 1.25)
+    notes = [f"test refit, {n_rounds} rounds"]
+    if "total" in cv_points and cv_points["total"][0] > 0:
+        ratio = test[optimized]["total"] / cv_points["total"][0]
+        notes.append(f"total test / CV ({optimized}) = {ratio:.3f}")
+    if not cv_cats:
+        notes.append("per-category CV values not stored by this study")
+    ax.text(0.02, 0.97, "\n".join(notes), transform=ax.transAxes, va="top", fontsize=13,
+            bbox=dict(boxstyle="round", facecolor="white", alpha=0.85, edgecolor="grey"))
+    ax.legend(loc="upper right", fontsize=12)
+    _cms_label(ax, era)
+    _save(fig, f"{path}test_z_categories")
 
 
 def plot_feature_importance_kfold(models, variables, tag, plot_path):

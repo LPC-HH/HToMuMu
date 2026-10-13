@@ -15,12 +15,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "python"))
 from bdt_categories_io import save_bdt_category, variant_dir_suffix
 
 # directory-suffix flags, stripped so the positional arguments below are unaffected:
-#   --legacy     the pre-K-fold single-model scores 
-#                optimistically biased -- for comparison only.
+#   --legacy     the pre-K-fold single-model scores
 #   --optimized  the Optuna-configured K-fold scores 
 #   --compare    the six-variant tuples of train.py --stage compare
-#   --variant <label>  the K-fold scores of any train.py --stage apply variant, by its variant
-#                label (train.py's VARIANT.label, e.g. asimovFit_flatMassRes). 
+#   --variant <label>  the K-fold scores of any train.py --stage apply variant rain.py's VARIANT.label, e.g. asimovFit_flatMassRes). 
 
 dir_suffix = ""
 for suffix_flag in ("--legacy", "--optimized", "--compare", "--variant"):
@@ -146,8 +144,8 @@ UPROOT_OPEN = dict(file_handler=ur.MultithreadedFileSource)
 BDT_score_path = "../root_io/tuples/BDT_score/" + channel_US + file_append + "/" + subset_title + "/"
 #N_max_iterations = 4 if channel_US == "ggH" else 4
 use_bsConstrain = True
-#signal_region = (122.5 , 127.5)
-signal_region = (121.0 , 129.0)
+signal_region = (122.5 , 127.5)
+#signal_region = (121.0 , 129.0)
 draw_data = True
 
 if use_bsConstrain:

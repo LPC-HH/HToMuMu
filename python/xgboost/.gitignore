@@ -5,7 +5,7 @@
 !/models/dev/
 /models/dev/*
 !/models/dev/config_optuna_*.json
-/models/dev/config_optuna_*_smoke.json
+/models/dev/config_optuna_*_smoke*.json
 /modelsOld/*
 optunaPlots
 *.db

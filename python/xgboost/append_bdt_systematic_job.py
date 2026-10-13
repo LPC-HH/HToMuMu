@@ -135,7 +135,7 @@ xgb_utils.score_tuple_into(
     "_category",
     USE_BSCONSTRAIN,
     variable_names,
-    bundle,
+    {f"BDT_{channel_US}": bundle},
     tag=f"{tuple_type}_{era}_{systematic}",
 )
 
