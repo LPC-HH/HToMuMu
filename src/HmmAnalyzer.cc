@@ -54,7 +54,7 @@ int main(int argc, char *argv[]) {
     //std::cout << year_num.Data() << std::endl;
 
     HmmAnalyzer Hmm(inputFileList, outFileName, data, is_data_input, year_num,
-                    include_Z, include_H);
+                    include_Z, include_H, ifSync);
     Hmm.muon_pt_syst = muon_pt_syst;
     Hmm.apply_muon_pt_syst_to_signal =
         !is_data_input && muon_pt_syst != "nominal";
@@ -178,7 +178,7 @@ void HmmAnalyzer::EventLoop() {
     std::cout << "Btag calibration loaded" << std::endl;           
     long nentries = fChain->GetEntriesFast();
     //h_nEntries->SetBinContent(1, nentries);
-    //nentries = 5000;
+    nentries = 500;
     long nbytes = 0;
     long nb = 0;
     
@@ -274,14 +274,29 @@ void HmmAnalyzer::EventLoop() {
 
 
         bool trig_decision = (HLT_IsoMu24 == 1);
-
+        if(ifSync){
+            if(trig_decision){
+                t_pass_HLT_IsoMu24 = true;
+            }
+            else{
+                t_pass_HLT_IsoMu24 = false;
+            }
+        }
         bool run_trig_checks = 
             (trig_decision && Flag_HBHENoiseFilter && Flag_HBHENoiseIsoFilter &&
              Flag_EcalDeadCellTriggerPrimitiveFilter && Flag_goodVertices &&
              Flag_globalSuperTightHalo2016Filter && PV_npvsGood > 0);
 
         if(!run_trig_checks) {
-            continue;
+            if(!ifSync){
+                continue;
+            }
+            else{
+                t_pass_trigger_flags = false;
+            }
+        }
+        else if(ifSync){
+            t_pass_trigger_flags = true;
         }
 
         h_nTrigger->Fill(0.5);
@@ -293,7 +308,15 @@ void HmmAnalyzer::EventLoop() {
         //std::cout << "Running muon checks" << std::endl; 
         if (!run_muChecks) {
             //std::cout << "Muon checks valid" << std::endl; 
-            continue;
+            if(!ifSync){
+                continue;
+            }
+            else{
+                t_pass_atleast_two_PF_muons = false;
+            }
+        }
+        else if(ifSync){
+            t_pass_atleast_two_PF_muons = true;
         }
 
         //add in MET variable
@@ -359,7 +382,15 @@ void HmmAnalyzer::EventLoop() {
         }
 
         if(n_valid_muons < 2){
-            continue;
+            if(!ifSync){
+                continue;
+            }
+            else{
+                t_pass_atleast_two_loose_soft_muons = false;
+            }
+        }
+        else if(ifSync){
+            t_pass_atleast_two_loose_soft_muons = true;
         }
 
         float best_pair_pt_sum = -1.0;
@@ -406,15 +437,25 @@ void HmmAnalyzer::EventLoop() {
         }
         //std::cout << "Checking 2 valid muons" << std::endl; 
         if(!two_valid_muons){
-            //std::cout << "No valid muons" << std::endl; 
+            t_pass_two_OS_mediumID_harder_muons = false;
             continue;
         }
-
+        else if(ifSync){
+            t_pass_two_OS_mediumID_harder_muons = true;
+        }
         h_nTwoMuons->Fill(0.5);
 
         //Ensure only 3 Muons
         if(n_valid_muons > 2){
-            continue;
+            if(!ifSync){
+                continue;
+            }
+            else{
+                t_pass_no_extra_loose_soft_muons = false;
+            }
+        }
+        else if(ifSync){
+            t_pass_no_extra_loose_soft_muons = true;
         }
 
         h_nNoExtraMuon->Fill(0.5);
@@ -513,11 +554,11 @@ void HmmAnalyzer::EventLoop() {
                 continue;
             }
             else{
-                t_pass_trigger_match = false;
+                t_pass_muon_trigger_match = false;
             }
         }
         else if (ifSync){
-            t_pass_trigger_match = true;
+            t_pass_muon_trigger_match = true;
         }
 
         h_nTriggerMatch->Fill(0.5);
@@ -949,7 +990,15 @@ void HmmAnalyzer::EventLoop() {
 
             if (!isValidJet(j, corrected_jet_pt)) {
                 //std::cout << "Jet " << j << " invalid" << std::endl;
-                continue;
+                if(!ifSync){
+                    continue;
+                }
+                else{
+                    t_pass_valid_jet->push_back(false);
+                }
+            }
+            else if(ifSync){
+                t_pass_valid_jet->push_back(true);
             }
             h_nValidJets->Fill(0.5);
             //std::cout << "Valid jet" << std::endl;
@@ -966,7 +1015,15 @@ void HmmAnalyzer::EventLoop() {
                                 Jet_eta[j], Jet_phi[j]);
             if (dR1 < 0.4 || dR2 < 0.4) {
                 //std::cout << "Jet " << j << " not well seperated" << std::endl;
-                continue;
+                if(!ifSync){
+                    continue;
+                }
+                else{
+                    t_pass_jet_seperation->push_back(false);
+                }
+            }
+            else if(ifSync){
+                t_pass_jet_seperation->push_back(true);
             }
             h_nValidSeperatedJets->Fill(0.5);
 
@@ -1117,7 +1174,15 @@ void HmmAnalyzer::EventLoop() {
             t_bJet_SFdown->push_back(jet_scalefactor_do);
         }
         if (veto_event_jvm) {
-            continue; 
+            if(!ifSync){
+                continue;
+            }
+            else{
+                t_pass_jet_veto = false;
+            }
+        }
+        else if(ifSync){
+            t_pass_jet_veto = true;
         }      
         h_nValidNotVetoedJets->Fill(0.5);
         t_leadJet_idx = leadJet_idx;

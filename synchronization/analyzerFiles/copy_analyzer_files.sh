@@ -22,8 +22,11 @@ copy_dir() {
 
 for dataset in Muon0_2024H Muon1_2024H; do
     copy_dir "$src_base/Data/$dataset" "$dst_dir/data/$dataset"
+    cd $dst_dir/data/$dataset
+    hadd ${dataset}.root *.root
+    rm Higgs*.root
 done
 
-for mode in ggH VBF; do
-    copy_dir "$src_base/MC_signal/${mode}_Summer24" "$dst_dir/signal/$mode"
-done
+#for mode in ggH VBF; do
+#    copy_dir "$src_base/MC_signal/${mode}_Summer24" "$dst_dir/signal/$mode"
+#done

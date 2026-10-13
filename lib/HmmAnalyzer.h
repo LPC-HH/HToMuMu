@@ -301,7 +301,8 @@ class HmmAnalyzer : public MainEvent {
     HmmAnalyzer(const TString &inputFileList = "foo.txt",
                 const char *outFileName = "histo.root",
                 TString dataset = "data", bool is_data_input = false,
-                TString year_num = "2017",  bool include_Z_ = false, bool include_H_ = true);
+                TString year_num = "2017",  bool include_Z_ = false, bool include_H_ = true,
+                bool ifSync_ = false);
     virtual ~HmmAnalyzer();
     // void Analyze(bool is_data, int option, string outputFileName, string
     // label);
@@ -629,9 +630,18 @@ class HmmAnalyzer : public MainEvent {
 
     //synchronization leaves
     //event
+    Bool_t t_pass_HLT_IsoMu24;
+    Bool_t t_pass_trigger_flags;
+    Bool_t t_pass_atleast_two_PF_muons;
+    Bool_t t_pass_atleast_two_loose_soft_muons;
+    Bool_t t_pass_two_OS_mediumID_harder_muons;
+    Bool_t t_pass_no_extra_loose_soft_muons;
     Bool_t t_pass_no_extra_electrons;
-    Bool_t t_pass_trigger_match;
-    //diMuon
+    Bool_t t_pass_muon_trigger_match;
+    Bool_t t_pass_jet_veto;
+    std::vector<Bool_t> *t_pass_valid_jet;
+    std::vector<Bool_t> *t_pass_jet_seperation;
+
     //jets
 
 };
@@ -641,7 +651,7 @@ class HmmAnalyzer : public MainEvent {
 #ifdef HmmAnalyzer_cxx
 HmmAnalyzer::HmmAnalyzer(const TString &inputFileList, const char *outFileName,
                          TString dataset, bool is_data_input, TString year_num, 
-                         bool include_Z_, bool include_H_) {
+                         bool include_Z_, bool include_H_, bool ifSync_) {
     // if parameter tree is not specified (or zero), connect the file
     // used to generate this class and read the Tree.
 
@@ -649,6 +659,7 @@ HmmAnalyzer::HmmAnalyzer(const TString &inputFileList, const char *outFileName,
     year = year_num;
     include_Z = include_Z_;
     include_H = include_H_;
+    ifSync = ifSync_;
     muon_pt_syst = "nominal";
     apply_muon_pt_syst_to_signal = false;
     yearst = std::string(year.Data());
@@ -1283,8 +1294,17 @@ void HmmAnalyzer::clearTreeVectors() {
     
 
     //syncronization values
+    t_pass_HLT_IsoMu24 = false;
+    t_pass_trigger_flags = false;
+    t_pass_atleast_two_PF_muons = false;
+    t_pass_atleast_two_loose_soft_muons = false;
+    t_pass_two_OS_mediumID_harder_muons = false;
+    t_pass_no_extra_loose_soft_muons = false;
     t_pass_no_extra_electrons = false;
-    t_pass_trigger_match = false;
+    t_pass_muon_trigger_match = false;
+    t_pass_jet_veto = false;
+    t_pass_valid_jet->clear();
+    t_pass_jet_seperation->clear();
 }
 
 void HmmAnalyzer::BookTreeBranches() {
@@ -1793,9 +1813,20 @@ void HmmAnalyzer::BookTreeBranches() {
     tree->Branch("t_GenJet_pt", "vector<float>", &t_GenJet_pt);
 
     //synchronization branches
+    t_pass_valid_jet = new std::vector<Bool_t>();
+    t_pass_jet_seperation = new std::vector<Bool_t>();
     if(ifSync){
+        tree->Branch("t_pass_valid_jet", &t_pass_valid_jet);
+        tree->Branch("t_pass_jet_seperation", &t_pass_jet_seperation);
+        tree->Branch("t_pass_HLT_IsoMu24", &t_pass_HLT_IsoMu24, "t_pass_HLT_IsoMu24/O");
+        tree->Branch("t_pass_trigger_flags", &t_pass_trigger_flags, "t_pass_trigger_flags/O");
+        tree->Branch("t_pass_atleast_two_PF_muons", &t_pass_atleast_two_PF_muons, "t_pass_atleast_two_PF_muons/O");
+        tree->Branch("t_pass_atleast_two_loose_soft_muons", &t_pass_atleast_two_loose_soft_muons, "t_pass_atleast_two_loose_soft_muons/O");
+        tree->Branch("t_pass_two_OS_mediumID_harder_muons", &t_pass_two_OS_mediumID_harder_muons, "t_pass_two_OS_mediumID_harder_muons/O");
+        tree->Branch("t_pass_no_extra_loose_soft_muons", &t_pass_no_extra_loose_soft_muons, "t_pass_no_extra_loose_soft_muons/O");
         tree->Branch("t_pass_no_extra_electrons", &t_pass_no_extra_electrons, "t_pass_no_extra_electrons/O");
-        tree->Branch("t_pass_trigger_match", &t_pass_trigger_match, "t_pass_trigger_match/O");
+        tree->Branch("t_pass_muon_trigger_match", &t_pass_muon_trigger_match, "t_pass_muon_trigger_match/O");
+        tree->Branch("t_pass_jet_veto", &t_pass_jet_veto, "t_pass_jet_veto/O");
     }
 }
 #endif // #ifdef HmmAnalyzer_cxx

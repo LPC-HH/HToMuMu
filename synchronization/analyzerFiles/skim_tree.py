@@ -19,20 +19,22 @@ BRANCHES = {
     "t_Mu_bsConstrainedPt_nanoAOD": "mu_pt_preCorr",
     "t_Mu_phi": "mu_phi",
     "t_Mu_eta": "mu_eta",
-    #muon isolation
-    #muonID
+    "t_Mu_pfRelIso04_all": "mu_RelIso04",
+    "t_Mu_looseId": "mu_looseID",
+    "t_Mu_mediumId": "mu_mediumID",
+    "t_Mu_tightId": "mu_tightID",
     "t_diMuon_bsConstrainedPt": "dimuon_pt",
     "t_diMuon_mass": "dimuon_mass",
-    #dimuon pt preCorr
-    #diMuon mass preCorr
+    "t_diMuon_bsConstrainedPt_nanoAOD": "dimuon_pt_preCorr",
+    "t_diMuon_bsConstrainedMass_nanoAOD": "dimuon_mass_preCorr",
     "t_nJet": "jet_mult",
     "t_Jet_pt": "jet_pt",
     "t_Jet_pt_nanoAOD": "jet_pt_preCorr",
+    "t_Jet_mass": "jet_mass",
+    "t_Jet_mass_nanoAOD": "jet_mass_preCorr",
     "t_Jet_eta": "jet_eta",
     "t_Jet_phi": "jet_phi",
-    #jet btag info
-    #jet quality flags
-    #trigger matching info
+    "t_Jet_btagPNetB": "jet_btagPNetB",
     "t_PuppiMET_phi": "puppiMET_phi",
     "t_PuppiMET_pt": "puppiMET_pt",
     #MC info
