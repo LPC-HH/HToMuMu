@@ -16,7 +16,7 @@ namespace JecApplication {
 
 // -------- Utilities (headers only) --------
 inline bool hasPhiDependentL2(const std::string& year) {
-    return (year == "2023Post" || year == "2024" || year == "2025");
+    return (year == "2023Post" || year == "2024" || year == "2025"|| year == "2026");
 }
 inline bool requiresRunBasedResidual(const std::string& year) {
     return (
@@ -24,12 +24,12 @@ inline bool requiresRunBasedResidual(const std::string& year) {
             year == "2017" || year == "2018" ||
             year == "2022Pre" || year == "2022Post" ||
             year == "2023Pre" || year == "2023Post" || 
-            year == "2024" || year == "2025"
+            year == "2024" || year == "2025"|| year == "2026"
            );
 }
 inline bool usesPuppiMet(const std::string& year) {
     static const std::unordered_set<std::string> years{
-        "2022Pre", "2022Post", "2023Pre", "2023Post", "2024", "2025"
+        "2022Pre", "2022Post", "2023Pre", "2023Post", "2024", "2025", "2026"
     };
     return years.count(year) != 0;
 }

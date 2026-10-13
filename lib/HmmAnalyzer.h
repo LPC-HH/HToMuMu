@@ -51,7 +51,8 @@ constexpr unsigned int N_LHE_PDF_WEIGHTS = 103;
 constexpr unsigned int N_LHE_SCALE_WEIGHTS = 9;
 
 inline const std::map<TString, TString> NANOAOD_VERSION = {
-    {"2022", "v12"}, {"2022EE", "v12"},  {"2023", "v12"}, {"2023BPix", "v12"}, {"2024", "v15"}, {"2025", "v15"}
+    {"2022", "v12"}, {"2022EE", "v12"},  {"2023", "v12"}, {"2023BPix", "v12"}, 
+    {"2024", "v15"}, {"2025", "v15"}, {"2026", "v15"},
 };
 
 inline std::string GetJercYear(const std::string &year) {
@@ -67,6 +68,8 @@ inline std::string GetJercYear(const std::string &year) {
         return "2024";
     else if (year == "2025")
         return "2025";
+    else if (year == "2026")
+        return "2026";
     else
         throw std::runtime_error("Unsupported JERC year: " + year);
 }
@@ -84,6 +87,8 @@ inline std::string GetJercEra(const std::string &jec_year) {
         return "Era2024All";
     if (jec_year == "2025")
         return "Era2025All";
+    if (jec_year == "2026")
+        return "Era2026All";
     throw std::runtime_error("Unsupported JEC era year: " + jec_year);
 }
 
@@ -257,7 +262,8 @@ inline bool IsYearLabel(const std::string &label) {
         "2023",
         "2023BPix",
         "2024",
-        "2025"
+        "2025",
+        "2026"
     };
 
     return std::find(valid_year_labels.begin(),
@@ -658,6 +664,7 @@ HmmAnalyzer::HmmAnalyzer(const TString &inputFileList, const char *outFileName,
     muon_pt_cut["2023BPix"] = 26.0;
     muon_pt_cut["2024"] = 26.0;
     muon_pt_cut["2025"] = 26.0;
+    muon_pt_cut["2026"] = 26.0;
 
     // Define b-tagging scores
     // b-tag particleNet LOOSE score selection
@@ -667,6 +674,7 @@ HmmAnalyzer::HmmAnalyzer(const TString &inputFileList, const char *outFileName,
     btagLoose_cut["2023BPix"] = 0.0359;
     btagLoose_cut["2024"] = 0.0365;
     btagLoose_cut["2025"] = 0.0365;// 2025 values NEED to be checked
+    btagLoose_cut["2026"] = 0.0365;// 2025 values NEED to be checked
 
     // b-tag deepFlav MEDIUM score selection
     btagMedium_cut["2016"] = 0.6321;
@@ -679,6 +687,7 @@ HmmAnalyzer::HmmAnalyzer(const TString &inputFileList, const char *outFileName,
     btagMedium_cut["2023BPix"] = 0.1919;
     btagMedium_cut["2024"] = 0.1990;
     btagMedium_cut["2025"] = 0.1990; // 2025 values NEED to be checked
+    btagMedium_cut["2026"] = 0.1990; // 2025 values NEED to be checked
 
     if (!is_data) {
         getPileupHistograms();
@@ -728,6 +737,9 @@ void HmmAnalyzer::getPileupHistograms() {
     } else if (yearst == "2025") {
         pileupWeightFile =
             new TFile("./data/pileup/PileupReweight_Summer25.root");
+    } else if (yearst == "2026") {
+        pileupWeightFile =
+            new TFile("./data/pileup/PileupReweight_Summer26.root");
     }
     if (pileupWeightFile) {
         pileupWeightHist = (TH1F *)pileupWeightFile->Get("npu_nominal");

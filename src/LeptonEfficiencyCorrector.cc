@@ -20,7 +20,7 @@ void LeptonEfficiencyCorrector::initializeCorrections(const std::string& year_nu
     //std::string basePath = "/afs/cern.ch/user/y/yulou/CMSSW_14_0_14/src/HToMuMu/data/leptonSF/";
     std::string basePath = "./data/leptonSF/";
     
-    const std::vector<std::string> valid_eras = {"2022", "2022EE", "2023", "2023BPix", "2024", "2025"};
+    const std::vector<std::string> valid_eras = {"2022", "2022EE", "2023", "2023BPix", "2024", "2025", "2026"};
     
     if (std::find(valid_eras.begin(), valid_eras.end(), year_num) != valid_eras.end()) {
         basePath += year_num + "/";

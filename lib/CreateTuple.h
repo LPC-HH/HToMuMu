@@ -301,14 +301,14 @@ CreateTuple::CreateTuple(TString input, TString weightFile, TString output, TStr
               << ", cross section: " << cross_section << std::endl;
     if (!is_data) {
         gen_weight_sum = GetGenWeightSum(weight_name);
-        //if(era == "2025"){
-        //    scale_factor = GetScaleFactor(luminosity + LUMINOSITY.at("2026"), cross_section, gen_weight_sum);
-        //}
-        //else{
-        //    scale_factor = GetScaleFactor(luminosity, cross_section, gen_weight_sum);
-        //}
+        if(era == "2025"){
+            scale_factor = GetScaleFactor(luminosity + LUMINOSITY.at("2026"), cross_section, gen_weight_sum);
+        }
+        else{
+            scale_factor = GetScaleFactor(luminosity, cross_section, gen_weight_sum);
+        }
         // is_data_int = 0;
-        scale_factor = GetScaleFactor(luminosity, cross_section, gen_weight_sum);
+        //scale_factor = GetScaleFactor(luminosity, cross_section, gen_weight_sum);
         // if (is_signal_) {
         // is_signal_int = 1;
         //} else {
@@ -1390,7 +1390,8 @@ bool CreateTuple::passesJetPtSelection(size_t index) const {
     }
 
     // 2024
-    else if (mc_campaign == 5) {
+    //else if (mc_campaign == 5) {
+    else if (mc_campaign == 5 || mc_campaign == 6 || mc_campaign == 7) {
 
         if (abs_eta < 2.5) {
             return true;
@@ -1402,9 +1403,9 @@ bool CreateTuple::passesJetPtSelection(size_t index) const {
     }
 
     // 2025
-    else if (mc_campaign == 6 || mc_campaign == 7) {
-        return true;
-    }
+    //else if (mc_campaign == 6 || mc_campaign == 7) {
+    //    return true;
+    //}
 
     else {
         std::cerr << "Jet pT era not found. mc_campaign = "

@@ -1178,5 +1178,123 @@
         }
       }
     }
+  },
+  "2026": {
+    "jercJsonPath": "./data/jetCorrections/jet_jerc.json.gz",
+    "ApplyOnData": {
+      "JesNominal": {
+        "Era2026All": {
+          "tagNameL1FastJet": "Summer24Prompt26_V1_DATA_L1FastJet_AK4PFPuppi",
+          "tagNameL2Relative": "Summer24Prompt26_V1_DATA_L2Relative_AK4PFPuppi",
+          "tagNameL2L3Residual": "Summer24Prompt26_V1_DATA_L2L3Residual_AK4PFPuppi"
+        }
+      }
+    },
+    "ApplyOnMC": {
+      "JesNominal": {
+        "tagNameL1FastJet": "Summer24Prompt26_V1_MC_L1FastJet_AK4PFPuppi",
+        "tagNameL2Relative": "Summer24Prompt26_V1_MC_L2Relative_AK4PFPuppi"
+      },
+      "JerNominal": {
+        "tagNamePtResolution": "Summer24Prompt26_RunBD_JRV1_MC_PtResolution_AK4PFPuppi",
+        "tagNameJerScaleFactor": "Summer24Prompt26_RunBD_JRV1_MC_ScaleFactor_AK4PFPuppi",
+        "tagNameJerSFUncertainty": "Summer24Prompt26_RunBD_JRV1_MC_SFUncertainty_AK4PFPuppi"
+      },
+      "JesUncertaintySet": {
+        "JesUncertaintySetFull": {
+          "CMS_scale_j_AbsoluteMPFBias": "Summer24Prompt26_V1_MC_AbsoluteMPFBias_AK4PFPuppi",
+          "CMS_scale_j_AbsoluteScale": "Summer24Prompt26_V1_MC_AbsoluteScale_AK4PFPuppi",
+          "CMS_scale_j_AbsoluteStat_2025": "Summer24Prompt26_V1_MC_AbsoluteStat_AK4PFPuppi",
+          "CMS_scale_j_FlavorQCD": "Summer24Prompt26_V1_MC_FlavorQCD_AK4PFPuppi",
+          "CMS_scale_j_Fragmentation": "Summer24Prompt26_V1_MC_Fragmentation_AK4PFPuppi",
+          "CMS_scale_j_PileUpDataMC": "Summer24Prompt26_V1_MC_PileUpDataMC_AK4PFPuppi",
+          "CMS_scale_j_PileUpPtBB": "Summer24Prompt26_V1_MC_PileUpPtBB_AK4PFPuppi",
+          "CMS_scale_j_PileUpPtEC1": "Summer24Prompt26_V1_MC_PileUpPtEC1_AK4PFPuppi",
+          "CMS_scale_j_PileUpPtEC2": "Summer24Prompt26_V1_MC_PileUpPtEC2_AK4PFPuppi",
+          "CMS_scale_j_PileUpPtHF": "Summer24Prompt26_V1_MC_PileUpPtHF_AK4PFPuppi",
+          "CMS_scale_j_PileUpPtRef": "Summer24Prompt26_V1_MC_PileUpPtRef_AK4PFPuppi",
+          "CMS_scale_j_RelativeFSR": "Summer24Prompt26_V1_MC_RelativeFSR_AK4PFPuppi",
+          "CMS_scale_j_RelativeJEREC1_2025": "Summer24Prompt26_V1_MC_RelativeJEREC1_AK4PFPuppi",
+          "CMS_scale_j_RelativeJEREC2_2025": "Summer24Prompt26_V1_MC_RelativeJEREC2_AK4PFPuppi",
+          "CMS_scale_j_RelativeJERHF": "Summer24Prompt26_V1_MC_RelativeJERHF_AK4PFPuppi",
+          "CMS_scale_j_RelativePtBB": "Summer24Prompt26_V1_MC_RelativePtBB_AK4PFPuppi",
+          "CMS_scale_j_RelativePtEC1_2025": "Summer24Prompt26_V1_MC_RelativePtEC1_AK4PFPuppi",
+          "CMS_scale_j_RelativePtEC2_2025": "Summer24Prompt26_V1_MC_RelativePtEC2_AK4PFPuppi",
+          "CMS_scale_j_RelativePtHF": "Summer24Prompt26_V1_MC_RelativePtHF_AK4PFPuppi",
+          "CMS_scale_j_RelativeBal": "Summer24Prompt26_V1_MC_RelativeBal_AK4PFPuppi",
+          "CMS_scale_j_RelativeSample_2025": "Summer24Prompt26_V1_MC_RelativeSample_AK4PFPuppi",
+          "CMS_scale_j_RelativeStatEC_2025": "Summer24Prompt26_V1_MC_RelativeStatEC_AK4PFPuppi",
+          "CMS_scale_j_RelativeStatFSR_2025": "Summer24Prompt26_V1_MC_RelativeStatFSR_AK4PFPuppi",
+          "CMS_scale_j_RelativeStatHF_2025": "Summer24Prompt26_V1_MC_RelativeStatHF_AK4PFPuppi",
+          "CMS_scale_j_SinglePionECAL": "Summer24Prompt26_V1_MC_SinglePionECAL_AK4PFPuppi",
+          "CMS_scale_j_SinglePionHCAL": "Summer24Prompt26_V1_MC_SinglePionHCAL_AK4PFPuppi",
+          "CMS_scale_j_TimePtEta_2025": "Summer24Prompt26_V1_MC_TimePtEta_AK4PFPuppi"
+        },
+        "JesUncertaintySetReduced": {
+          "CMS_scale_j_FlavorQCD": "Summer24Prompt26_V1_MC_Regrouped_FlavorQCD_AK4PFPuppi",
+          "CMS_scale_j_RelativeBal": "Summer24Prompt26_V1_MC_Regrouped_RelativeBal_AK4PFPuppi",
+          "CMS_scale_j_HF": "Summer24Prompt26_V1_MC_Regrouped_HF_AK4PFPuppi",
+          "CMS_scale_j_BBEC1": "Summer24Prompt26_V1_MC_Regrouped_BBEC1_AK4PFPuppi",
+          "CMS_scale_j_EC2": "Summer24Prompt26_V1_MC_Regrouped_EC2_AK4PFPuppi",
+          "CMS_scale_j_Absolute": "Summer24Prompt26_V1_MC_Regrouped_Absolute_AK4PFPuppi",
+          "CMS_scale_j_BBEC1_2025": "Summer24Prompt26_V1_MC_Regrouped_BBEC1_2025_AK4PFPuppi",
+          "CMS_scale_j_RelativeSample_2025": "Summer24Prompt26_V1_MC_Regrouped_RelativeSample_2025_AK4PFPuppi",
+          "CMS_scale_j_EC2_2025": "Summer24Prompt26_V1_MC_Regrouped_EC2_2025_AK4PFPuppi",
+          "CMS_scale_j_HF_2025": "Summer24Prompt26_V1_MC_Regrouped_HF_2025_AK4PFPuppi",
+          "CMS_scale_j_Absolute_2025": "Summer24Prompt26_V1_MC_Regrouped_Absolute_2025_AK4PFPuppi"
+        },
+        "JesUncertaintySetTotal": {
+          "CMS_scale_j_Total": "Summer24Prompt26_V1_MC_Total_AK4PFPuppi"
+        }
+      },
+      "JerUncertaintySet": {
+        "JerUncertaintySetFull": {
+          "CMS_res_j_eta0to1p93_pt0toInf_2025": [
+            0.0,
+            1.93,
+            0,
+            10000
+          ],
+          "CMS_res_j_eta1p93to2p5_pt0toInf_2025": [
+            1.93,
+            2.5,
+            0,
+            10000
+          ],
+          "CMS_res_j_eta2p5to3p0_pt0to50_2025": [
+            2.5,
+            3.0,
+            0,
+            50
+          ],
+          "CMS_res_j_eta2p5to3p0_pt50toInf_2025": [
+            2.5,
+            3.0,
+            50,
+            10000
+          ],
+          "CMS_res_j_eta3to5_pt0to50_2025": [
+            3.0,
+            5.0,
+            0,
+            50
+          ],
+          "CMS_res_j_eta3to5_pt50toInf_2025": [
+            3.0,
+            5.0,
+            50,
+            10000
+          ]
+        },
+        "JerUncertaintySetTotal": {
+          "CMS_res_j_2025": [
+            0.0,
+            6.0,
+            0,
+            10000
+          ]
+        }
+      }
+    }
   }
 }

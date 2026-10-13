@@ -13,7 +13,8 @@ static inline bool useGenMatchedOnlyJer(const std::string& year,
                                         double eta) {
     const double absEta = std::fabs(eta);
 
-    const bool affectedYear = (year != "2025");
+    //const bool affectedYear = (year != "2025");
+    const bool affectedYear = (year != "2025" && year != "2026");
 
     return affectedYear &&
            absEta > 2.5 &&

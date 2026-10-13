@@ -10,25 +10,27 @@ from utils.helper import save_figure
 
 ROOT.gROOT.SetBatch(True)
 hep.style.use("CMS")
+
 X_TICK_FONT_SIZE = 8
 POINT_LABEL_FONT_SIZE = 14
+
 year = "Combined"
-sample = "Data"
+sample = "VBF"
+
+
+# ================================================================
+# Files to compare
+# ================================================================
 
 files = {
- #    "pre-corr": (
- #        "/eos/uscms/store/user/lpchmumu/esledge/"
- #        "analyzer_HiggsMuMu_v1.5/tuples_v1.5.0/"
- #       f"haddTuples/{sample}_{year}_tuples.root"
- #    ),
-    "pre-corr": (
-        "/eos/uscms/store/user/lpchmumu/mbarrial/"
-        "analyzer_HiggsMuMu_v1.7/tuples_v1.7.0/"
+    "v2.3.0": (
+        "root://cmseos.fnal.gov//store/user/lpchmumu/mbarrial/"
+        "analyzer_HiggsMuMu_v2.3/tuples_v2.3.0/"
         f"haddTuples/{sample}_{year}_tuples.root"
     ),
-    "post-corr": (
-        "/eos/uscms/store/user/lpchmumu/mbarrial/"
-        "analyzer_HiggsMuMu_v1.10/tuples_v1.10.0/"
+    "v2.4.2": (
+        "root://cmseos.fnal.gov//store/user/lpchmumu/mbarrial/"
+        "analyzer_HiggsMuMu_v2.4/tuples_v2.4.2/"
         f"haddTuples/{sample}_{year}_tuples.root"
     ),
 }
@@ -43,11 +45,33 @@ cutflow_histograms = [
     ("h_nTriggerMatch", "Trigger match"),
     # ("h_nInFinalMassRange", "Final mass range"),
     ("h_nBjetRejection", "b-jet rejection"),
+    ("h_nggHCat", "ggH category"),
+    ("h_nVBFCat", "VBF category"),
 ]
 
 
 output_directory = f"../plots/cut_flow/{sample}/"
 
+
+# ================================================================
+# Useful indices
+# ================================================================
+
+histogram_names = [
+    histogram_name
+    for histogram_name, _ in cutflow_histograms
+]
+
+BJET_INDEX = histogram_names.index("h_nBjetRejection")
+GGH_INDEX = histogram_names.index("h_nggHCat")
+VBF_INDEX = histogram_names.index("h_nVBFCat")
+
+CATEGORY_X_POSITION = BJET_INDEX + 1
+
+
+# ================================================================
+# Functions
+# ================================================================
 
 def read_cutflow(file_path):
     """Read the number of events stored in each cut-flow histogram."""
@@ -83,15 +107,21 @@ def read_cutflow(file_path):
 
 def calculate_step_efficiency(values):
     """
-    Percentage passing each cut relative to the previous cut:
+    Percentage passing each cut relative to the previous cut.
 
-        current / previous * 100
+    ggH and VBF categories are both calculated relative to
+    h_nBjetRejection because they are parallel branches.
     """
 
     percentages = np.full(len(values), np.nan)
 
     for index in range(1, len(values)):
-        previous = values[index - 1]
+
+        if index in (GGH_INDEX, VBF_INDEX):
+            previous = values[BJET_INDEX]
+        else:
+            previous = values[index - 1]
+
         current = values[index]
 
         if previous != 0:
@@ -122,19 +152,35 @@ def add_point_labels(
     x_positions,
     values,
     line,
-    sample_label,
+    series_index,
+    n_series,
     value_format,
+    point_names=None,
 ):
-    """Add labels above or below the plotted points."""
+    """Add labels near plotted points."""
 
-    vertical_offset = 10 if sample_label == "pre-corr" else -18
+    if n_series == 1:
+        vertical_offset = 10
+    else:
+        vertical_offset = 12 + series_index * 12
 
-    for x_position, value in zip(x_positions, values):
+    for index, (x_position, value) in enumerate(
+        zip(x_positions, values)
+    ):
+
         if not np.isfinite(value):
             continue
 
+        text = value_format.format(value)
+
+        if point_names is not None:
+            point_name = point_names[index]
+
+            if point_name:
+                text = f"{point_name}: {text}"
+
         axis.annotate(
-            value_format.format(value),
+            text,
             xy=(x_position, value),
             xytext=(0, vertical_offset),
             textcoords="offset points",
@@ -144,8 +190,83 @@ def add_point_labels(
         )
 
 
+def plot_branched_cutflow(
+    axis,
+    values,
+    label,
+):
+    """
+    Plot the common cut flow up to b-jet rejection, then branch into
+    ggH and VBF categories at the same x position.
+    """
+
+    common_x_positions = np.arange(BJET_INDEX + 1)
+
+    plotted_line = axis.plot(
+        common_x_positions,
+        values[:BJET_INDEX + 1],
+        marker="o",
+        linewidth=2,
+        markersize=8,
+        label=label,
+    )[0]
+
+    color = plotted_line.get_color()
+
+    # ggH branch
+    axis.plot(
+        [BJET_INDEX, CATEGORY_X_POSITION],
+        [values[BJET_INDEX], values[GGH_INDEX]],
+        marker="o",
+        linewidth=2,
+        markersize=8,
+        color=color,
+    )
+
+    # VBF branch
+    axis.plot(
+        [BJET_INDEX, CATEGORY_X_POSITION],
+        [values[BJET_INDEX], values[VBF_INDEX]],
+        marker="s",
+        linewidth=2,
+        markersize=8,
+        color=color,
+    )
+
+    return plotted_line
+
+
+def print_table(title, values_dict, value_format, skip_first=False):
+    """Print a generic comparison table for all versions."""
+
+    labels = list(values_dict.keys())
+
+    print(f"\n{title}")
+
+    column_width = 18
+
+    header = f"{'Selection':<25}"
+
+    for label in labels:
+        header += f"{label:>{column_width}}"
+
+    print(header)
+    print("-" * (25 + column_width * len(labels)))
+
+    start_index = 1 if skip_first else 0
+
+    for index in range(start_index, len(cut_labels)):
+        row = f"{cut_labels[index]:<25}"
+
+        for label in labels:
+            value = values_dict[label][index]
+            row += f"{value_format.format(value):>{column_width}}"
+
+        print(row)
+
+
 # ================================================================
-# Read data and calculate efficiencies
+# Read data
 # ================================================================
 
 cutflows = {
@@ -163,6 +284,7 @@ cumulative_efficiencies = {
     for label, values in cutflows.items()
 }
 
+
 cut_labels = [
     cut_label
     for _, cut_label in cutflow_histograms
@@ -170,110 +292,91 @@ cut_labels = [
 
 
 # ================================================================
-# Print 1: Number of entries
+# Plot positions
 # ================================================================
 
-print("\nNumber of entries")
-print(
-    f"{'Selection':<25}"
-    f"{'pre-corr':>18}"
-    f"{'post-corr':>18}"
+# ggH and VBF occupy the same final x position
+x_positions = np.asarray(
+    list(range(BJET_INDEX + 1))
+    + [CATEGORY_X_POSITION, CATEGORY_X_POSITION]
 )
-print("-" * 61)
 
-for index, selection in enumerate(cut_labels):
-    pre_entries = cutflows["pre-corr"][index]
-    post_entries = cutflows["post-corr"][index]
-
-    print(
-        f"{selection:<25}"
-        f"{pre_entries:>18,.0f}"
-        f"{post_entries:>18,.0f}"
-    )
-
-
-# ================================================================
-# Print 2: Step efficiency
-# ================================================================
-
-print("\nStep efficiency relative to the previous selection")
-print(
-    f"{'Selection':<25}"
-    f"{'pre-corr':>18}"
-    f"{'post-corr':>18}"
+point_names = (
+    [""] * (BJET_INDEX + 1)
+    + ["ggH", "VBF"]
 )
-print("-" * 61)
 
-for index, selection in enumerate(cut_labels[1:], start=1):
-    pre_percentage = step_efficiencies["pre-corr"][index]
-    post_percentage = step_efficiencies["post-corr"][index]
+tick_positions = np.arange(CATEGORY_X_POSITION + 1)
 
-    print(
-        f"{selection:<25}"
-        f"{pre_percentage:>17.3f}%"
-        f"{post_percentage:>17.3f}%"
-    )
-
-
-# ================================================================
-# Print 3: Cumulative efficiency
-# ================================================================
-
-print("\nCumulative efficiency relative to all events")
-print(
-    f"{'Selection':<25}"
-    f"{'pre-corr':>18}"
-    f"{'post-corr':>18}"
+tick_labels = (
+    cut_labels[:BJET_INDEX + 1]
+    + ["Category"]
 )
-print("-" * 61)
 
-for index, selection in enumerate(cut_labels):
-    pre_percentage = cumulative_efficiencies["pre-corr"][index]
-    post_percentage = cumulative_efficiencies["post-corr"][index]
 
-    print(
-        f"{selection:<25}"
-        f"{pre_percentage:>17.3f}%"
-        f"{post_percentage:>17.3f}%"
-    )
+# ================================================================
+# Print tables
+# ================================================================
+
+print_table(
+    title="Number of entries",
+    values_dict=cutflows,
+    value_format="{:,.0f}",
+)
+
+print_table(
+    title="Step efficiency relative to the previous selection",
+    values_dict=step_efficiencies,
+    value_format="{:.3f}%",
+    skip_first=True,
+)
+
+print_table(
+    title="Cumulative efficiency relative to all events",
+    values_dict=cumulative_efficiencies,
+    value_format="{:.3f}%",
+)
 
 
 # ================================================================
 # Plot 1: Number of entries
 # ================================================================
 
-x_positions = np.arange(len(cut_labels))
-
 fig_entries, axis_entries = plt.subplots(figsize=(14, 8))
 
-for label, values in cutflows.items():
-    plotted_line = axis_entries.plot(
-        x_positions,
-        values,
-        marker="o",
-        linewidth=2,
-        markersize=8,
+n_series = len(cutflows)
+
+for series_index, (label, values) in enumerate(cutflows.items()):
+
+    plotted_line = plot_branched_cutflow(
+        axis=axis_entries,
+        values=values,
         label=label,
-    )[0]
+    )
 
     add_point_labels(
         axis=axis_entries,
         x_positions=x_positions,
         values=values,
         line=plotted_line,
-        sample_label=label,
+        series_index=series_index,
+        n_series=n_series,
         value_format="{:,.0f}",
+        point_names=point_names,
     )
 
-axis_entries.set_xticks(x_positions)
+
+axis_entries.set_xticks(tick_positions)
+
 axis_entries.set_xticklabels(
-    cut_labels,
+    tick_labels,
     rotation=35,
     ha="right",
     fontsize=X_TICK_FONT_SIZE,
 )
 
 axis_entries.set_yscale("log")
+
 axis_entries.set_ylabel("Number of entries")
 axis_entries.set_xlabel("Selection")
 
@@ -308,35 +411,36 @@ plt.close(fig_entries)
 # Plot 2: Step efficiency
 # ================================================================
 
-step_labels = cut_labels[1:]
-step_x_positions = np.arange(len(step_labels))
-
 fig_step, axis_step = plt.subplots(figsize=(14, 8))
 
-for label, percentages in step_efficiencies.items():
-    plotted_percentages = percentages[1:]
+n_series = len(step_efficiencies)
 
-    plotted_line = axis_step.plot(
-        step_x_positions,
-        plotted_percentages,
-        marker="o",
-        linewidth=2,
-        markersize=8,
+for series_index, (label, percentages) in enumerate(
+    step_efficiencies.items()
+):
+
+    plotted_line = plot_branched_cutflow(
+        axis=axis_step,
+        values=percentages,
         label=label,
-    )[0]
+    )
 
     add_point_labels(
         axis=axis_step,
-        x_positions=step_x_positions,
-        values=plotted_percentages,
+        x_positions=x_positions,
+        values=percentages,
         line=plotted_line,
-        sample_label=label,
+        series_index=series_index,
+        n_series=n_series,
         value_format="{:.2f}%",
+        point_names=point_names,
     )
 
-axis_step.set_xticks(step_x_positions)
+
+axis_step.set_xticks(tick_positions[1:])
+
 axis_step.set_xticklabels(
-    step_labels,
+    tick_labels[1:],
     rotation=35,
     ha="right",
     fontsize=X_TICK_FONT_SIZE,
@@ -344,6 +448,7 @@ axis_step.set_xticklabels(
 
 axis_step.set_ylabel("Step efficiency [%]")
 axis_step.set_xlabel("Selection")
+
 axis_step.set_ylim(0, 110)
 
 axis_step.grid(
@@ -378,28 +483,34 @@ plt.close(fig_step)
 
 fig_cumulative, axis_cumulative = plt.subplots(figsize=(14, 8))
 
-for label, percentages in cumulative_efficiencies.items():
-    plotted_line = axis_cumulative.plot(
-        x_positions,
-        percentages,
-        marker="o",
-        linewidth=2,
-        markersize=8,
+n_series = len(cumulative_efficiencies)
+
+for series_index, (label, percentages) in enumerate(
+    cumulative_efficiencies.items()
+):
+
+    plotted_line = plot_branched_cutflow(
+        axis=axis_cumulative,
+        values=percentages,
         label=label,
-    )[0]
+    )
 
     add_point_labels(
         axis=axis_cumulative,
         x_positions=x_positions,
         values=percentages,
         line=plotted_line,
-        sample_label=label,
+        series_index=series_index,
+        n_series=n_series,
         value_format="{:.2f}%",
+        point_names=point_names,
     )
 
-axis_cumulative.set_xticks(x_positions)
+
+axis_cumulative.set_xticks(tick_positions)
+
 axis_cumulative.set_xticklabels(
-    cut_labels,
+    tick_labels,
     rotation=35,
     ha="right",
     fontsize=X_TICK_FONT_SIZE,
@@ -407,6 +518,7 @@ axis_cumulative.set_xticklabels(
 
 axis_cumulative.set_ylabel("Cumulative efficiency [%]")
 axis_cumulative.set_xlabel("Selection")
+
 axis_cumulative.set_ylim(0, 110)
 
 axis_cumulative.grid(

@@ -148,7 +148,45 @@ datasets_info = {
                        "/Muon1/Run2025F-PromptReco-v2/NANOAOD"],
     "Muon1_2025G": ["T", 2, "2025", "Data",
                        "/Muon1/Run2025G-PromptReco-v1/NANOAOD"],
+
+
+    ####################################################################################################
+    # 2026  Datasets
+    ####################################################################################################
     
+    "Muon0_2026A": ["T", 2, "2026", "Data",
+                       "/Muon0/Run2026A-PromptReco-v1/NANOAOD"],
+    "Muon0_2026B": ["T", 2, "2026", "Data",
+                       "/Muon0/Run2026B-PromptReco-v1/NANOAOD"],
+    "Muon0_2026C": ["T", 2, "2026", "Data",
+                       "/Muon0/Run2026C-PromptReco-v1/NANOAOD"],
+    "Muon0_2026D": ["T", 2, "2026", "Data",
+                       "/Muon0/Run2026D-PromptReco-v1/NANOAOD"],
+    "Muon1_2026A": ["T", 2, "2026", "Data",
+                       "/Muon1/Run2026A-PromptReco-v1/NANOAOD"],
+    "Muon1_2026B": ["T", 2, "2026", "Data",
+                       "/Muon1/Run2026B-PromptReco-v1/NANOAOD"],
+    "Muon1_2026C": ["T", 2, "2026", "Data",
+                       "/Muon1/Run2026C-PromptReco-v1/NANOAOD"],
+    "Muon1_2026D": ["T", 2, "2026", "Data",
+                       "/Muon1/Run2026D-PromptReco-v1/NANOAOD"],
+    "Muon2_2026A": ["T", 2, "2026", "Data",
+                       "/Muon2/Run2026A-PromptReco-v1/NANOAOD"],
+    "Muon2_2026B": ["T", 2, "2026", "Data",
+                       "/Muon2/Run2026B-PromptReco-v1/NANOAOD"],
+    "Muon2_2026C": ["T", 2, "2026", "Data",
+                       "/Muon2/Run2026C-PromptReco-v1/NANOAOD"],
+    "Muon2_2026D": ["T", 2, "2026", "Data",
+                       "/Muon2/Run2026D-PromptReco-v1/NANOAOD"],
+    "Muon3_2026A": ["T", 2, "2026", "Data",
+                       "/Muon3/Run2026A-PromptReco-v1/NANOAOD"],
+    "Muon3_2026B": ["T", 2, "2026", "Data",
+                       "/Muon3/Run2026B-PromptReco-v1/NANOAOD"],
+    "Muon3_2026C": ["T", 2, "2026", "Data",
+                       "/Muon3/Run2026C-PromptReco-v1/NANOAOD"],
+    "Muon3_2026D": ["T", 2, "2026", "Data",
+                       "/Muon3/Run2026D-PromptReco-v1/NANOAOD"],
+
     ####################################################################################################
     # 2022 Simulations Backgrounds
     ####################################################################################################
