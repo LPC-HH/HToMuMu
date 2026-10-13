@@ -328,6 +328,7 @@ class HmmAnalyzer : public MainEvent {
     bool include_H; /**< Flag indicating if save H region. */
     std::string muon_pt_syst;
     bool apply_muon_pt_syst_to_signal;
+    bool ifSync;
     std::string yearst;
     std::map<std::string, float> muon_pt_cut;
     std::map<std::string, float> btagLoose_cut;
@@ -485,6 +486,9 @@ class HmmAnalyzer : public MainEvent {
     float t_diMuon_mass;
     float t_diMuon_bsConstrainedMass;
 
+    float t_diMuon_bsConstrainedPt_nanoAOD;
+    float t_diMuon_bsConstrainedMass_nanoAOD;
+
     float t_PuppiMET_phi;
     float t_PuppiMET_pt;
     float t_PuppiMET_sumEt;
@@ -621,6 +625,14 @@ class HmmAnalyzer : public MainEvent {
     std::vector<float> *t_GenJet_mass;
     std::vector<float> *t_GenJet_phi;
     std::vector<float> *t_GenJet_pt;
+
+
+    //synchronization leaves
+    //event
+    Bool_t t_pass_no_extra_electrons;
+    Bool_t t_pass_trigger_match;
+    //diMuon
+    //jets
 
 };
 
@@ -1130,6 +1142,9 @@ void HmmAnalyzer::clearTreeVectors() {
     t_diMuon_mass = FLOAT_NULL_VALUE;
     t_diMuon_bsConstrainedMass = FLOAT_NULL_VALUE;
 
+    t_diMuon_bsConstrainedPt_nanoAOD = FLOAT_NULL_VALUE;
+    t_diMuon_bsConstrainedMass_nanoAOD = FLOAT_NULL_VALUE;
+
     t_PuppiMET_phi = FLOAT_NULL_VALUE;
     t_PuppiMET_pt = FLOAT_NULL_VALUE;
     t_PuppiMET_sumEt = FLOAT_NULL_VALUE;
@@ -1265,6 +1280,11 @@ void HmmAnalyzer::clearTreeVectors() {
     t_GenJet_mass->clear();
     t_GenJet_phi->clear();
     t_GenJet_pt->clear();
+    
+
+    //syncronization values
+    t_pass_no_extra_electrons = false;
+    t_pass_trigger_match = false;
 }
 
 void HmmAnalyzer::BookTreeBranches() {
@@ -1471,10 +1491,12 @@ void HmmAnalyzer::BookTreeBranches() {
 
     tree->Branch("t_diMuon_pt", &t_diMuon_pt, "t_diMuon_pt/F");
     tree->Branch("t_diMuon_bsConstrainedPt", &t_diMuon_bsConstrainedPt, "t_diMuon_bsConstrainedPt/F");
+    tree->Branch("t_diMuon_bsConstrainedPt_nanoAOD", &t_diMuon_bsConstrainedPt_nanoAOD, "t_diMuon_bsConstrainedPt_nanoAOD/F");
     tree->Branch("t_diMuon_eta", &t_diMuon_eta, "t_diMuon_eta/F");
     tree->Branch("t_diMuon_phi", &t_diMuon_phi, "t_diMuon_phi/F");
     tree->Branch("t_diMuon_mass", &t_diMuon_mass, "t_diMuon_mass/F");
     tree->Branch("t_diMuon_bsConstrainedMass", &t_diMuon_bsConstrainedMass, "t_diMuon_bsConstrainedMass/F");
+    tree->Branch("t_diMuon_bsConstrainedMass_nanoAOD", &t_diMuon_bsConstrainedMass_nanoAOD, "t_diMuon_bsConstrainedMass_nanoAOD/F");
 
     tree->Branch("t_PuppiMET_phi", &t_PuppiMET_phi, "t_PuppiMET_phi/F");
     tree->Branch("t_PuppiMET_pt", &t_PuppiMET_pt, "t_PuppiMET_pt/F");
@@ -1769,5 +1791,11 @@ void HmmAnalyzer::BookTreeBranches() {
     tree->Branch("t_GenJet_mass", "vector<float>", &t_GenJet_mass);
     tree->Branch("t_GenJet_phi", "vector<float>", &t_GenJet_phi);
     tree->Branch("t_GenJet_pt", "vector<float>", &t_GenJet_pt);
+
+    //synchronization branches
+    if(ifSync){
+        tree->Branch("t_pass_no_extra_electrons", &t_pass_no_extra_electrons, "t_pass_no_extra_electrons/O");
+        tree->Branch("t_pass_trigger_match", &t_pass_trigger_match, "t_pass_trigger_match/O");
+    }
 }
 #endif // #ifdef HmmAnalyzer_cxx

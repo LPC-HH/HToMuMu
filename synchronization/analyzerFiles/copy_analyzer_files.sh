@@ -8,7 +8,7 @@ fi
 
 version=$1
 host="root://cmseos.fnal.gov"
-src_base="/store/user/lpchmumu/mbarrial/analyzer_HiggsMuMu_v${version}"
+src_base="/store/user/lpchmumu/esledge/analyzer_HiggsMuMu_v${version}"
 dst_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # copy_dir <EOS source dir> <local destination dir>

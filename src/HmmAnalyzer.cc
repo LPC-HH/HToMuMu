@@ -34,10 +34,10 @@
 
 int main(int argc, char *argv[]) {
 
-    if (argc != 9) {
-        std::cerr << "Please give 8 arguments: runList outputFileName dataset "
+    if (argc != 10) {
+        std::cerr << "Please give 9 arguments: runList outputFileName dataset "
           << "dataType(T/F) year include_Z(T/F) include_H(T/F) "
-          << "muon_pt_syst" << std::endl;
+          << "muon_pt_syst" << "ifSync(T/F)" << std::endl;
         return -1;
     }
     const char *inputFileList = argv[1];
@@ -49,6 +49,7 @@ int main(int argc, char *argv[]) {
     const bool include_Z = *argv[6] == 'T';
     const bool include_H = *argv[7] == 'T';
     const std::string muon_pt_syst = NormalizeMuonPtSyst(argv[8]);
+    const bool ifSync = *argv[9] == 'T';
 
     //std::cout << year_num.Data() << std::endl;
 
@@ -68,6 +69,8 @@ int main(int argc, char *argv[]) {
     std::cout << "  Muon pT systematic: " << muon_pt_syst << std::endl;
     std::cout << "  Apply muon pT systematic? "
               << Hmm.apply_muon_pt_syst_to_signal << std::endl;
+    std::cout << "  Synchronizing? " << ifSync << std::endl;
+
     Hmm.EventLoop();
 
     return 0;
@@ -455,7 +458,15 @@ void HmmAnalyzer::EventLoop() {
         }
 
         if (t_El_pt->size() > 0){
-            continue;
+            if(!ifSync){
+                continue;
+            }
+            else{
+                t_pass_no_extra_electrons = false;
+            }
+        }
+        else if(ifSync){
+            t_pass_no_extra_electrons = true;
         }
 
         h_nNoExtraElectron->Fill(0.5);
@@ -498,7 +509,15 @@ void HmmAnalyzer::EventLoop() {
 
         //std::cout << "Checking trig match" << std::endl; 
         if (!trig_match) {
-            continue;
+            if(!ifSync){
+                continue;
+            }
+            else{
+                t_pass_trigger_match = false;
+            }
+        }
+        else if (ifSync){
+            t_pass_trigger_match = true;
         }
 
         h_nTriggerMatch->Fill(0.5);
@@ -628,12 +647,21 @@ void HmmAnalyzer::EventLoop() {
         ROOT::Math::PtEtaPhiMVector mu2BSC((mu_pt_corr)[index_mu2],
                                         (Muon_eta)[index_mu2],
                                         (Muon_phi)[index_mu2], MUON_MASS);
+
+        ROOT::Math::PtEtaPhiMVector dimuBSC_nanoAOD;
+        ROOT::Math::PtEtaPhiMVector mu1BSC_nanoAOD((Muon_bsConstrainedPt)[index_mu1],
+                                        (Muon_eta)[index_mu1],
+                                        (Muon_phi)[index_mu1], MUON_MASS);
+        ROOT::Math::PtEtaPhiMVector mu2BSC_nanoAOD((Muon_bsConstrainedPt)[index_mu2],
+                                        (Muon_eta)[index_mu2],
+                                        (Muon_phi)[index_mu2], MUON_MASS);
         // mu1.SetPtEtaPhiM((mu_pt_corr)[index_mu1], (Muon_eta)[index_mu1],
         //(Muon_phi)[index_mu1], MUON_MASS);
         // mu2.SetPtEtaPhiM((mu_pt_corr)[index_mu2], (Muon_eta)[index_mu2],
         //(Muon_phi)[index_mu2], MUON_MASS);
         dimu = mu1 + mu2;
         dimuBSC = mu1BSC + mu2BSC;
+        dimuBSC_nanoAOD = mu1BSC_nanoAOD + mu2BSC_nanoAOD;
         t_diMuon_pt = dimu.Pt();
         t_diMuon_eta = dimuBSC.Eta();
         t_diMuon_phi = dimuBSC.Phi();
@@ -642,21 +670,30 @@ void HmmAnalyzer::EventLoop() {
         t_diMuon_bsConstrainedPt = dimuBSC.Pt();
         t_diMuon_bsConstrainedMass = dimuBSC.M();
 
-        //std::cout << "looking at diMuon mass" << std::endl;
+        t_diMuon_bsConstrainedPt_nanoAOD = dimuBSC_nanoAOD.Pt();
+        t_diMuon_bsConstrainedMass_nanoAOD = dimuBSC_nanoAOD.M();
 
-        if ((include_Z && include_H) || (!include_Z && !include_H)){
-            if (t_diMuon_bsConstrainedMass < 70 || t_diMuon_bsConstrainedMass > 180){
-                continue;
-            }    
-        }
-        else if (include_Z){
-            if(t_diMuon_bsConstrainedMass < 76 || t_diMuon_bsConstrainedMass > 106){
-                continue;
+        //std::cout << "looking at diMuon mass" << std::endl;
+        if(!ifSync){
+            if ((include_Z && include_H) || (!include_Z && !include_H)){
+                if (t_diMuon_bsConstrainedMass < 70 || t_diMuon_bsConstrainedMass > 180){
+                    continue;
+                }    
+            }
+            else if (include_Z){
+                if(t_diMuon_bsConstrainedMass < 76 || t_diMuon_bsConstrainedMass > 106){
+                    continue;
+                }
+            }
+            else{
+                //in Higgs region
+                if(t_diMuon_bsConstrainedMass < 100 || t_diMuon_bsConstrainedMass > 180){
+                    continue;
+                }
             }
         }
         else{
-            //in Higgs region
-            if(t_diMuon_bsConstrainedMass < 100 || t_diMuon_bsConstrainedMass > 180){
+            if(t_diMuon_bsConstrainedMass_nanoAOD < 50 || t_diMuon_bsConstrainedMass_nanoAOD > 200){
                 continue;
             }
         }

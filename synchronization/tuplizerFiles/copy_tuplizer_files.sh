@@ -9,7 +9,7 @@ fi
 tuplizer_version=$1
 analyzer_version=${1%.*}
 host="root://cmseos.fnal.gov"
-src_base="/store/user/lpchmumu/mbarrial/analyzer_HiggsMuMu_v${analyzer_version}/tuples_v${tuplizer_version}/"
+src_base="/store/user/lpchmumu/esledge/analyzer_HiggsMuMu_v${analyzer_version}/tuples_v${tuplizer_version}/"
 dst_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 echo $dst_dir
 

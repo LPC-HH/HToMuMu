@@ -32,6 +32,7 @@ BRANCHES = {
     "t_Jet_phi": "jet_phi",
     #jet btag info
     #jet quality flags
+    #trigger matching info
     "t_PuppiMET_phi": "puppiMET_phi",
     "t_PuppiMET_pt": "puppiMET_pt",
     #MC info
