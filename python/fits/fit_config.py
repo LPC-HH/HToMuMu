@@ -14,7 +14,7 @@ import os
 # --------------------------------------------------------------------------- #
 # Paths
 # --------------------------------------------------------------------------- #
-# Repository root (…/CMSSW_14_0_14/src/HToMuMu). This file is python/fits/fit_config.py
+# Repository root (…/CMSSW_15_0_9/src/HToMuMu). This file is python/fits/fit_config.py
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 SPLIT_DIR = os.path.join(REPO_ROOT, "root_io", "tuples", "split_tuples")
