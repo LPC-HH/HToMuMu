@@ -178,7 +178,7 @@ void HmmAnalyzer::EventLoop() {
     std::cout << "Btag calibration loaded" << std::endl;           
     long nentries = fChain->GetEntriesFast();
     //h_nEntries->SetBinContent(1, nentries);
-    nentries = 500;
+    //nentries = 500;
     long nbytes = 0;
     long nb = 0;
     

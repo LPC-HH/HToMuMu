@@ -21,7 +21,7 @@ ifH=$8
 file_type="data"
 if [ "$is_data" == "F" ]; then file_type="mc"; fi
 muon_pt_syst=${9:-nominal}
-ifSync=$10
+ifSync=${10}
 
 ###############################
 # Define exec and setup cmssw

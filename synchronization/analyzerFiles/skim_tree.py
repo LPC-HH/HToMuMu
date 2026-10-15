@@ -37,6 +37,17 @@ BRANCHES = {
     "t_Jet_btagPNetB": "jet_btagPNetB",
     "t_PuppiMET_phi": "puppiMET_phi",
     "t_PuppiMET_pt": "puppiMET_pt",
+    "t_pass_valid_jet": "pass_valid_jet",
+    "t_pass_jet_seperation": "pass_jet_seperation",
+    "t_pass_HLT_IsoMu24": "pass_HLT_IsoMu24",
+    "t_pass_trigger_flags": "pass_trigger_flags",
+    "t_pass_atleast_two_PF_muons": "pass_atleast_two_PF_muons",
+    "t_pass_atleast_two_loose_soft_muons": "pass_atleast_two_loose_soft_muons",
+    "t_pass_two_OS_mediumID_harder_muons": "pass_two_OS_mediumID_harder_muons",
+    "t_pass_no_extra_loose_soft_muons": "pass_no_extra_loose_soft_muons",
+    "t_pass_no_extra_electrons": "pass_no_extra_electrons",
+    "t_pass_muon_trigger_match": "pass_muon_trigger_match",
+    "t_pass_jet_veto": "pass_jet_event_veto",
     #MC info
 }
 
