@@ -48,10 +48,11 @@ class CreateTuple {
      * or background
      * @param include_Z Boolean flag indicating if include Z region
      * @param include_H Boolean flag indicating if include H region
+     * @param ifSync Boolean flag indicating if syncronizing
      */
     CreateTuple(TString input, TString weightFile, TString output, TString era, TString channel,
                 bool is_data, bool is_signal_,  bool include_Z, bool include_H,
-                TString jet_syst);
+                TString jet_syst, bool ifSync);
     /**
      * @brief Destructor for CreateTuple, cleaning up dynamically allocated
      * objects.
@@ -103,6 +104,7 @@ class CreateTuple {
     bool is_data;
     bool include_Z; /**< Flag indicating if save Z region. */
     bool include_H; /**< Flag indicating if save H region. */
+    bool ifSync; /**< Flag indicating if we are running synchronization pipeline */
     long double
         gen_weight_sum;     /**< Sum of generator weights for normalization. */
     const float luminosity; /**< Luminosity of the era. */
@@ -150,7 +152,8 @@ class CreateTuple {
     /** Read DiMuon variables */
     float diMuon_mass, diMuon_bsConstrainedMass_nanoAOD, diMuon_bsConstrainedMass, diMuon_pt,
         diMuon_bsConstrainedPt, diMuon_phi, diMuon_eta;
-
+    //diMuon sync variables
+    float diMuon_bsConstrainedPt_nanoAOD;
     /** Read MET variables **/
     float PuppiMET_phi, PuppiMET_pt, PuppiMET_sumEt;
 
@@ -160,6 +163,9 @@ class CreateTuple {
     std::vector<float> *mu_pt, *mu_bsConstrainedPt, *mu_bsConstrainedPt_nanoAOD,
         *mu_phi, *mu_eta, *mu_dz, *mu_dzErr;
     std::vector<float> *mu_ptErr, *mu_bsConstrainedPtErr;
+    //muon sync variables
+    std::vector<float> *mu_RelIso04; 
+    std::vector<bool> *mu_looseID, *mu_mediumID, *mu_tightID;
 
     /** Read electron variables */
     std::vector<float> *elec_pt;
@@ -181,6 +187,16 @@ class CreateTuple {
 
     /** Read Jet variables */
     float diJet_pt, diJet_eta, diJet_phi, diJet_mass, diJet_mass_mo;
+
+    //jet synch variables
+    std::vector<float> *jet_mass_nanoAOD;
+
+    //selection variables
+    Bool_t pass_two_OS_mediumID_harder_muons,
+            pass_no_extra_loose_soft_muons, pass_no_extra_electrons,
+            pass_muon_trigger_match, pass_jet_veto;
+
+    std::vector<Bool_t> *pass_valid_jet, *pass_jet_seperation;
 
     /** New Event variables */
     double scale_factor; // luminosity * cross_section / gen_weight_sum
@@ -264,7 +280,7 @@ inline std::string CreateTuple::JetMassBranchName(const std::string &jet_syst) {
 
 CreateTuple::CreateTuple(TString input, TString weightFile, TString output, TString era,
                          TString channel, bool is_data_, bool is_signal_, bool include_Z_,
-                         bool include_H_, TString jet_syst)
+                         bool include_H_, TString jet_syst, bool ifSync_)
     : luminosity(LUMINOSITY.at(era)), cross_section(CROSS_SECTION.at(channel)) {
 
     tree_input = new TChain("tree");
@@ -282,6 +298,7 @@ CreateTuple::CreateTuple(TString input, TString weightFile, TString output, TStr
     is_signal = is_signal_;
     include_Z = include_Z_;
     include_H = include_H_;
+    ifSync = ifSync_;
     analysis_channel = channel;
     is_data = is_data_;
     jet_pt_branch_name = JetPtBranchName(jet_syst_name);
@@ -331,6 +348,10 @@ CreateTuple::CreateTuple(TString input, TString weightFile, TString output, TStr
     mu_eta = nullptr;
     mu_dz = nullptr;
     mu_dzErr = nullptr;
+    mu_RelIso04 = nullptr;
+    mu_looseID = nullptr;
+    mu_mediumID = nullptr;
+    mu_tightID = nullptr;
     elec_pt = nullptr;
     lhe_pdf_weight = nullptr;
     lhe_scale_weight = nullptr;
@@ -340,6 +361,9 @@ CreateTuple::CreateTuple(TString input, TString weightFile, TString output, TStr
     jet_pt_nanoAOD = nullptr;
     jet_phi = nullptr;
     jet_mass = nullptr;
+    jet_mass_nanoAOD = nullptr;
+    pass_valid_jet = nullptr;
+    pass_jet_seperation = nullptr;
 
     jet_area = nullptr;
 
@@ -484,6 +508,8 @@ void CreateTuple::setBranchesAddressesOutput() {
     tree_output->Branch("diMuon_pt", &diMuon_pt, "diMuon_pt/F");
     tree_output->Branch("diMuon_bsConstrainedPt", &diMuon_bsConstrainedPt,
                         "diMuon_bsConstrainedPt/F");
+    tree_output->Branch("diMuon_bsConstrainedPt_nanoAOD", &diMuon_bsConstrainedPt_nanoAOD,
+                        "diMuon_bsConstrainedPt_nanoAOD/F");
     tree_output->Branch("diMuon_phi", &diMuon_phi, "diMuon_phi/F");
     tree_output->Branch("diMuon_eta", &diMuon_eta, "diMuon_eta/F");
     tree_output->Branch("diMuon_rapidity", &diMuon_rapidity,
@@ -611,6 +637,35 @@ void CreateTuple::setBranchesAddressesOutput() {
     tree_output->Branch("min_delta_phi_diMuon_jet", &min_delta_phi_diMuon_jet,
                         "min_delta_phi_diMuon_jet/F");
     
+    if(ifSync){
+        //muon variables
+        tree_output->Branch("mu_pt", &mu_bsConstrainedPt);
+        tree_output->Branch("mu_pt_nanoAOD", &mu_bsConstrainedPt_nanoAOD);
+        tree_output->Branch("mu_phi", &mu_phi);
+        tree_output->Branch("mu_eta", &mu_eta);
+        tree_output->Branch("mu_RelIso04", &mu_RelIso04);
+        tree_output->Branch("mu_looseID", &mu_looseID);
+        tree_output->Branch("mu_mediumID", &mu_mediumID);
+        tree_output->Branch("mu_tightID", &mu_tightID);
+        
+        //jet variables
+        tree_output->Branch("jet_pt", &jet_pt);
+        tree_output->Branch("jet_pt_nanoAOD", &jet_pt_nanoAOD);
+        tree_output->Branch("jet_mass", &jet_mass);
+        tree_output->Branch("jet_mass_nanoAOD", &jet_mass_nanoAOD);
+        tree_output->Branch("jet_phi", &jet_phi);
+        tree_output->Branch("jet_eta", &jet_eta);
+        tree_output->Branch("jet_btagPNetB", &jet_btagPNetB);
+        tree_output->Branch("pass_valid_jet", &pass_valid_jet);
+        tree_output->Branch("pass_jet_seperation", &pass_jet_seperation);
+
+        //selectionVariables
+        tree_output->Branch("pass_two_OS_mediumID_harder_muons", &pass_two_OS_mediumID_harder_muons, "pass_two_OS_mediumID_harder_muons/O");
+        tree_output->Branch("pass_no_extra_loose_soft_muons", &pass_no_extra_loose_soft_muons, "pass_no_extra_loose_soft_muons/O");
+        tree_output->Branch("pass_no_extra_electrons", &pass_no_extra_electrons, "pass_no_extra_electrons/O");
+        tree_output->Branch("pass_muon_trigger_match", &pass_muon_trigger_match, "pass_muon_trigger_match/O");
+        tree_output->Branch("pass_jet_veto", &pass_jet_veto, "pass_jet_veto/O");
+    }
 
     // LHE variables
     //tree_output->Branch("LHEPdfWeight", &lhe_pdf_weight);
@@ -693,9 +748,15 @@ void CreateTuple::setBranchesAddressesInput() {
     tree_input->SetBranchStatus("t_diMuon_bsConstrainedMass", 1);
     tree_input->SetBranchAddress("t_diMuon_bsConstrainedMass",
                                  &diMuon_bsConstrainedMass);
+    tree_input->SetBranchStatus("t_diMuon_bsConstrainedMass_nanoAOD", 1);
+    tree_input->SetBranchAddress("t_diMuon_bsConstrainedMass_nanoAOD",
+                                 &diMuon_bsConstrainedMass_nanoAOD);
     tree_input->SetBranchStatus("t_diMuon_bsConstrainedPt", 1);
     tree_input->SetBranchAddress("t_diMuon_bsConstrainedPt",
                                  &diMuon_bsConstrainedPt);
+    tree_input->SetBranchStatus("t_diMuon_bsConstrainedPt_nanoAOD", 1);
+    tree_input->SetBranchAddress("t_diMuon_bsConstrainedPt_nanoAOD",
+                                 &diMuon_bsConstrainedPt_nanoAOD);
     tree_input->SetBranchStatus("t_diMuon_mass", 1);
     tree_input->SetBranchAddress("t_diMuon_mass", &diMuon_mass);
     tree_input->SetBranchStatus("t_diMuon_pt", 1);
@@ -813,6 +874,32 @@ void CreateTuple::setBranchesAddressesInput() {
     tree_input->SetBranchStatus("t_diJet_eta", 1);
     tree_input->SetBranchAddress("t_diJet_eta", &diJet_eta);
 
+    //synchronization variables
+    tree_input->SetBranchStatus("t_Mu_pfRelIso04_all", 1);
+    tree_input->SetBranchAddress("t_Mu_pfRelIso04_all", &mu_RelIso04);
+    tree_input->SetBranchStatus("t_Mu_looseId", 1);
+    tree_input->SetBranchAddress("t_Mu_looseId", &mu_looseID);
+    tree_input->SetBranchStatus("t_Mu_mediumId", 1);
+    tree_input->SetBranchAddress("t_Mu_mediumId", &mu_mediumID);
+    tree_input->SetBranchStatus("t_Mu_tightId", 1);
+    tree_input->SetBranchAddress("t_Mu_tightId", &mu_tightID);
+    tree_input->SetBranchStatus("t_Jet_mass_nanoAOD", 1);
+    tree_input->SetBranchAddress("t_Jet_mass_nanoAOD", &jet_mass_nanoAOD);
+    tree_input->SetBranchStatus("t_pass_two_OS_mediumID_harder_muons", 1);
+    tree_input->SetBranchAddress("t_pass_two_OS_mediumID_harder_muons", &pass_two_OS_mediumID_harder_muons);
+    tree_input->SetBranchStatus("t_pass_no_extra_loose_soft_muons", 1);
+    tree_input->SetBranchAddress("t_pass_no_extra_loose_soft_muons", &pass_no_extra_loose_soft_muons);
+    tree_input->SetBranchStatus("t_pass_no_extra_electrons", 1);
+    tree_input->SetBranchAddress("t_pass_no_extra_electrons", &pass_no_extra_electrons);
+    tree_input->SetBranchStatus("t_pass_muon_trigger_match", 1);
+    tree_input->SetBranchAddress("t_pass_muon_trigger_match", &pass_muon_trigger_match);
+    tree_input->SetBranchStatus("t_pass_jet_veto", 1);
+    tree_input->SetBranchAddress("t_pass_jet_veto", &pass_jet_veto);
+    tree_input->SetBranchStatus("t_pass_valid_jet", 1);
+    tree_input->SetBranchAddress("t_pass_valid_jet", &pass_valid_jet);
+    tree_input->SetBranchStatus("t_pass_jet_seperation", 1);
+    tree_input->SetBranchAddress("t_pass_jet_seperation", &pass_jet_seperation);
+
     std::cout << "Input Branches addressed setted" << std::endl;
 }
 
@@ -832,26 +919,27 @@ void CreateTuple::fillOutputTree() {
     std::cout << include_H << std::endl;
     for (int event_index = 0; event_index < total_entries; event_index++) {
         tree_input->GetEntry(event_index);
-        if ((include_Z && include_H) || (!include_Z && !include_H)){
+        if(!ifSync){
+            if ((include_Z && include_H) || (!include_Z && !include_H)){
+                if (diMuon_bsConstrainedMass < 70 || diMuon_bsConstrainedMass > 180)
+                    continue;
+            }
+            else if (include_Z){
+                if(diMuon_bsConstrainedMass < 76 || diMuon_bsConstrainedMass > 106)
+                    continue;
+            }
+            else{
+                // in Higgs region
+                if(diMuon_bsConstrainedMass < 100 || diMuon_bsConstrainedMass > 180)
+                    continue;
+            }
+            // if (diMuon_mass < 110 || diMuon_mass > 150)
+            // if (diMuon_mass < 100 || diMuon_mass > 180)
             if (diMuon_bsConstrainedMass < 70 || diMuon_bsConstrainedMass > 180)
                 continue;
-        }
-        else if (include_Z){
-            if(diMuon_bsConstrainedMass < 76 || diMuon_bsConstrainedMass > 106)
-                continue;
-        }
-        else{
-            // in Higgs region
-            if(diMuon_bsConstrainedMass < 100 || diMuon_bsConstrainedMass > 180)
-                continue;
-        }
-        // if (diMuon_mass < 110 || diMuon_mass > 150)
-        // if (diMuon_mass < 100 || diMuon_mass > 180)
-        if (diMuon_bsConstrainedMass < 70 || diMuon_bsConstrainedMass > 180)
-            continue;
 
-        h_nInFinalMassRange->Fill(0.5);
-
+            h_nInFinalMassRange->Fill(0.5);
+        }
         if ((*mu_bsConstrainedPt)[mu1_index] < (*mu_bsConstrainedPt)[mu2_index]) {
             std::swap(mu1_index, mu2_index);
         }
@@ -981,13 +1069,13 @@ void CreateTuple::fillOutputTree() {
         mu2_pt = (*mu_pt)[mu2_index];
         mu1_bsConstrainedPt_nanoAOD = (*mu_bsConstrainedPt_nanoAOD)[mu1_index];
         mu2_bsConstrainedPt_nanoAOD = (*mu_bsConstrainedPt_nanoAOD)[mu2_index];
-        mu1BSC_nanoAOD_vector.SetPtEtaPhiM(mu1_bsConstrainedPt_nanoAOD,
-                                           (*mu_eta)[mu1_index], (*mu_phi)[mu1_index],
-                                           MUON_MASS);
-        mu2BSC_nanoAOD_vector.SetPtEtaPhiM(mu2_bsConstrainedPt_nanoAOD,
-                                           (*mu_eta)[mu2_index], (*mu_phi)[mu2_index],
-                                           MUON_MASS);
-        diMuon_bsConstrainedMass_nanoAOD = (mu1BSC_nanoAOD_vector + mu2BSC_nanoAOD_vector).M();
+        //mu1BSC_nanoAOD_vector.SetPtEtaPhiM(mu1_bsConstrainedPt_nanoAOD,
+        //                                   (*mu_eta)[mu1_index], (*mu_phi)[mu1_index],
+        //                                   MUON_MASS);
+        //mu2BSC_nanoAOD_vector.SetPtEtaPhiM(mu2_bsConstrainedPt_nanoAOD,
+        //                                   (*mu_eta)[mu2_index], (*mu_phi)[mu2_index],
+        //                                   MUON_MASS);
+        //diMuon_bsConstrainedMass_nanoAOD = (mu1BSC_nanoAOD_vector + mu2BSC_nanoAOD_vector).M();
         mu1_bsConstrainedPt = (*mu_bsConstrainedPt)[mu1_index];
         mu2_bsConstrainedPt = (*mu_bsConstrainedPt)[mu2_index];
         mu1_ptErr = (*mu_ptErr)[mu1_index];
@@ -1084,6 +1172,7 @@ void CreateTuple::fillOutputTree() {
         for (size_t jet_index = 0; jet_index < jet_count; ++jet_index) {
             
             if (!passesJetPtSelection(jet_index)) {
+                //pass_valid_jet[event_index][jet_index] = false;
                 continue;
             }
 
