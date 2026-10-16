@@ -24,8 +24,15 @@ copy_dir() {
 
 for dataset in Muon0_2024H Muon1_2024H; do
     copy_dir "$src_base/$dataset" "$dst_dir/data/$dataset"
+    cd $dst_dir/data/$dataset
+    hadd ${dataset}_CombinedTuples.root *.root
+    rm *_tuples.root
 done
 
 for mode in ggH VBF; do
     copy_dir "$src_base/${mode}_Summer24" "$dst_dir/signal/$mode"
+    cd $dst_dir/signal/$mode
+    hadd ${mode}_CombinedTuples.root *.root
+    rm *_tuples.root
 done
+cd ${src_base}/synchronization/

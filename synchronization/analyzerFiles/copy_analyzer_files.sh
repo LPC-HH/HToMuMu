@@ -27,6 +27,11 @@ for dataset in Muon0_2024H Muon1_2024H; do
     rm Higgs*.root
 done
 
-#for mode in ggH VBF; do
-#    copy_dir "$src_base/MC_signal/${mode}_Summer24" "$dst_dir/signal/$mode"
-#done
+for mode in ggH VBF; do
+    copy_dir "$src_base/MC_signal/${mode}_Summer24" "$dst_dir/signal/$mode"
+    cd $dst_dir/signal/$mode
+    hadd ${mode}.root *.root
+    rm Higgs*.root
+done
+
+cd ${src_base}/synchronization/
