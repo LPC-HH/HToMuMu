@@ -72,29 +72,17 @@ list_datasets = [
     #"VBF_Summer22EE",
     #"VBF_Summer23",
     #"VBF_Summer23BPix",
-<<<<<<< HEAD
     "VBF_Summer24",
     "ggH_Summer24",
-=======
-    #"VBF_Summer24",
-    #"VBF_Summer25",
->>>>>>> main
     #"ggH_Summer22",
     #"ggH_Summer22EE",
     #"ggH_Summer23",
     #"ggH_Summer23BPix",
     #"WWtoLNu2Q_Summer22",
     #"Muon_2022C",
-<<<<<<< HEAD
 #    "Muon_2022D",
 #    "SingleMuon_2022C",
 ]
-=======
-    #"Muon_2022D",
-    #"SingleMuon_2022C",
-    #"Muon0_2026A",
-#]
->>>>>>> main
 
 
 
