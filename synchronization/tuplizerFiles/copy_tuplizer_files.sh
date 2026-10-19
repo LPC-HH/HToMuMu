@@ -35,4 +35,4 @@ for mode in ggH VBF; do
     hadd ${mode}_CombinedTuples.root *.root
     rm *_tuples.root
 done
-cd ${src_base}/synchronization/
+#cd ${src_base}/synchronization/

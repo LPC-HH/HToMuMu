@@ -630,17 +630,8 @@ class HmmAnalyzer : public MainEvent {
 
     //synchronization leaves
     //event
-    Bool_t t_pass_HLT_IsoMu24;
-    Bool_t t_pass_trigger_flags;
-    Bool_t t_pass_atleast_two_PF_muons;
-    Bool_t t_pass_atleast_two_loose_soft_muons;
-    Bool_t t_pass_two_OS_mediumID_harder_muons;
-    Bool_t t_pass_no_extra_loose_soft_muons;
-    Bool_t t_pass_no_extra_electrons;
     Bool_t t_pass_muon_trigger_match;
     Bool_t t_pass_jet_veto;
-    std::vector<Bool_t> *t_pass_valid_jet;
-    std::vector<Bool_t> *t_pass_jet_seperation;
 
     //jets
 
@@ -695,9 +686,11 @@ HmmAnalyzer::HmmAnalyzer(const TString &inputFileList, const char *outFileName,
     btagLoose_cut["2022EE"] = 0.0499;
     btagLoose_cut["2023"] = 0.0358;
     btagLoose_cut["2023BPix"] = 0.0359;
-    btagLoose_cut["2024"] = 0.0365;
-    btagLoose_cut["2025"] = 0.0365;// 2025 values NEED to be checked
-    btagLoose_cut["2026"] = 0.0365;// 2025 values NEED to be checked
+
+    //UParT values
+    btagLoose_cut["2024"] = 0.0246;
+    btagLoose_cut["2025"] = 0.0246;// 2025 values NEED to be checked
+    btagLoose_cut["2026"] = 0.0246;// 2025 values NEED to be checked
 
     // b-tag deepFlav MEDIUM score selection
     btagMedium_cut["2016"] = 0.6321;
@@ -708,9 +701,11 @@ HmmAnalyzer::HmmAnalyzer(const TString &inputFileList, const char *outFileName,
     btagMedium_cut["2022EE"] = 0.2605;
     btagMedium_cut["2023"] = 0.1917;
     btagMedium_cut["2023BPix"] = 0.1919;
-    btagMedium_cut["2024"] = 0.1990;
-    btagMedium_cut["2025"] = 0.1990; // 2025 values NEED to be checked
-    btagMedium_cut["2026"] = 0.1990; // 2025 values NEED to be checked
+
+    //UParT values
+    btagMedium_cut["2024"] = 0.1272;
+    btagMedium_cut["2025"] = 0.1272; // 2025 values NEED to be checked
+    btagMedium_cut["2026"] = 0.1272; // 2025 values NEED to be checked
 
     if (!is_data) {
         getPileupHistograms();
@@ -927,11 +922,20 @@ bool HmmAnalyzer::passesJetIdTightLepVeto(int index) {
 
 bool HmmAnalyzer::isValidJet(int index, float corrected_pt) {
 
-    return (
-        corrected_pt > 15. &&
-        fabs(Jet_eta[index]) < 4.7 &&
-        passesJetIdTightLepVeto(index)
-    );
+    if(!ifSync){
+        return (
+            corrected_pt > 15. &&
+            fabs(Jet_eta[index]) < 4.7 &&
+            passesJetIdTightLepVeto(index)
+        );
+    }
+    else{
+        return (
+            corrected_pt > 30. &&
+            fabs(Jet_eta[index]) < 4.7 &&
+            passesJetIdTightLepVeto(index) 
+        );
+    }
 }
 
 bool HmmAnalyzer::FillChain(TChain *chain, const TString &inputFileList) {
@@ -1294,17 +1298,8 @@ void HmmAnalyzer::clearTreeVectors() {
     
 
     //syncronization values
-    t_pass_HLT_IsoMu24 = false;
-    t_pass_trigger_flags = false;
-    t_pass_atleast_two_PF_muons = false;
-    t_pass_atleast_two_loose_soft_muons = false;
-    t_pass_two_OS_mediumID_harder_muons = false;
-    t_pass_no_extra_loose_soft_muons = false;
-    t_pass_no_extra_electrons = false;
     t_pass_muon_trigger_match = false;
     t_pass_jet_veto = false;
-    t_pass_valid_jet->clear();
-    t_pass_jet_seperation->clear();
 }
 
 void HmmAnalyzer::BookTreeBranches() {
@@ -1813,18 +1808,7 @@ void HmmAnalyzer::BookTreeBranches() {
     tree->Branch("t_GenJet_pt", "vector<float>", &t_GenJet_pt);
 
     //synchronization branches
-    t_pass_valid_jet = new std::vector<Bool_t>();
-    t_pass_jet_seperation = new std::vector<Bool_t>();
-    if(ifSync){
-        tree->Branch("t_pass_valid_jet", &t_pass_valid_jet);
-        tree->Branch("t_pass_jet_seperation", &t_pass_jet_seperation);
-        tree->Branch("t_pass_HLT_IsoMu24", &t_pass_HLT_IsoMu24, "t_pass_HLT_IsoMu24/O");
-        tree->Branch("t_pass_trigger_flags", &t_pass_trigger_flags, "t_pass_trigger_flags/O");
-        tree->Branch("t_pass_atleast_two_PF_muons", &t_pass_atleast_two_PF_muons, "t_pass_atleast_two_PF_muons/O");
-        tree->Branch("t_pass_atleast_two_loose_soft_muons", &t_pass_atleast_two_loose_soft_muons, "t_pass_atleast_two_loose_soft_muons/O");
-        tree->Branch("t_pass_two_OS_mediumID_harder_muons", &t_pass_two_OS_mediumID_harder_muons, "t_pass_two_OS_mediumID_harder_muons/O");
-        tree->Branch("t_pass_no_extra_loose_soft_muons", &t_pass_no_extra_loose_soft_muons, "t_pass_no_extra_loose_soft_muons/O");
-        tree->Branch("t_pass_no_extra_electrons", &t_pass_no_extra_electrons, "t_pass_no_extra_electrons/O");
+   if(ifSync){
         tree->Branch("t_pass_muon_trigger_match", &t_pass_muon_trigger_match, "t_pass_muon_trigger_match/O");
         tree->Branch("t_pass_jet_veto", &t_pass_jet_veto, "t_pass_jet_veto/O");
     }

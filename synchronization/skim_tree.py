@@ -34,18 +34,7 @@ BRANCHES = {
     "t_Jet_mass_nanoAOD": "jet_mass_preCorr",
     "t_Jet_eta": "jet_eta",
     "t_Jet_phi": "jet_phi",
-    "t_Jet_btagPNetB": "jet_btagPNetB",
-    "t_PuppiMET_phi": "puppiMET_phi",
-    "t_PuppiMET_pt": "puppiMET_pt",
-    "t_pass_valid_jet": "pass_valid_jet",
-    "t_pass_jet_seperation": "pass_jet_seperation",
-    "t_pass_HLT_IsoMu24": "pass_HLT_IsoMu24",
-    "t_pass_trigger_flags": "pass_trigger_flags",
-    "t_pass_atleast_two_PF_muons": "pass_atleast_two_PF_muons",
-    "t_pass_atleast_two_loose_soft_muons": "pass_atleast_two_loose_soft_muons",
-    "t_pass_two_OS_mediumID_harder_muons": "pass_two_OS_mediumID_harder_muons",
-    "t_pass_no_extra_loose_soft_muons": "pass_no_extra_loose_soft_muons",
-    "t_pass_no_extra_electrons": "pass_no_extra_electrons",
+    "t_Jet_btagUParTAK4B": "jet_btagUParTAK4B",
     "t_pass_muon_trigger_match": "pass_muon_trigger_match",
     "t_pass_jet_veto": "pass_jet_event_veto",
     #MC info
@@ -58,9 +47,6 @@ BRANCHES_TUPLES = {
     "event": None,
     "is_ggH_category": None,
     "is_VBF_category": None,
-    "pass_two_OS_mediumID_harder_muons": "event_pass_two_OS_mediumID_harder_muons",
-    "pass_no_extra_loose_soft_muons": "event_pass_no_extra_loose_soft_muons",
-    "pass_no_extra_electrons": "event_pass_no_extra_electrons",
     "pass_muon_trigger_match": "event_pass_muon_trigger_match",
     "pass_jet_veto": "event_pass_jet_veto",
 
@@ -118,16 +104,18 @@ BRANCHES_TUPLES = {
 
     #physics jet info
     "n_jet": None,
+    "leading_jet_index": None,
     "leading_jet_pt": None,
     "leading_jet_pt_nanoAOD": "leading_jet_pt_noCorr",
     "leading_jet_eta": None,
     "leading_jet_phi": None,
-    "leading_jet_btagPNetB": None,
+    "leading_jet_btagUParTAK4B": None,
+    "subleading_jet_index": None,
     "subleading_jet_pt": None,
     "subleading_jet_pt_nanoAOD": "subleading_jet_pt_noCorr",
     "subleading_jet_eta": None,
     "subleading_jet_phi": None,
-    "leading_jet_btagPNetB": None,
+    "subleading_jet_btagUParTAK4B": None,
 
     #diJet info
     "diJet_mass": None,
@@ -146,9 +134,7 @@ BRANCHES_TUPLES = {
     "jet_mass_nanoAOD": "jet_mass_noCorr",
     "jet_eta": None,
     "jet_phi": None,
-    "jet_btagPNetB": None,
-    "pass_valid_jet": "jet_pass_valid_jet",
-    "pass_jet_seperation": "jet_pass_jet_seperation",
+    "jet_btagUParTAK4B": None,
 
     #MET info
     "PuppiMET_phi": None,

@@ -192,12 +192,13 @@ void HmmAnalyzer::EventLoop() {
         nb = fChain->GetEntry(jentry);
         nbytes += nb;
 
-
-        if (!is_data && yearst == "2024" && event % 2 == 0) {
-            continue;
-        }
-        if (!is_data && yearst == "2025" && event % 2 != 0) {
-            continue;
+        if(!ifSync){
+            if (!is_data && yearst == "2024" && event % 2 == 0) {
+                continue;
+            }
+            if (!is_data && yearst == "2025" && event % 2 != 0) {
+                continue;
+            }
         }
 
         h_nEntries->Fill(0.5);
@@ -274,29 +275,13 @@ void HmmAnalyzer::EventLoop() {
 
 
         bool trig_decision = (HLT_IsoMu24 == 1);
-        if(ifSync){
-            if(trig_decision){
-                t_pass_HLT_IsoMu24 = true;
-            }
-            else{
-                t_pass_HLT_IsoMu24 = false;
-            }
-        }
         bool run_trig_checks = 
             (trig_decision && Flag_HBHENoiseFilter && Flag_HBHENoiseIsoFilter &&
              Flag_EcalDeadCellTriggerPrimitiveFilter && Flag_goodVertices &&
              Flag_globalSuperTightHalo2016Filter && PV_npvsGood > 0);
 
         if(!run_trig_checks) {
-            if(!ifSync){
-                continue;
-            }
-            else{
-                t_pass_trigger_flags = false;
-            }
-        }
-        else if(ifSync){
-            t_pass_trigger_flags = true;
+            continue;
         }
 
         h_nTrigger->Fill(0.5);
@@ -307,16 +292,7 @@ void HmmAnalyzer::EventLoop() {
         
         //std::cout << "Running muon checks" << std::endl; 
         if (!run_muChecks) {
-            //std::cout << "Muon checks valid" << std::endl; 
-            if(!ifSync){
-                continue;
-            }
-            else{
-                t_pass_atleast_two_PF_muons = false;
-            }
-        }
-        else if(ifSync){
-            t_pass_atleast_two_PF_muons = true;
+            continue;
         }
 
         //add in MET variable
@@ -372,25 +348,24 @@ void HmmAnalyzer::EventLoop() {
             mu_pt_corr[i] = pt_corr;
             mu_ptErr_corr[i] = ptErr_corr;
 
-            if (pt_corr > 10 &&
+            if (!ifSync){
+                if(pt_corr > 10 &&
                 fabs(Muon_eta[i]) < 2.4 &&
                 Muon_isGlobal[i] &&
                 Muon_pfRelIso04_all[i] < 0.25 &&
                 Muon_looseId[i]) {
                 n_valid_muons++;
+                }
+            }
+            else if(ifSync && pt_raw > 20 && Muon_isGlobal[i] &&
+                Muon_mediumId[i] && Muon_pfRelIso04_all[i] < 0.25 &&
+                fabs(Muon_eta[i]) < 2.4){
+                n_valid_muons++;
             }
         }
 
         if(n_valid_muons < 2){
-            if(!ifSync){
-                continue;
-            }
-            else{
-                t_pass_atleast_two_loose_soft_muons = false;
-            }
-        }
-        else if(ifSync){
-            t_pass_atleast_two_loose_soft_muons = true;
+            continue;
         }
 
         float best_pair_pt_sum = -1.0;
@@ -419,7 +394,7 @@ void HmmAnalyzer::EventLoop() {
                 float pair_pt_sum =
                     mu_pt_corr[muon_index_1] + mu_pt_corr[muon_index_2];
 
-                if (pair_pt_sum > best_pair_pt_sum) {
+                if (pair_pt_sum > best_pair_pt_sum) { //is this how we want to sort muons?
                     best_pair_pt_sum = pair_pt_sum;
 
                     // Store the higher-pT muon as mu1
@@ -437,33 +412,26 @@ void HmmAnalyzer::EventLoop() {
         }
         //std::cout << "Checking 2 valid muons" << std::endl; 
         if(!two_valid_muons){
-            t_pass_two_OS_mediumID_harder_muons = false;
             continue;
-        }
-        else if(ifSync){
-            t_pass_two_OS_mediumID_harder_muons = true;
         }
         h_nTwoMuons->Fill(0.5);
 
         //Ensure only 3 Muons
         if(n_valid_muons > 2){
-            if(!ifSync){
-                continue;
-            }
-            else{
-                t_pass_no_extra_loose_soft_muons = false;
-            }
-        }
-        else if(ifSync){
-            t_pass_no_extra_loose_soft_muons = true;
+            continue;
         }
 
         h_nNoExtraMuon->Fill(0.5);
 
 
         for (int i = 0; i < nElectron; i++) {
-            if ((fabs(Electron_eta[i]) > 2.5 || Electron_pt[i] < 10.0 || fabs(Electron_dz[i]) > 1.0 
+            if (!ifSync){
+                if((fabs(Electron_eta[i]) > 2.5 || Electron_pt[i] < 10.0 || fabs(Electron_dz[i]) > 1.0 
                     || fabs(Electron_dxy[i]) > 0.5 || !Electron_mvaIso_WP90[i])) {
+                    continue;
+                }
+            }
+            else if((fabs(Electron_eta[i]) > 2.5 || Electron_pt[i] < 20.0 || !Electron_mvaIso_WP90[i])) {
                 continue;
             }
             // t_El_genPartIdx->push_back(Electron_genPartIdx[i]);
@@ -499,15 +467,7 @@ void HmmAnalyzer::EventLoop() {
         }
 
         if (t_El_pt->size() > 0){
-            if(!ifSync){
-                continue;
-            }
-            else{
-                t_pass_no_extra_electrons = false;
-            }
-        }
-        else if(ifSync){
-            t_pass_no_extra_electrons = true;
+            continue;
         }
 
         h_nNoExtraElectron->Fill(0.5);
@@ -734,8 +694,18 @@ void HmmAnalyzer::EventLoop() {
             }
         }
         else{
-            if(t_diMuon_bsConstrainedMass_nanoAOD < 50 || t_diMuon_bsConstrainedMass_nanoAOD > 200){
-                continue;
+            if(!is_data){
+                if(t_diMuon_bsConstrainedMass_nanoAOD < 50 || t_diMuon_bsConstrainedMass_nanoAOD > 200){
+                    continue;
+                }
+            }
+            else{ //data blinding
+                if(t_diMuon_bsConstrainedMass_nanoAOD < 50 || t_diMuon_bsConstrainedMass_nanoAOD > 200){
+                    continue;
+                }
+                if(t_diMuon_bsConstrainedMass_nanoAOD > 115.0 && t_diMuon_bsConstrainedMass_nanoAOD < 135.0){
+                    continue;
+                }
             }
         }
 
@@ -990,15 +960,7 @@ void HmmAnalyzer::EventLoop() {
 
             if (!isValidJet(j, corrected_jet_pt)) {
                 //std::cout << "Jet " << j << " invalid" << std::endl;
-                if(!ifSync){
-                    continue;
-                }
-                else{
-                    t_pass_valid_jet->push_back(false);
-                }
-            }
-            else if(ifSync){
-                t_pass_valid_jet->push_back(true);
+                continue;
             }
             h_nValidJets->Fill(0.5);
             //std::cout << "Valid jet" << std::endl;
@@ -1015,15 +977,7 @@ void HmmAnalyzer::EventLoop() {
                                 Jet_eta[j], Jet_phi[j]);
             if (dR1 < 0.4 || dR2 < 0.4) {
                 //std::cout << "Jet " << j << " not well seperated" << std::endl;
-                if(!ifSync){
-                    continue;
-                }
-                else{
-                    t_pass_jet_seperation->push_back(false);
-                }
-            }
-            else if(ifSync){
-                t_pass_jet_seperation->push_back(true);
+                continue;
             }
             h_nValidSeperatedJets->Fill(0.5);
 
@@ -1126,13 +1080,25 @@ void HmmAnalyzer::EventLoop() {
             t_Jet_nElectrons->push_back(Jet_nElectrons[j]);
             t_Jet_nMuons->push_back(Jet_nMuons[j]);
             // t_Jet_puId->push_back(Jet_puId[j]);
-            if (Jet_btagPNetB[j] > btagLoose_cut.at(yearst)) {
-                t_nbJet_Loose++;
-            }
 
-            if (!(Jet_btagPNetB[j] > btagMedium_cut.at(yearst))) {
-                continue; // medium WP
-            } // end of b-tag
+            if (NANOAOD_VERSION.at(year) == "v15"){
+                if (Jet_btagUParTAK4B[j] > btagLoose_cut.at(yearst)) {
+                    t_nbJet_Loose++;
+                }
+
+                if (!(Jet_btagUParTAK4B[j] > btagMedium_cut.at(yearst))) {
+                    continue; // medium WP
+                } // end of b-tag
+            }
+            else{
+                if (Jet_btagPNetB[j] > btagLoose_cut.at(yearst)) {
+                    t_nbJet_Loose++;
+                }
+
+                if (!(Jet_btagPNetB[j] > btagMedium_cut.at(yearst))) {
+                    continue; // medium WP
+                } // end of b-tag
+            }
             t_nbJet++;
             t_bJet_area->push_back(Jet_area[j]);
             t_bJet_btagDeepB->push_back(Jet_btagDeepFlavB[j]);
