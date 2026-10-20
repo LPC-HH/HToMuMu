@@ -1,12 +1,10 @@
-#!/bin/bash
-
+#!/usr/bin/env bash
 set -e
 
-echo "========================================"
-echo "Host: $(hostname)"
-echo "PWD:  $(pwd)"
-echo "Date: $(date)"
-echo "========================================"
+if [[ $# -lt 9 || $# -gt 10 ]]; then
+    echo "Usage: $0 <channel> <era> <model_era> <tuple_type> <systematic> <bkg_subset> <sig_subset> <version> <user> [group|user]" >&2
+    exit 2
+fi
 
 CHANNEL=$1
 ERA=$2
@@ -17,7 +15,18 @@ BKG_SUBSET=$6
 SIG_SUBSET=$7
 VERSION=$8
 USER_NAME=$9
+EOS_AREA=${10:-group}
 
+if [[ "${EOS_AREA}" != "group" && "${EOS_AREA}" != "user" ]]; then
+    echo "[ERROR] EOS_AREA must be group or user, got: ${EOS_AREA}" >&2
+    exit 2
+fi
+
+echo "========================================"
+echo "Host: $(hostname)"
+echo "PWD:  $(pwd)"
+echo "Date: $(date)"
+echo "========================================"
 echo "CHANNEL     = ${CHANNEL}"
 echo "ERA         = ${ERA}"
 echo "MODEL ERA   = ${MODEL_ERA}"
@@ -27,44 +36,31 @@ echo "BKG SUBSET  = ${BKG_SUBSET}"
 echo "SIG SUBSET  = ${SIG_SUBSET}"
 echo "VERSION     = ${VERSION}"
 echo "USER        = ${USER_NAME}"
+echo "EOS AREA    = ${EOS_AREA}"
 
-echo
-echo "========================================"
-echo "Setting up CMSSW"
-echo "========================================"
-
-# Save Condor working directory before changing directories
+# Keep the Condor scratch directory for the transferred model files.
 WORKDIR=$(pwd)
 
 source /cvmfs/cms.cern.ch/cmsset_default.sh
-
 export SCRAM_ARCH=el9_amd64_gcc12
-
 scramv1 project CMSSW CMSSW_15_0_19
 cd CMSSW_15_0_19/src
 eval "$(scramv1 runtime -sh)"
-
 cd "${WORKDIR}"
 
-echo "USER = ${USER}"
-
-echo
 echo "========================================"
 echo "Python environment"
 echo "========================================"
-
 which python3
 python3 --version
+python3 -c 'import ROOT, numpy, uproot, xgboost, pandas, matplotlib, mplhep; print("[INFO] Python dependencies imported successfully")'
 
-python3 -c "import numpy; print('numpy:', numpy.__version__)"
-python3 -c "import uproot; print('uproot:', uproot.__version__)"
-python3 -c "import xgboost; print('xgboost:', xgboost.__version__)"
-
-echo
 echo "========================================"
-echo "Running BDT job"
+echo "Running K-fold BDT systematic job"
 echo "========================================"
 
+# Condor flattens models/<file> transfers into the scratch directory.
+# The Python job therefore reads its models from '.'.
 python3 append_bdt_systematic_job.py \
     "${CHANNEL}" \
     "${ERA}" \
@@ -74,13 +70,12 @@ python3 append_bdt_systematic_job.py \
     "${BKG_SUBSET}" \
     "${SIG_SUBSET}" \
     "${VERSION}" \
-    "${USER_NAME}"
+    "${USER_NAME}" \
+    --models-dir . \
+    --eos-area "${EOS_AREA}" \
+    --skim-chunks 1 \
+    --score-chunk-rows 500000
 
-STATUS=$?
-
-echo
 echo "========================================"
-echo "Python exit status: ${STATUS}"
+echo "[INFO] Job finished successfully"
 echo "========================================"
-
-exit ${STATUS}
