@@ -51,11 +51,12 @@ skip_pattern = [
 
 list_datasets = datasets_info.keys()
 # # Use in case you want to run over a specific list of datasets!
-#list_datasets = [
+list_datasets = [
     #"DY120to200_Summer24",
     #"EWK_2L2J_Summer24",
     #"Muon_2022E",
-    #"Muon0_2024C",
+    "Muon0_2024H",
+    "Muon1_2024H",
     #"Muon0_2023C_v1",
     #"Muon0_2024I_v2",
     #"Muon0_2025B",
@@ -71,23 +72,24 @@ list_datasets = datasets_info.keys()
     #"VBF_Summer22EE",
     #"VBF_Summer23",
     #"VBF_Summer23BPix",
-    #"VBF_Summer24",
-    #"VBF_Summer25",
+    "VBF_Summer24_ext1",
+    "VBF_Summer24",
+    "ggH_Summer24",
     #"ggH_Summer22",
     #"ggH_Summer22EE",
     #"ggH_Summer23",
     #"ggH_Summer23BPix",
     #"WWtoLNu2Q_Summer22",
     #"Muon_2022C",
-    #"Muon_2022D",
-    #"SingleMuon_2022C",
-    #"Muon0_2026A",
-#]
+#    "Muon_2022D",
+#    "SingleMuon_2022C",
+]
 
 
 
 include_Z = "F"
 include_H = "T"
+ifSync = "T"
 muon_pt_syst = os.getenv("MUON_PT_SYST", "nominal")
 valid_muon_pt_systs = [
     "nominal",
@@ -243,7 +245,7 @@ for dataset_name in list_datasets:
         EOS_SUBPATH = os.getenv('LOGNAME') + "/analyzer_%s/"%(outputfile) + type_info + "/%s"%(dataset_name) + "_%s/"%(muon_pt_syst) 
 
     os.system("xrdfs root://cmseos.fnal.gov mkdir -p /store/group/lpchmumu/"+ EOS_SUBPATH)
-    args = outputfile + " $(I) " + isData + " " + year + " " + EOS_SUBPATH + " " + cmsswReleaseVersion + " "  + include_Z + " " + include_H + " " + muon_pt_syst
+    args = outputfile + " $(I) " + isData + " " + year + " " + EOS_SUBPATH + " " + cmsswReleaseVersion + " "  + include_Z + " " + include_H + " " + muon_pt_syst + " " + ifSync
     jobfile_JDL.write("Arguments = " + args + "\n")
 
     jobfile_JDL.write("Log = log/jobR$(I).$(Cluster).$(Process).log" + "\n")

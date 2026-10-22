@@ -12,9 +12,11 @@ from systematics_config import (
     FLASHGG_PATH,
     MASS_MAX,
     MASS_MIN,
+    NOMINAL_BDT_SCORE_DIR,
     PROCESSES,
     SUBSET,
     TREE_NAME,
+    VARIANT_CHANNEL,
 )
 
 OUTPUT_JSON = (
@@ -26,8 +28,7 @@ OUTPUT_PROC_KEYS = {
     "VBF": "qqH",
 }
 
-TUPLE_BASE = Path("./root_io/tuples")
-NOMINAL_BASE = TUPLE_BASE / "BDT_score"
+NOMINAL_BASE = NOMINAL_BDT_SCORE_DIR
 
 SYSTEMATICS = {
     "mu_trig_eff": {
@@ -125,7 +126,7 @@ def make_mask(bdt, topology, mass, weight, category):
 
 
 def nominal_file(channel, process):
-    return NOMINAL_BASE / channel / SUBSET / f"{process}_Combined_{SUBSET}.root"
+    return NOMINAL_BASE / VARIANT_CHANNEL[channel] / SUBSET / f"{process}_Combined_{SUBSET}.root"
 
 
 def calculate_file(channel, process):

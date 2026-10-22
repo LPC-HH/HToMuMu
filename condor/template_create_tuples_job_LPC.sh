@@ -89,9 +89,9 @@ ls -l
 # Check input parameters
 ###############################
 
-if (( $# < 11 )); then
+if (( $# < 12 )); then
     echo "Usage:" >&2
-    echo "$0 input_file weight_file output_folder era channel file_type ifZ ifH jet_syst cmssw_version job_number" >&2
+    echo "$0 input_file weight_file output_folder era channel file_type ifZ ifH jet_syst ifSync cmssw_version job_number" >&2
     exit 2
 fi
 
@@ -104,8 +104,9 @@ file_type="$6"
 ifZ="$7"
 ifH="$8"
 jet_syst="$9"
-cmssw_version="${10}"
-job_number="${11}"
+ifSync="${10}"
+cmssw_version="${11}"
+job_number="${12}"
 
 is_data="F"
 if [[ "$file_type" == *"Data"* ]]; then
@@ -140,6 +141,7 @@ echo "Channel:         $channel"
 echo "Data:            $is_data"
 echo "Signal:          $is_signal"
 echo "Jet systematic:  $jet_syst"
+echo "Synchronizing:   $ifSync"
 
 ###############################
 # Set up CMSSW
@@ -203,7 +205,7 @@ eval "$(scram runtime -sh)" ||
 
 echo "========================================"
 echo "Executing CreateTuple:"
-echo "./${executable} input_file.root weight_file.root ./ ${era} ${channel} ${is_data} ${is_signal} ${ifZ} ${ifH} ${jet_syst}"
+echo "./${executable} input_file.root weight_file.root ./ ${era} ${channel} ${is_data} ${is_signal} ${ifZ} ${ifH} ${jet_syst} ${ifSync}" 
 echo "========================================"
 
 if ! "./${executable}" \
@@ -216,7 +218,8 @@ if ! "./${executable}" \
     "$is_signal" \
     "$ifZ" \
     "$ifH" \
-    "$jet_syst"; then
+    "$jet_syst" \
+    "${ifSync}"; then
 
     error_exit "CreateTuple exited with an error." 40
 fi

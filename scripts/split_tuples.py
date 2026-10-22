@@ -10,7 +10,7 @@ import numpy as np
 from pathlib import Path
 
 sys_path.insert(0, str(Path(__file__).resolve().parent.parent / "python"))
-from bdt_categories_io import load_bdt_categories, get_bdt_cuts
+from bdt_categories_io import load_bdt_categories, get_bdt_cuts, variant_dir_suffix
 
 def get_output_file_name(data_type, path):
     return os.path.join(
@@ -46,21 +46,23 @@ def split_tuples_by_category(
     branching_ratio,
     bdt_cuts,
     use_bsConstrain,
+    file_append,
 ):
+    """channel is the plain channel name (ggH/VBF); file_append ("reCat" and/or the variant's dir
+    suffix) picks the BDT_score/<sample>/ input directory and the bdt_cuts key, sample = channel + file_append."""
 
-    samples = [channel]
-    if data_type != "data":
-        samples = ["ggHreCat", "VBFreCat"] if RECATEGORIZE else ["ggH","VBF"]
+    channels = [channel] if data_type == "data" else ["ggH", "VBF"]
     with uproot.recreate(output_file_name) as file_output:
 
-        for sample in samples:
+        for sample_channel in channels:
+            sample = sample_channel + file_append
 
             input_path = f"./root_io/tuples/BDT_score/{sample}/BFull_SNottH/"
-            input_file_name = get_input_file_name(data_type, channel[:3] if RECATEGORIZE else channel, input_path)
+            input_file_name = get_input_file_name(data_type, channel, input_path)
 
             branches = {}
-            BDT_branch = f"BDT_{sample[:3]}" if RECATEGORIZE else f"BDT_{sample}"
-            CAT_branch = f"is_{sample[:3]}_categoryBDT" if RECATEGORIZE else f"is_{sample}_category"
+            BDT_branch = f"BDT_{sample_channel}"
+            CAT_branch = f"is_{sample_channel}_categoryBDT" if RECATEGORIZE else f"is_{sample_channel}_category"
             selected_branches = [
                 "pileup_weight",
                 "diMuon_mass",
@@ -138,7 +140,7 @@ def split_tuples_by_category(
 
                 bdt_selection = (score >= lower_bdt) & (score < upper_bdt) & is_category
 
-                category_name = f"{sample[0:3]}cat{len(bdt_cuts[sample]) - category - 1}"
+                category_name = f"{sample_channel}cat{len(bdt_cuts[sample]) - category - 1}"
 
                 print(f"\n[CHECK] {category_name}")
                 print(f"BDT range: {lower_bdt} to {upper_bdt}")
@@ -197,14 +199,7 @@ def split_tuples_by_category(
                 print(f"[Info] Final selected events: {len(selected_events['diMuon_mass'])}")
 
 
-                category_name = (
-                    sample + "cat" + str(len(bdt_cuts[sample]) - category - 1)
-                )
-                if RECATEGORIZE:
-                    category_name = f"{sample[:3]}cat{len(bdt_cuts[sample]) - category - 1}"
-                else:
-                    category_name = f"{sample}cat{len(bdt_cuts[sample]) - category - 1}"
-                tree_name = get_tree_name(data_type, channel[:3] if RECATEGORIZE else channel, category_name)
+                tree_name = get_tree_name(data_type, channel, category_name)
 
                 file_output[tree_name] = selected_events
 
@@ -225,6 +220,15 @@ if __name__ == "__main__":
         action="store_true",
         help="use the re-categorization BDT branches/cuts",
     )
+    parser.add_argument(
+        "-v",
+        "--variant",
+        default="base",
+        help="train.py variant label of the BDT scores (e.g. asimovFit_flatMassRes; default base). "
+        "Reads BDT_score/<channel><dir suffix>/ (dir suffix = label without '_', e.g. "
+        "asimovFitflatMassRes), uses the cuts saved by plot_BDT_Categories.py --variant <label>, "
+        "and writes split_tuples/<channel><dir suffix>/",
+    )
     args = parser.parse_args()
 
     RECATEGORIZE = args.recategorize
@@ -233,14 +237,14 @@ if __name__ == "__main__":
     branching_ratio = 2.176e-4
     use_bsConstrain = True
 
-    if RECATEGORIZE:
-        channel = channel + "reCat"
-    out_path = f"./root_io/tuples/split_tuples/{channel}"
-    input_path = f"./root_io/tuples/BDT_score/{channel}/BFull_SNottH/"
+    # same order as the BDT_score directories (xgb_utils.scoring_paths): reCat, then the variant
+    file_append = ("reCat" if RECATEGORIZE else "") + variant_dir_suffix(args.variant)
+    out_path = f"./root_io/tuples/split_tuples/{channel}{file_append}"
     output_file_name = get_output_file_name(data_type, out_path)
 
     print(f"[Config] Using data_type = {data_type}")
     print(f"[Config] Using channel   = {channel}")
+    print(f"[Config] BDT variant     = {args.variant} (BDT_score/<channel>{file_append}/, cuts key <channel>{file_append})")
     print(f"[Config] Output file= {output_file_name}")
     print(f"[Config] Branching Ratio = {branching_ratio}")
     print(f"[Config] Use bsConstrain = {use_bsConstrain}")
@@ -250,12 +254,12 @@ if __name__ == "__main__":
 
     mass_variable = "diMuon_bsConstrainedMass" if use_bsConstrain else "diMuon_mass"
     bdt_categories_info = load_bdt_categories()
-    ch_list = ["ggHreCat", "VBFreCat"] if RECATEGORIZE else ["ggH", "VBF"]
+    ch_list = [ch + file_append for ch in ("ggH", "VBF")]
     bdt_cuts = {
         ch: get_bdt_cuts(bdt_categories_info, ch, "Combined", "BFull_SNottH", mass_variable)
         for ch in ch_list
     }
 
     split_tuples_by_category(
-        data_type, channel, output_file_name, branching_ratio, bdt_cuts, use_bsConstrain
+        data_type, channel, output_file_name, branching_ratio, bdt_cuts, use_bsConstrain, file_append
     )

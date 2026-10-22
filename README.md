@@ -261,22 +261,48 @@ Go to the XGBoost directory:
 cd ../python/xgboost/
 ```
 
-Submit the jobs that add the BDT scores to the systematic tuples:
+Make sure you have a valid grid proxy (the jobs use it to read and write EOS):
 
 ```bash
-bash submit_bdt_systematics.sh
+voms-proxy-init --voms cms --valid 192:00
 ```
+
+Set the hardcoded locations at the top of `submit_bdt_systematics.sh`:
+
+- `SYST_TUPLE_DIR`: the systematic tuples to score (default: Matias's area)
+- `BDT_SCORE_DIR`: where the scored tuples go (default: your own area); `<channel>/BFull_SNottH/` is appended
+- `MODEL_NAME_PREFIX`: the fold models used, `models/model_<channel>_<MODEL_NAME_PREFIX>_fold<k>_bsC.json`
+
+Then submit the jobs, giving the tuple version:
+
+```bash
+bash submit_bdt_systematics.sh 2.4.2
+```
+
+Add `DRY_RUN=1` to write the JDL files without submitting. Logs are in `python/xgboost/logs/`; a
+finished job prints `JOB FINISHED SUCCESSFULLY`.
 
 ---
 
 ### 10. Calculate the systematic uncertainties
 
-Finally, return to the initial project directory and run:
+Set the hardcoded locations at the top of `scripts/systematics_config.py`:
+
+- `BDT_VARIANT`: the train.py variant label (`base`, `asimovFit_flatMassRes`, ...). It picks the
+  `<channel><variant>` BDT categories from `root_io/bdt_categories.json` and the nominal
+  `BDT_score/<channel><variant>/` folder, so it must match the model used in step 9
+- `FLASHGG_PATH`: your flashggFinalFit checkout; the results go to `Datacard/experimental_systematics/` in it
+- `NOMINAL_BDT_SCORE_DIR`: the nominal BDT-scored tuples
+- `SYSTEMATICS_BDT_SCORE_DIR`: the systematic BDT-scored tuples, i.e. `BDT_SCORE_DIR` from step 9 written as a
+  local path (`/store/group/lpchmumu/...` is `/eos/uscms/store/user/lpchmumu/...`); `{user}`, `{analyzer_version}`
+  and `{version}` are filled from `$USER` and the version argument
+
+Then return to the initial project directory and run:
 
 ```bash
-bash ./scripts/calculate_all_systematics.sh
+bash ./scripts/calculate_all_systematics.sh 2.4.2
 ```
-c
+
 This calculates the systematic uncertainties from the nominal and systematic tuples.
 
 ---
