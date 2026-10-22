@@ -1266,10 +1266,37 @@ def load_fold_bundle(test_name, use_bsConstrain, models_dir="models"):
             booster.set_param({"device": "cpu"})
         except Exception:
             pass
+        _restore_base_score(booster, f"{models_dir}/model_{base}.json")
         bundle.append(dict(booster=booster, meta=meta, fold=k))
     if len({tuple(b["meta"]["variables"]) for b in bundle}) != 1:
         raise RuntimeError("fold models were trained with different variable lists")
     return bundle
+
+
+def _base_score_of(learner):
+    """base_score of a learner JSON block: "5.04E-1" (xgboost < 3) or "[5.04E-1]" (>= 3)."""
+    return float(str(learner["learner_model_param"]["base_score"]).strip("[]").split(",")[0])
+
+
+def _restore_base_score(booster, model_path):
+    """Give the booster back the base_score the model was saved with, when the running xgboost
+    loaded a different one. xgboost 1.7.5 (cmsenv on LPC / Condor) drops the base_score that
+    >= 2.0 estimates and stores (~0.504 for the K-fold models) and uses 0.5, which shifts every
+    score by up to ~4.5e-3. A no-op when they agree (e.g. on EAF, where the models were trained).
+    Verified on 1.7.5: scores then match the EAF (3.2.0) ones bit for bit."""
+    with open(model_path) as f:
+        learner = json.load(f)["learner"]
+    saved = _base_score_of(learner)
+    loaded = _base_score_of(json.loads(booster.save_config())["learner"])
+    if saved == loaded:
+        return
+    objective = learner["objective"]["name"]
+    if objective != "binary:logistic":
+        raise RuntimeError(f"{model_path}: base_score restore only checked for binary:logistic, "
+                           f"not {objective}; score in the xgboost version the model was trained with")
+    print(f"[WARNING] {model_path}: running xgboost loaded base_score {loaded:.7g} instead of the "
+          f"saved {saved:.7g}; restoring it")
+    booster.set_param({"base_score": saved})
 
 
 def _booster_and_dmatrix(member, x_raw):

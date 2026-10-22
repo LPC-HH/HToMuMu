@@ -1,172 +1,244 @@
 #!/usr/bin/env python3
+"""Score ONE systematic ROOT tuple with the SAME K-fold pipeline as nominal.
 
-import os
-import sys
+Requires the updated xgb_utils.py and xgb_kfold.py used by train.py.
+
+Preserves the nine positional arguments of the original HTCondor job:
+
+    python3 append_bdt_systematic_job_updated.py \
+        <channel> <era> <model_era> <tuple_type> <systematic> \
+        <bkg_subset> <sig_subset> <version> <user> \
+        --input-dir <eos dir> --output-dir <eos dir> --model-name <test_name> \
+        [--models-dir models]
+
+Example (five fold models from ``train.py ggH Combined --stage final``):
+
+    python3 append_bdt_systematic_job_updated.py \
+        ggH 2023 Combined DY scale_up Full NottH 2.4.2 mbarrial \
+        --input-dir /store/group/lpchmumu/mbarrial/analyzer_HiggsMuMu_v2.4/tuples_v2.4.2/systematics \
+        --output-dir /store/group/lpchmumu/mbarrial/analyzer_HiggsMuMu_v2.4/tuples_v2.4.2/systematics/BDT_score \
+        --model-name ggH_Combined_BFull_SNottH --models-dir models
+
+HTCondor input files must include xgb_utils.py, xgb_kfold.py, labels.py, plus for
+k = 0..4:
+    model_<test_name>_fold<k>_bsC.json
+    preprocessing_<test_name>_fold<k>_bsC.pkl
+
+``test_name`` is --model-name, e.g. ggH_Combined_BFull_SNottH.
+If Condor places the 10 model files in the scratch directory itself,
+pass ``--models-dir .``. The model .pkl files are NOT needed for scoring.
+"""
+
+import argparse
 import subprocess
+from pathlib import Path
 
+import numpy as np
+import uproot
 
+import xgb_kfold as kf
 import xgb_utils
+
+XROOTD = "root://cmseos.fnal.gov"
+USE_BSCONSTRAIN = True  # must match the nominal train.py configuration
 
 
 def run_command(command):
-    print("[COMMAND]", " ".join(command))
+    print("[COMMAND]", " ".join(map(str, command)), flush=True)
     subprocess.run(command, check=True)
 
 
-if len(sys.argv) != 10:
-    print(
-        "Usage: python3 append_bdt_systematic_job.py "
-        "<channel> <era> <model_era> <tuple_type> "
-        "<systematic> <bkg_subset> <sig_subset> "
-        "<version> <user>"
+def load_bundle(args, test_name, names):
+    models_dir = Path(args.models_dir)
+    bs_suffix = "_bsC" if USE_BSCONSTRAIN else ""
+    expected = [
+        models_dir / f"{kind}_{test_name}_fold{k}{bs_suffix}.{extension}"
+        for k in range(kf.N_FOLDS)
+        for kind, extension in (("model", "json"), ("preprocessing", "pkl"))
+    ]
+    missing = [str(path) for path in expected if not path.is_file()]
+    if missing:
+        raise FileNotFoundError(
+            "Missing K-fold model or preprocessing files:\n  "
+            + "\n  ".join(missing)
+            + "\nSupply the 10 files saved by train.py, and set --models-dir "
+              "to the correct Condor scratch directory."
+        )
+
+    print(f"[INFO] Loading K-fold bundle '{test_name}' from {models_dir}")
+    bundle = kf.load_fold_bundle(
+        test_name, USE_BSCONSTRAIN, models_dir=str(models_dir)
     )
-    sys.exit(1)
+    if len(bundle) != kf.N_FOLDS:
+        raise RuntimeError(
+            f"Expected {kf.N_FOLDS} fold models, loaded {len(bundle)}"
+        )
+    for index, member in enumerate(bundle):
+        if member["fold"] != index:
+            raise RuntimeError(f"Unexpected fold ordering in model bundle: {index}")
+        trained_names = list(member["meta"]["variables"])
+        if trained_names != names:
+            raise RuntimeError(
+                f"Feature list/order differs from fold {index} training.\n"
+                f"Trained: {trained_names}\nCurrent: {names}"
+            )
+    print(f"[INFO] Loaded {len(bundle)} fold models")
+    return bundle
 
 
-channel_US = sys.argv[1]
-era = sys.argv[2]
-model_era = sys.argv[3]
-tuple_type = sys.argv[4]
-systematic = sys.argv[5]
-background_subset = sys.argv[6]
-signal_subset = sys.argv[7]
-version = sys.argv[8]
-user = sys.argv[9]
+def validate_input(path, channel, names, category_suffix):
+    """Catch old/incompatible systematic tuples before expensive skimming."""
+    mass = "diMuon_bsConstrainedMass" if USE_BSCONSTRAIN else "diMuon_mass"
+    category = f"is_{channel}{category_suffix}"
+    required = set(names) | {mass, category, kf.EVENT_ID}
+    with uproot.open(str(path), **kf.uproot_open_options()) as source:
+        if "tree_output" not in source:
+            raise RuntimeError(f"No tree_output in {path}")
+        tree = source["tree_output"]
+        missing = sorted(required - set(tree.keys()))
+        if missing:
+            raise RuntimeError(
+                "Systematic input is missing branches required by the new "
+                "K-fold BDT:\n  " + "\n  ".join(missing)
+                + "\nIf these branches are absent in the source tuples, the "
+                  "tuples must be regenerated before scoring."
+            )
+        # EVENT_ID must never be converted to float32: folds would be corrupted.
+        event_array = tree[kf.EVENT_ID].array(
+            entry_start=0, entry_stop=1, library="np"
+        )
+        if event_array.dtype.kind not in "ui":
+            raise TypeError(
+                f"The '{kf.EVENT_ID}' branch must contain integer event IDs, "
+                f"got {event_array.dtype}"
+            )
+        print(f"[INFO] Input events (before skim): {tree.num_entries:,}")
+        print(f"[INFO] Skim category: {category}; mass window: "
+              f"{xgb_utils.SKIM_MASS_WINDOW}")
 
 
-DO_STANDARDIZATION = True
-USE_BSCONSTRAIN = True
+def validate_output(path, channel):
+    """Confirm output exists and inspect some rows for consistent fold assignment."""
+    with uproot.open(str(path), **kf.uproot_open_options()) as source:
+        if "tree_output" not in source:
+            raise RuntimeError(f"No tree_output in scored file {path}")
+        tree = source["tree_output"]
+        score_branch = f"BDT_{channel}"
+        required = {score_branch, "BDT_fold", kf.EVENT_ID}
+        missing = sorted(required - set(tree.keys()))
+        if missing:
+            raise RuntimeError(f"Output is missing branches: {missing}")
+        n = tree.num_entries
+        print(f"[INFO] Output events (after skim): {n:,}")
+        # Cheap cross-check; the shared scoring routine processes the whole tree.
+        if n:
+            indices = ((0, min(n, 1000)), (max(0, n - 1000), n))
+            for start, stop in set(indices):
+                arrays = tree.arrays(
+                    [score_branch, "BDT_fold", kf.EVENT_ID],
+                    entry_start=start, entry_stop=stop, library="np"
+                )
+                expected_folds = kf.fold_of_event(arrays[kf.EVENT_ID])
+                if not np.array_equal(arrays["BDT_fold"], expected_folds):
+                    raise RuntimeError(
+                        "Output BDT_fold differs from event % N_FOLDS"
+                    )
+                if not np.isfinite(arrays[score_branch]).all():
+                    raise RuntimeError("Output contains non-finite BDT scores")
+        return n
 
-version_parts = version.split(".")
 
-if len(version_parts) < 2:
-    raise ValueError(
-        f"Invalid version '{version}'. Expected something like 2.2.1"
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("channel", choices=("ggH", "VBF"))
+    parser.add_argument("era", help="Systematic tuple era, e.g. 2023")
+    parser.add_argument("model_era", help="Training era, e.g. Combined")
+    parser.add_argument("tuple_type", help="Tuple sample e.g. DY, ggH, VBF")
+    parser.add_argument("systematic", help="e.g. scale_up or CMS_scale_j_Absolute_up")
+    parser.add_argument("bkg_subset", help="e.g. Full")
+    parser.add_argument("sig_subset", help="e.g. NottH")
+    parser.add_argument("version", help="Tuple version, e.g. 2.4.2")
+    parser.add_argument("user", help="EOS analyzer owner")
+    parser.add_argument("--models-dir", default="models",
+                        help="Directory containing model JSON and preprocessing PKLs. "
+                             "Use '.' for flat Condor transfers (default: models).")
+    parser.add_argument("--input-dir", required=True,
+                        help="EOS directory of the systematic tuples")
+    parser.add_argument("--output-dir", required=True,
+                        help="EOS BDT_score directory; <channel>/<subset>/ is appended")
+    parser.add_argument("--model-name", required=True,
+                        help="test_name of the fold models, e.g. ggH_Combined_BFull_SNottH")
+    parser.add_argument("--systematic-category", choices=("original", "BDT"), default="original",
+                        help="Skim using is_<channel>_category (default, as in "
+                             "xgb_utils.append_BDT_score_to_sys) or categoryBDT")
+    parser.add_argument("--score-chunk-rows", type=int, default=500_000)
+    parser.add_argument("--skim-chunks", type=int, default=1,
+                        help="Parallel CopyTree workers; 1 recommended on Condor")
+    args = parser.parse_args()
+
+    if args.score_chunk_rows <= 0 or args.skim_chunks <= 0:
+        parser.error("--score-chunk-rows and --skim-chunks must be positive")
+    parts = args.version.split(".")
+    if len(parts) < 2 or not all(part.isdigit() for part in parts):
+        parser.error("Version must look like 2.4.2")
+
+    subset_title = f"B{args.bkg_subset}_S{args.sig_subset}"
+    test_name = args.model_name
+    category_suffix = ("_categoryBDT" if args.systematic_category == "BDT"
+                       else "_category")
+
+    eos_dir = args.input_dir
+    eos_out_dir = f"{args.output_dir}/{args.channel}/{subset_title}"
+
+    tuple_name = f"{args.tuple_type}_{args.era}_{args.systematic}_tuples.root"
+    input_url = f"{XROOTD}/{eos_dir}/{tuple_name}"  # double slash before /store
+    output_url = f"{XROOTD}/{eos_out_dir}/{tuple_name}"
+    local_input = Path("input.root")
+    local_output = Path(tuple_name)
+
+    print("=" * 80)
+    print(f"Channel:          {args.channel}")
+    print(f"Systematic era:   {args.era}")
+    print(f"Model era:        {args.model_era}")
+    print(f"Model name:       {test_name}")
+    print(f"Systematic:       {args.systematic}")
+    print(f"Model directory:  {args.models_dir}")
+    print(f"Input:            {input_url}")
+    print(f"Output:           {output_url}")
+    print("=" * 80)
+
+    variables = xgb_utils.get_variables(args.channel, USE_BSCONSTRAIN)[:-3]
+    names = [entry[0] for entry in variables]
+    bundle = load_bundle(args, test_name, names)
+
+    print("[INFO] Copying systematic ROOT input from EOS")
+    run_command(["xrdcp", "-f", input_url, str(local_input)])
+    validate_input(local_input, args.channel, names, category_suffix)
+
+    # The SAME function used by train.py and by the nominal K-fold application.
+    # It skims, masks missing jets, selects model via event % 5, applies each
+    # fold's own standardization, and writes BDT_<channel> plus BDT_fold.
+    xgb_utils.SCORE_CHUNK_ROWS = args.score_chunk_rows
+    xgb_utils.SKIM_CHUNKS = args.skim_chunks
+    xgb_utils.score_tuple_into(
+        "./", str(local_input),
+        "./", str(local_output),
+        args.channel, category_suffix, USE_BSCONSTRAIN,
+        names, {f"BDT_{args.channel}": bundle},
+        tag=f"{args.tuple_type}_{args.era}_{args.systematic}",
+        legacy=False,
     )
+    validate_output(local_output, args.channel)
 
-ANALYZER_VERSION = f"v{version_parts[0]}.{version_parts[1]}"
-TUPLES_VERSION = f"v{version}"
-
-subset_title = f"B{background_subset}_S{signal_subset}"
-
-XROOTD = "root://cmseos.fnal.gov"
-
-# Change "group" to "user" here if your systematic tuples
-# are actually in /store/user/lpchmumu/...
-EOS_DIR = (
-    f"/store/group/lpchmumu/{user}/"
-    f"analyzer_HiggsMuMu_{ANALYZER_VERSION}/"
-    f"tuples_{TUPLES_VERSION}/systematics"
-)
-
-EOS_OUTPUT_DIR = (
-    f"{EOS_DIR}/BDT_score/"
-    f"{channel_US}/{subset_title}"
-)
-
-tuple_name = (
-    f"{tuple_type}_{era}_{systematic}_tuples.root"
-)
-
-local_input = "input.root"
-local_output = tuple_name
-
-input_url = f"{XROOTD}/{EOS_DIR}/{tuple_name}"
-output_url = f"{XROOTD}/{EOS_OUTPUT_DIR}/{tuple_name}"
+    print("[INFO] Creating EOS output directory")
+    run_command(["xrdfs", XROOTD, "mkdir", "-p", eos_out_dir])
+    print("[INFO] Copying scored tuple to EOS")
+    run_command(["xrdcp", "-f", str(local_output), output_url])
+    print("=" * 80)
+    print("[INFO] JOB FINISHED SUCCESSFULLY")
+    print(f"[INFO] {output_url}")
+    print("=" * 80)
 
 
-print("=" * 80)
-print(f"Channel:       {channel_US}")
-print(f"Era:           {era}")
-print(f"Model era:     {model_era}")
-print(f"Tuple type:    {tuple_type}")
-print(f"Systematic:    {systematic}")
-print(f"Input:         {input_url}")
-print(f"Output:        {output_url}")
-print("=" * 80)
-
-
-# ----------------------------------------------------------------------
-# Input
-# ----------------------------------------------------------------------
-
-print("[INFO] Copying input ROOT file from EOS")
-
-run_command([
-    "xrdcp",
-    "-f",
-    input_url,
-    local_input,
-])
-
-
-# ----------------------------------------------------------------------
-# Load the fold models, skim, score and append
-# ----------------------------------------------------------------------
-
-# Fold-matched, exactly as for the nominal tuples: fold = event % n_folds, so a varied event
-# carries the same `event` as its nominal self, lands in the same fold and is scored by the same
-# model -- one that was not trained on it. This used to be a single legacy model with a
-# hand-rolled standardize / predict / append block, because before the event ID a varied row
-# could not be matched to its nominal row's fold. score_tuple_into() raises a clear error if
-# the systematic tuple predates the `event` branch.
-
-import xgb_kfold as kf
-
-variables = xgb_utils.get_variables(channel_US, USE_BSCONSTRAIN)[:-3]
-variable_names = [var[0] for var in variables]
-
-test_name = f"{channel_US}_{model_era}_{subset_title}"
-print(f"[INFO] Loading fold models: {test_name}")
-bundle = kf.load_fold_bundle(test_name, USE_BSCONSTRAIN)
-if variable_names != list(bundle[0]["meta"]["variables"]):
-    raise RuntimeError(
-        "xgb_utils.get_variables() does not match the variables the fold models were trained "
-        f"with ({len(variable_names)} vs {len(bundle[0]['meta']['variables'])})"
-    )
-print(f"[INFO] {len(bundle)} fold models, {len(variable_names)} variables")
-
-xgb_utils.score_tuple_into(
-    "./",
-    local_input,
-    "./",
-    local_output,
-    channel_US,
-    "_category",
-    USE_BSCONSTRAIN,
-    variable_names,
-    {f"BDT_{channel_US}": bundle},
-    tag=f"{tuple_type}_{era}_{systematic}",
-)
-
-
-# ----------------------------------------------------------------------
-# Copy result to EOS
-# ----------------------------------------------------------------------
-
-print("[INFO] Creating EOS output directory")
-
-run_command([
-    "xrdfs",
-    XROOTD,
-    "mkdir",
-    "-p",
-    EOS_OUTPUT_DIR,
-])
-
-
-print("[INFO] Copying output to EOS")
-
-run_command([
-    "xrdcp",
-    "-f",
-    local_output,
-    output_url,
-])
-
-
-print()
-print("=" * 80)
-print("[INFO] JOB FINISHED SUCCESSFULLY")
-print(f"[INFO] {output_url}")
-print("=" * 80)
+if __name__ == "__main__":
+    main()
