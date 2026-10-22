@@ -13,12 +13,12 @@ src_base="/store/user/lpchmumu/esledge/analyzer_HiggsMuMu_v${analyzer_version}/t
 dst_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 echo $dst_dir
 
-# copy_dir <EOS source dir> <local destination dir>
+# copy_dir <EOS source dir> <local destination dir> [file name prefix]
 copy_dir() {
     mkdir -p "$2"
     xrdfs "$host" ls "$1" | grep -E "*.root" | while read -r src_file; do
         echo "Copying $src_file"
-        xrdcp -f "$host/$src_file" "$2/$(basename "$src_file")"
+        xrdcp -f "$host/$src_file" "$2/$3$(basename "$src_file")"
     done
 }
 
@@ -31,6 +31,10 @@ done
 
 for mode in ggH VBF; do
     copy_dir "$src_base/${mode}_Summer24" "$dst_dir/signal/$mode"
+    # ext1 tuples share file names with the nominal ones, so prefix them before merging
+    if [[ $mode == VBF ]]; then
+        copy_dir "$src_base/${mode}_Summer24_ext1" "$dst_dir/signal/$mode" "ext1_"
+    fi
     cd $dst_dir/signal/$mode
     hadd ${mode}_CombinedTuples.root *.root
     rm *_tuples.root

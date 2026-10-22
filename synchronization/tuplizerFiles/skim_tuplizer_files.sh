@@ -7,7 +7,8 @@ skim_script="$dir/../skim_tree.py"
 
 for path in data/Muon0_2024H/Muon0_2024H data/Muon1_2024H/Muon1_2024H signal/ggH/ggH signal/VBF/VBF; do
     input="$dir/${path}_CombinedTuples.root"
-    output="$dir/${path}_skim.root"
+    echo "${path##*/}"
+    output="$dir/combinedSkims/${path##*/}_skim.root"
     if [[ ! -s "$input" ]]; then
         echo "Missing $input, skipping"
         continue

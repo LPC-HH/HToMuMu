@@ -50,6 +50,7 @@ list_datasets = [
     #"VBF_Summer23",
     #"VBF_Summer23BPix",
     "VBF_Summer24",
+    "VBF_Summer24_ext1",
     #"ggH_Summer22",
     #"ggH_Summer22EE",
     #"ggH_Summer23",
