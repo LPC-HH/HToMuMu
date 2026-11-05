@@ -4,6 +4,12 @@ from pathlib import Path
 BDT_CATEGORIES_PATH = Path(__file__).resolve().parent.parent / "root_io" / "bdt_categories.json"
 
 
+def variant_dir_suffix(label):
+    """BDT_score/<channel><suffix>/ directory suffix of a train.py variant label (VARIANT.label,
+    e.g. "asimovFit_flatMassRes" -> "asimovFitflatMassRes"; "base" -> "")."""
+    return "" if label == "base" else label.replace("_", "")
+
+
 def load_bdt_categories(path=BDT_CATEGORIES_PATH):
     if not Path(path).exists():
         return {}

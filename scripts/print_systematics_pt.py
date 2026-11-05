@@ -15,9 +15,12 @@ from systematics_config import (
     FLASHGG_PATH,
     MASS_MAX,
     MASS_MIN,
+    NOMINAL_BDT_SCORE_DIR,
+    SYSTEMATICS_BDT_SCORE_DIR,
     PROCESSES,
     SUBSET,
     TREE_NAME,
+    VARIANT_CHANNEL,
 )
 
 OUTPUT_JSON = (
@@ -92,16 +95,10 @@ USER = os.environ["USER"]
 
 ANALYZER_VERSION = ".".join(VERSION.split(".")[:2])
 
-TUPLE_BASE = Path(
-    f"/eos/uscms/store/user/lpchmumu/{USER}/"
-    f"analyzer_HiggsMuMu_v{ANALYZER_VERSION}/"
-    f"tuples_v{VERSION}"
-)
-
-TUPLE_BASE_NOMINAL = Path("./root_io/tuples/")
-
-NOMINAL_BASE = TUPLE_BASE_NOMINAL / "BDT_score"
-SYSTEMATICS_BASE = TUPLE_BASE / "systematics/BDT_score"
+NOMINAL_BASE = NOMINAL_BDT_SCORE_DIR
+SYSTEMATICS_BASE = Path(SYSTEMATICS_BDT_SCORE_DIR.format(
+    user=USER, analyzer_version=ANALYZER_VERSION, version=VERSION
+))
 
 MUON_PT_SYSTEMATICS = [
     "scale",
@@ -237,7 +234,7 @@ def make_mask(bdt, topology, mass, weight, category):
 
 
 def nominal_file(channel, process):
-    return NOMINAL_BASE / channel / SUBSET / f"{process}_Combined_{SUBSET}.root"
+    return NOMINAL_BASE / VARIANT_CHANNEL[channel] / SUBSET / f"{process}_Combined_{SUBSET}.root"
 
 
 def systematic_file(channel, process, systematic, direction):

@@ -42,12 +42,15 @@ skip_pattern = [
 
 list_datasets = datasets_info.keys()
 # # Use in case you want to run over a specific list of datasets!
-#list_datasets = [
+list_datasets = [
+    "Muon0_2024H",
+    "Muon1_2024H",
  #   "VBF_Summer22",
     #"VBF_Summer22EE",
     #"VBF_Summer23",
     #"VBF_Summer23BPix",
-    #"VBF_Summer24",
+    "VBF_Summer24",
+    "VBF_Summer24_ext1",
     #"ggH_Summer22",
     #"ggH_Summer22EE",
     #"ggH_Summer23",
@@ -57,13 +60,14 @@ list_datasets = datasets_info.keys()
      #"DY50to120_Summer24v13",
      #"Muon0_2024E",
     # "Muon1_2024E",
-    #"ggH_Summer24",
-#]
+    "ggH_Summer24",
+]
 
 
 include_Z = "F"
 include_H = "T"
 jet_syst = "nominal"
+ifSync = "T"
 
 muon_pt_syst = os.getenv("MUON_PT_SYST", "nominal")
 valid_muon_pt_systs = [
@@ -194,7 +198,7 @@ for dataset_name in list_datasets:
             comm += "/eos/uscms/" + OUTPUT_DIR + " " + era + " " + channel
             comm += " T" if "Data" in type_info else " F"
             comm += " T" if "signal" in type_info else " F"
-            comm += " " + include_Z + " " + include_H + " " + jet_syst
+            comm += " " + include_Z + " " + include_H + " " + jet_syst + " " + ifSync
             print(" > cd " + JOB_DIR + "; " + comm)
             send_all_jobs.write("cd " + JOB_DIR + "\n")
             send_all_jobs.write(comm + "\n")
@@ -242,7 +246,7 @@ for dataset_name in list_datasets:
     jobfile_JDL.write("Universe  = vanilla" + "\n")
     jobfile_JDL.write("Executable = ./run_job_LPC.sh" + "\n")
 
-    args = INPUT_FILE + " " + WEIGHT_FILE + " " + OUTPUT_DIR + " " + era + " " + channel + " " + type_info + " "  + include_Z + " " + include_H + " " + jet_syst + " " + cmsswReleaseVersion + " " + "$(I)"
+    args = INPUT_FILE + " " + WEIGHT_FILE + " " + OUTPUT_DIR + " " + era + " " + channel + " " + type_info + " "  + include_Z + " " + include_H + " " + jet_syst + " " + ifSync + " " + cmsswReleaseVersion + " " + "$(I)"
     jobfile_JDL.write("Arguments = " + args + "\n")
 
     jobfile_JDL.write("Log = log/jobR$(I).$(Cluster).$(Process).log" + "\n")

@@ -21,6 +21,7 @@ ifH=$8
 file_type="data"
 if [ "$is_data" == "F" ]; then file_type="mc"; fi
 muon_pt_syst=${9:-nominal}
+ifSync=${10}
 
 ###############################
 # Define exec and setup cmssw
@@ -56,8 +57,8 @@ mkdir -p ${DATA_FOLDER}/jetCorrections/${year}/
 #cp jer_smear.json.gz ${DATA_FOLDER}/jetCorrections/${year}/
 #cp JvmConfig.json ${DATA_FOLDER}/jetCorrections/${year}/
 
-cp jetvetomaps.json.gz ${DATA_FOLDER}/jetCorrections/
-cp jet_jerc.json.gz ${DATA_FOLDER}/jetCorrections/
+cp jetvetomaps.json.gz ${DATA_FOLDER}/jetCorrections/${year}/
+cp jet_jerc.json.gz ${DATA_FOLDER}/jetCorrections/${year}/
 cp JecConfigAK4.json ${DATA_FOLDER}/jetCorrections/
 cp JecConfigAK8.json ${DATA_FOLDER}/jetCorrections/
 cp jer_smear.json.gz ${DATA_FOLDER}/jetCorrections/
@@ -92,8 +93,8 @@ cp data/btagSF/DeepCSV_94XSF_V3_B_F.csv ${DATA_FOLDER}/btagSF/
 #cp data/jetCorrections/jer_smear.json.gz ${DATA_FOLDER}/jetCorrections/${year}/
 #cp data/jetCorrections/JvmConfig.json ${DATA_FOLDER}/jetCorrections/${year}/
 
-cp data/jetCorrections/${year}/jetvetomaps.json.gz ${DATA_FOLDER}/jetCorrections
-cp data/jetCorrections/${year}/jet_jerc.json.gz ${DATA_FOLDER}/jetCorrections
+cp data/jetCorrections/${year}/jetvetomaps.json.gz ${DATA_FOLDER}/jetCorrections/${year}/
+cp data/jetCorrections/${year}/jet_jerc.json.gz ${DATA_FOLDER}/jetCorrections/${year}/
 cp data/jetCorrections/JecConfigAK4.json ${DATA_FOLDER}/jetCorrections
 cp data/jetCorrections/JecConfigAK8.json ${DATA_FOLDER}/jetCorrections
 cp data/jetCorrections/jer_smear.json.gz ${DATA_FOLDER}/jetCorrections
@@ -223,8 +224,8 @@ file inputs/*.root
 # Run executable
 ###########################
 echo "Executing Analysis executable:"
-echo "./${executable} tmp_input_list.txt ${output_name}_${job_number}.root ${file_type} ${is_data} ${year} ${ifZ} ${ifH} ${muon_pt_syst}"
-./${executable} tmp_input_list.txt ${output_name}_${job_number}.root ${file_type} ${is_data} ${year} ${ifZ} ${ifH} ${muon_pt_syst}
+echo "./${executable} tmp_input_list.txt ${output_name}_${job_number}.root ${file_type} ${is_data} ${year} ${ifZ} ${ifH} ${muon_pt_syst} ${ifSync}"
+./${executable} tmp_input_list.txt ${output_name}_${job_number}.root ${file_type} ${is_data} ${year} ${ifZ} ${ifH} ${muon_pt_syst} ${ifSync}
 
 
 ls -l

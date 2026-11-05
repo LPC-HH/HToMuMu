@@ -187,6 +187,7 @@ def get_histograms_from_tuple(
     production_channel,
     bdt_cuts=[],
     bdt_subset="",
+    bdt_dir_suffix="",
     lumi_rescale=False,
     Z_study=False,
     jet_pT_study=False,
@@ -233,7 +234,7 @@ def get_histograms_from_tuple(
     if bdt_subset != "" or variable == "BDT_" + production_channel:
         tuple_path = (
             "../root_io/tuples/"
-            f"BDT_score/{production_channel}/{bdt_subset}/"
+            f"BDT_score/{production_channel}{bdt_dir_suffix}/{bdt_subset}/"
         )
 
     # ------------------------------------------------------------
@@ -501,6 +502,7 @@ def get_data_histograms_from_tuple(
     production_channel,
     bdt_cuts,
     bdt_subset="",
+    bdt_dir_suffix="",
     Z_study=False,
     jet_pT_study=False,
     version="2.0.0",
@@ -530,7 +532,7 @@ def get_data_histograms_from_tuple(
 
         tuple_path = (
             "../root_io/tuples/"
-            f"BDT_score/{production_channel}/{bdt_subset}/"
+            f"BDT_score/{production_channel}{bdt_dir_suffix}/{bdt_subset}/"
         )
 
         file_name = (
@@ -667,6 +669,7 @@ def draw_data_and_simul_and_ratio(
     production_channel="",
     bdt_cuts=[],
     bdt_subset="",
+    bdt_dir_suffix="",
     Z_study=False,
     jet_pT_study=False,
     version="2.0.0",
@@ -707,6 +710,7 @@ def draw_data_and_simul_and_ratio(
         production_channel,
         bdt_cuts,
         bdt_subset,
+        bdt_dir_suffix=bdt_dir_suffix,
         Z_study=Z_study,
         jet_pT_study=jet_pT_study,
         version=version,
@@ -725,6 +729,7 @@ def draw_data_and_simul_and_ratio(
         production_channel,
         bdt_cuts,
         bdt_subset,
+        bdt_dir_suffix,
         era in ["2026", "2025"],
         Z_study=Z_study,
         jet_pT_study=jet_pT_study,
@@ -740,6 +745,7 @@ def draw_data_and_simul_and_ratio(
         production_channel,
         bdt_cuts,
         bdt_subset,
+        bdt_dir_suffix,
         era in ["2025", "2026"],
         Z_study=Z_study,
         jet_pT_study=jet_pT_study,
@@ -850,7 +856,7 @@ def draw_data_and_simul_and_ratio(
         if len(bdt_cuts) > 1:
             output_directory = (
                 f"../plots/ratio/{tuple_version}/"
-                + production_channel + "_category/bdt_selections/" + era + "/"
+                + production_channel + bdt_dir_suffix + "_category/bdt_selections/" + era + "/"
             )
 
     output_directory = get_output_directory(variable, output_directory, variables_type)
@@ -869,6 +875,7 @@ def draw_data_and_simul_and_ratio(
             production_channel=production_channel,
             bdt_cuts=bdt_cuts[1:],
             bdt_subset=bdt_subset,
+            bdt_dir_suffix=bdt_dir_suffix,
             Z_study=Z_study,
             jet_pT_study=jet_pT_study,
             version=version,

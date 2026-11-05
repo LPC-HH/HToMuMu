@@ -301,7 +301,8 @@ class HmmAnalyzer : public MainEvent {
     HmmAnalyzer(const TString &inputFileList = "foo.txt",
                 const char *outFileName = "histo.root",
                 TString dataset = "data", bool is_data_input = false,
-                TString year_num = "2017",  bool include_Z_ = false, bool include_H_ = true);
+                TString year_num = "2017",  bool include_Z_ = false, bool include_H_ = true,
+                bool ifSync_ = false);
     virtual ~HmmAnalyzer();
     // void Analyze(bool is_data, int option, string outputFileName, string
     // label);
@@ -328,6 +329,7 @@ class HmmAnalyzer : public MainEvent {
     bool include_H; /**< Flag indicating if save H region. */
     std::string muon_pt_syst;
     bool apply_muon_pt_syst_to_signal;
+    bool ifSync;
     std::string yearst;
     std::map<std::string, float> muon_pt_cut;
     std::map<std::string, float> btagLoose_cut;
@@ -485,6 +487,9 @@ class HmmAnalyzer : public MainEvent {
     float t_diMuon_mass;
     float t_diMuon_bsConstrainedMass;
 
+    float t_diMuon_bsConstrainedPt_nanoAOD;
+    float t_diMuon_bsConstrainedMass_nanoAOD;
+
     float t_PuppiMET_phi;
     float t_PuppiMET_pt;
     float t_PuppiMET_sumEt;
@@ -622,6 +627,14 @@ class HmmAnalyzer : public MainEvent {
     std::vector<float> *t_GenJet_phi;
     std::vector<float> *t_GenJet_pt;
 
+
+    //synchronization leaves
+    //event
+    Bool_t t_pass_muon_trigger_match;
+    Bool_t t_pass_jet_veto;
+
+    //jets
+
 };
 
 #endif
@@ -629,7 +642,7 @@ class HmmAnalyzer : public MainEvent {
 #ifdef HmmAnalyzer_cxx
 HmmAnalyzer::HmmAnalyzer(const TString &inputFileList, const char *outFileName,
                          TString dataset, bool is_data_input, TString year_num, 
-                         bool include_Z_, bool include_H_) {
+                         bool include_Z_, bool include_H_, bool ifSync_) {
     // if parameter tree is not specified (or zero), connect the file
     // used to generate this class and read the Tree.
 
@@ -637,6 +650,7 @@ HmmAnalyzer::HmmAnalyzer(const TString &inputFileList, const char *outFileName,
     year = year_num;
     include_Z = include_Z_;
     include_H = include_H_;
+    ifSync = ifSync_;
     muon_pt_syst = "nominal";
     apply_muon_pt_syst_to_signal = false;
     yearst = std::string(year.Data());
@@ -672,9 +686,11 @@ HmmAnalyzer::HmmAnalyzer(const TString &inputFileList, const char *outFileName,
     btagLoose_cut["2022EE"] = 0.0499;
     btagLoose_cut["2023"] = 0.0358;
     btagLoose_cut["2023BPix"] = 0.0359;
-    btagLoose_cut["2024"] = 0.0365;
-    btagLoose_cut["2025"] = 0.0365;// 2025 values NEED to be checked
-    btagLoose_cut["2026"] = 0.0365;// 2025 values NEED to be checked
+
+    //UParT values
+    btagLoose_cut["2024"] = 0.0246;
+    btagLoose_cut["2025"] = 0.0246;// 2025 values NEED to be checked
+    btagLoose_cut["2026"] = 0.0246;// 2025 values NEED to be checked
 
     // b-tag deepFlav MEDIUM score selection
     btagMedium_cut["2016"] = 0.6321;
@@ -685,9 +701,11 @@ HmmAnalyzer::HmmAnalyzer(const TString &inputFileList, const char *outFileName,
     btagMedium_cut["2022EE"] = 0.2605;
     btagMedium_cut["2023"] = 0.1917;
     btagMedium_cut["2023BPix"] = 0.1919;
-    btagMedium_cut["2024"] = 0.1990;
-    btagMedium_cut["2025"] = 0.1990; // 2025 values NEED to be checked
-    btagMedium_cut["2026"] = 0.1990; // 2025 values NEED to be checked
+
+    //UParT values
+    btagMedium_cut["2024"] = 0.1272;
+    btagMedium_cut["2025"] = 0.1272; // 2025 values NEED to be checked
+    btagMedium_cut["2026"] = 0.1272; // 2025 values NEED to be checked
 
     if (!is_data) {
         getPileupHistograms();
@@ -904,11 +922,20 @@ bool HmmAnalyzer::passesJetIdTightLepVeto(int index) {
 
 bool HmmAnalyzer::isValidJet(int index, float corrected_pt) {
 
-    return (
-        corrected_pt > 15. &&
-        fabs(Jet_eta[index]) < 4.7 &&
-        passesJetIdTightLepVeto(index)
-    );
+    if(!ifSync){
+        return (
+            corrected_pt > 15. &&
+            fabs(Jet_eta[index]) < 4.7 &&
+            passesJetIdTightLepVeto(index)
+        );
+    }
+    else{
+        return (
+            corrected_pt > 30. &&
+            fabs(Jet_eta[index]) < 4.7 &&
+            passesJetIdTightLepVeto(index) 
+        );
+    }
 }
 
 bool HmmAnalyzer::FillChain(TChain *chain, const TString &inputFileList) {
@@ -1130,6 +1157,9 @@ void HmmAnalyzer::clearTreeVectors() {
     t_diMuon_mass = FLOAT_NULL_VALUE;
     t_diMuon_bsConstrainedMass = FLOAT_NULL_VALUE;
 
+    t_diMuon_bsConstrainedPt_nanoAOD = FLOAT_NULL_VALUE;
+    t_diMuon_bsConstrainedMass_nanoAOD = FLOAT_NULL_VALUE;
+
     t_PuppiMET_phi = FLOAT_NULL_VALUE;
     t_PuppiMET_pt = FLOAT_NULL_VALUE;
     t_PuppiMET_sumEt = FLOAT_NULL_VALUE;
@@ -1265,6 +1295,11 @@ void HmmAnalyzer::clearTreeVectors() {
     t_GenJet_mass->clear();
     t_GenJet_phi->clear();
     t_GenJet_pt->clear();
+    
+
+    //syncronization values
+    t_pass_muon_trigger_match = false;
+    t_pass_jet_veto = false;
 }
 
 void HmmAnalyzer::BookTreeBranches() {
@@ -1471,10 +1506,12 @@ void HmmAnalyzer::BookTreeBranches() {
 
     tree->Branch("t_diMuon_pt", &t_diMuon_pt, "t_diMuon_pt/F");
     tree->Branch("t_diMuon_bsConstrainedPt", &t_diMuon_bsConstrainedPt, "t_diMuon_bsConstrainedPt/F");
+    tree->Branch("t_diMuon_bsConstrainedPt_nanoAOD", &t_diMuon_bsConstrainedPt_nanoAOD, "t_diMuon_bsConstrainedPt_nanoAOD/F");
     tree->Branch("t_diMuon_eta", &t_diMuon_eta, "t_diMuon_eta/F");
     tree->Branch("t_diMuon_phi", &t_diMuon_phi, "t_diMuon_phi/F");
     tree->Branch("t_diMuon_mass", &t_diMuon_mass, "t_diMuon_mass/F");
     tree->Branch("t_diMuon_bsConstrainedMass", &t_diMuon_bsConstrainedMass, "t_diMuon_bsConstrainedMass/F");
+    tree->Branch("t_diMuon_bsConstrainedMass_nanoAOD", &t_diMuon_bsConstrainedMass_nanoAOD, "t_diMuon_bsConstrainedMass_nanoAOD/F");
 
     tree->Branch("t_PuppiMET_phi", &t_PuppiMET_phi, "t_PuppiMET_phi/F");
     tree->Branch("t_PuppiMET_pt", &t_PuppiMET_pt, "t_PuppiMET_pt/F");
@@ -1769,5 +1806,11 @@ void HmmAnalyzer::BookTreeBranches() {
     tree->Branch("t_GenJet_mass", "vector<float>", &t_GenJet_mass);
     tree->Branch("t_GenJet_phi", "vector<float>", &t_GenJet_phi);
     tree->Branch("t_GenJet_pt", "vector<float>", &t_GenJet_pt);
+
+    //synchronization branches
+   if(ifSync){
+        tree->Branch("t_pass_muon_trigger_match", &t_pass_muon_trigger_match, "t_pass_muon_trigger_match/O");
+        tree->Branch("t_pass_jet_veto", &t_pass_jet_veto, "t_pass_jet_veto/O");
+    }
 }
 #endif // #ifdef HmmAnalyzer_cxx

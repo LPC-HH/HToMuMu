@@ -3,7 +3,21 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "python"))
-from bdt_categories_io import load_bdt_categories, get_bdt_cuts
+from bdt_categories_io import load_bdt_categories, get_bdt_cuts, variant_dir_suffix
+
+# -v/--variant <label>: 
+dir_suffix = ""
+for variant_flag in ("-v", "--variant"):
+    if variant_flag in sys.argv:
+        i = sys.argv.index(variant_flag)
+        if i + 1 >= len(sys.argv):
+            print(variant_flag + " needs a variant label (e.g. asimovFitflatMassRes)")
+            sys.exit(1)
+        dir_suffix = variant_dir_suffix(sys.argv[i + 1])
+        del sys.argv[i:i + 2]
+        if "--categories" not in sys.argv:
+            print(variant_flag + " only applies with --categories")
+            sys.exit(1)
 
 production_channel = ""
 bdt_subset = ""
@@ -22,7 +36,7 @@ if len(sys.argv) >= 2:
     if "--categories" in sys.argv:
         use_categories = True
         bdt_subset = "BFull_SNottH"
-        print("Using BDT categories")
+        print("Using BDT categories" + (f" of variant {dir_suffix}" if dir_suffix else ""))
     else:
         print("Using inclusive " + production_channel + " category")
 
@@ -125,12 +139,12 @@ variables = [
     "leading_jet_mass",
     "leading_jet_area",
     "leading_jet_btagPNetQvG",
-    "leading_jet_btagUParTAK4QvG"   ,
-    "leading_jet_btagDeepFlavQG",
-    "leading_jet_chEmEF",
-    "leading_jet_chHEF",
-    "leading_jet_neEmEF",
-    "leading_jet_neHEF",
+    #"leading_jet_btagUParTAK4QvG"   ,
+    #"leading_jet_btagDeepFlavQG",
+    #"leading_jet_chEmEF",
+    #"leading_jet_chHEF",
+    #"leading_jet_neEmEF",
+    #"leading_jet_neHEF",
     "leading_jet_nConstituents",
     "leading_jet_chMultiplicity",
     "leading_jet_neMultiplicity",
@@ -140,12 +154,12 @@ variables = [
     "subleading_jet_mass",
     "subleading_jet_area",
     "subleading_jet_btagPNetQvG",
-    "subleading_jet_btagUParTAK4QvG",
-    "subleading_jet_btagDeepFlavQG",
-    "subleading_jet_chEmEF",
-    "subleading_jet_chHEF",
-    "subleading_jet_neEmEF",
-    "subleading_jet_neHEF",
+    #"subleading_jet_btagUParTAK4QvG",
+    #"subleading_jet_btagDeepFlavQG",
+    #"subleading_jet_chEmEF",
+    #"subleading_jet_chHEF",
+    #"subleading_jet_neEmEF",
+    #"subleading_jet_neHEF",
     "subleading_jet_nConstituents",
     "subleading_jet_chMultiplicity",
     "subleading_jet_neMultiplicity",
@@ -169,11 +183,11 @@ variables = [
 ]
 
 variables = ["leading_jet_eta", "subleading_jet_eta", "diMuon_bsConstrainedMass"]
-# variables = ["diMuon_bsConstrainedMass"]
+variables = ["diMuon_bsConstrainedMass"]
 
 # eras = ["2022EE", "2022", "2023", "2023BPix", "2024"]#, "2025"]
 # eras = ["2025","2024", "Combined"]
-eras = ["2025", "2026", "Combined"]
+eras = ["Combined"]
 #eras = ["2025"]
 
 for era in eras:
@@ -181,7 +195,7 @@ for era in eras:
         bdt_cuts = []
     elif use_categories:
         bdt_cuts = get_bdt_cuts(
-            bdt_categories_info, production_channel, era, bdt_subset, bdt_mass_variable
+            bdt_categories_info, production_channel + dir_suffix, era, bdt_subset, bdt_mass_variable
         )
     for variable in variables:
         print(production_channel)
@@ -194,6 +208,7 @@ for era in eras:
             production_channel,
             bdt_cuts,
             bdt_subset,
+            bdt_dir_suffix=dir_suffix,
             jet_pT_study=False,
             version=version,
         )

@@ -472,7 +472,7 @@
     }
   },
   "2022Pre": {
-    "jercJsonPath": "./data/jetCorrections/jet_jerc.json.gz",
+    "jercJsonPath": "./data/jetCorrections/2022/jet_jerc.json.gz",
     "ApplyOnData": {
       "JesNominal": {
         "Era2022PreAll": {
@@ -590,7 +590,7 @@
     }
   },
   "2022Post": {
-    "jercJsonPath": "./data/jetCorrections/jet_jerc.json.gz",
+    "jercJsonPath": "./data/jetCorrections/2022EE/jet_jerc.json.gz",
     "ApplyOnData": {
       "JesNominal": {
         "Era2022PostAll": {
@@ -708,7 +708,7 @@
     }
   },
   "2023Pre": {
-    "jercJsonPath": "./data/jetCorrections/jet_jerc.json.gz",
+    "jercJsonPath": "./data/jetCorrections/2023/jet_jerc.json.gz",
     "ApplyOnData": {
       "JesNominal": {
         "Era2023PreAll": {
@@ -826,7 +826,7 @@
     }
   },
   "2023Post": {
-    "jercJsonPath": "./data/jetCorrections/jet_jerc.json.gz",
+    "jercJsonPath": "./data/jetCorrections/2023BPix/jet_jerc.json.gz",
     "ApplyOnData": {
       "JesNominal": {
         "Era2023PostAll": {
@@ -944,7 +944,7 @@
     }
   },
   "2024": {
-    "jercJsonPath": "./data/jetCorrections/jet_jerc.json.gz",
+    "jercJsonPath": "./data/jetCorrections/2024/jet_jerc.json.gz",
     "ApplyOnData": {
       "JesNominal": {
         "Era2024All": {
@@ -1062,7 +1062,7 @@
     }
   },
   "2025": {
-    "jercJsonPath": "./data/jetCorrections/jet_jerc.json.gz",
+    "jercJsonPath": "./data/jetCorrections/2025/jet_jerc.json.gz",
     "ApplyOnData": {
       "JesNominal": {
         "Era2025All": {
@@ -1180,7 +1180,7 @@
     }
   },
   "2026": {
-    "jercJsonPath": "./data/jetCorrections/jet_jerc.json.gz",
+    "jercJsonPath": "./data/jetCorrections/2026/jet_jerc.json.gz",
     "ApplyOnData": {
       "JesNominal": {
         "Era2026All": {

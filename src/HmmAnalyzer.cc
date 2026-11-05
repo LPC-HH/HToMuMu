@@ -34,10 +34,10 @@
 
 int main(int argc, char *argv[]) {
 
-    if (argc != 9) {
-        std::cerr << "Please give 8 arguments: runList outputFileName dataset "
+    if (argc != 10) {
+        std::cerr << "Please give 9 arguments: runList outputFileName dataset "
           << "dataType(T/F) year include_Z(T/F) include_H(T/F) "
-          << "muon_pt_syst" << std::endl;
+          << "muon_pt_syst" << "ifSync(T/F)" << std::endl;
         return -1;
     }
     const char *inputFileList = argv[1];
@@ -49,11 +49,12 @@ int main(int argc, char *argv[]) {
     const bool include_Z = *argv[6] == 'T';
     const bool include_H = *argv[7] == 'T';
     const std::string muon_pt_syst = NormalizeMuonPtSyst(argv[8]);
+    const bool ifSync = *argv[9] == 'T';
 
     //std::cout << year_num.Data() << std::endl;
 
     HmmAnalyzer Hmm(inputFileList, outFileName, data, is_data_input, year_num,
-                    include_Z, include_H);
+                    include_Z, include_H, ifSync);
     Hmm.muon_pt_syst = muon_pt_syst;
     Hmm.apply_muon_pt_syst_to_signal =
         !is_data_input && muon_pt_syst != "nominal";
@@ -68,6 +69,8 @@ int main(int argc, char *argv[]) {
     std::cout << "  Muon pT systematic: " << muon_pt_syst << std::endl;
     std::cout << "  Apply muon pT systematic? "
               << Hmm.apply_muon_pt_syst_to_signal << std::endl;
+    std::cout << "  Synchronizing? " << ifSync << std::endl;
+
     Hmm.EventLoop();
 
     return 0;
@@ -175,7 +178,7 @@ void HmmAnalyzer::EventLoop() {
     std::cout << "Btag calibration loaded" << std::endl;           
     long nentries = fChain->GetEntriesFast();
     //h_nEntries->SetBinContent(1, nentries);
-    //nentries = 5000;
+    //nentries = 500;
     long nbytes = 0;
     long nb = 0;
     
@@ -189,12 +192,13 @@ void HmmAnalyzer::EventLoop() {
         nb = fChain->GetEntry(jentry);
         nbytes += nb;
 
-
-        if (!is_data && yearst == "2024" && event % 2 == 0) {
-            continue;
-        }
-        if (!is_data && yearst == "2025" && event % 2 != 0) {
-            continue;
+        if(!ifSync){
+            if (!is_data && yearst == "2024" && event % 2 == 0) {
+                continue;
+            }
+            if (!is_data && yearst == "2025" && event % 2 != 0) {
+                continue;
+            }
         }
 
         h_nEntries->Fill(0.5);
@@ -271,7 +275,6 @@ void HmmAnalyzer::EventLoop() {
 
 
         bool trig_decision = (HLT_IsoMu24 == 1);
-
         bool run_trig_checks = 
             (trig_decision && Flag_HBHENoiseFilter && Flag_HBHENoiseIsoFilter &&
              Flag_EcalDeadCellTriggerPrimitiveFilter && Flag_goodVertices &&
@@ -289,7 +292,6 @@ void HmmAnalyzer::EventLoop() {
         
         //std::cout << "Running muon checks" << std::endl; 
         if (!run_muChecks) {
-            //std::cout << "Muon checks valid" << std::endl; 
             continue;
         }
 
@@ -346,11 +348,18 @@ void HmmAnalyzer::EventLoop() {
             mu_pt_corr[i] = pt_corr;
             mu_ptErr_corr[i] = ptErr_corr;
 
-            if (pt_corr > 10 &&
+            if (!ifSync){
+                if(pt_corr > 10 &&
                 fabs(Muon_eta[i]) < 2.4 &&
                 Muon_isGlobal[i] &&
                 Muon_pfRelIso04_all[i] < 0.25 &&
                 Muon_looseId[i]) {
+                n_valid_muons++;
+                }
+            }
+            else if(ifSync && pt_raw > 20 && Muon_isGlobal[i] &&
+                Muon_mediumId[i] && Muon_pfRelIso04_all[i] < 0.25 &&
+                fabs(Muon_eta[i]) < 2.4){
                 n_valid_muons++;
             }
         }
@@ -385,7 +394,7 @@ void HmmAnalyzer::EventLoop() {
                 float pair_pt_sum =
                     mu_pt_corr[muon_index_1] + mu_pt_corr[muon_index_2];
 
-                if (pair_pt_sum > best_pair_pt_sum) {
+                if (pair_pt_sum > best_pair_pt_sum) { //is this how we want to sort muons?
                     best_pair_pt_sum = pair_pt_sum;
 
                     // Store the higher-pT muon as mu1
@@ -403,10 +412,8 @@ void HmmAnalyzer::EventLoop() {
         }
         //std::cout << "Checking 2 valid muons" << std::endl; 
         if(!two_valid_muons){
-            //std::cout << "No valid muons" << std::endl; 
             continue;
         }
-
         h_nTwoMuons->Fill(0.5);
 
         //Ensure only 3 Muons
@@ -418,8 +425,13 @@ void HmmAnalyzer::EventLoop() {
 
 
         for (int i = 0; i < nElectron; i++) {
-            if ((fabs(Electron_eta[i]) > 2.5 || Electron_pt[i] < 10.0 || fabs(Electron_dz[i]) > 1.0 
+            if (!ifSync){
+                if((fabs(Electron_eta[i]) > 2.5 || Electron_pt[i] < 10.0 || fabs(Electron_dz[i]) > 1.0 
                     || fabs(Electron_dxy[i]) > 0.5 || !Electron_mvaIso_WP90[i])) {
+                    continue;
+                }
+            }
+            else if((fabs(Electron_eta[i]) > 2.5 || Electron_pt[i] < 20.0 || !Electron_mvaIso_WP90[i])) {
                 continue;
             }
             // t_El_genPartIdx->push_back(Electron_genPartIdx[i]);
@@ -498,7 +510,15 @@ void HmmAnalyzer::EventLoop() {
 
         //std::cout << "Checking trig match" << std::endl; 
         if (!trig_match) {
-            continue;
+            if(!ifSync){
+                continue;
+            }
+            else{
+                t_pass_muon_trigger_match = false;
+            }
+        }
+        else if (ifSync){
+            t_pass_muon_trigger_match = true;
         }
 
         h_nTriggerMatch->Fill(0.5);
@@ -628,12 +648,21 @@ void HmmAnalyzer::EventLoop() {
         ROOT::Math::PtEtaPhiMVector mu2BSC((mu_pt_corr)[index_mu2],
                                         (Muon_eta)[index_mu2],
                                         (Muon_phi)[index_mu2], MUON_MASS);
+
+        ROOT::Math::PtEtaPhiMVector dimuBSC_nanoAOD;
+        ROOT::Math::PtEtaPhiMVector mu1BSC_nanoAOD((Muon_bsConstrainedPt)[index_mu1],
+                                        (Muon_eta)[index_mu1],
+                                        (Muon_phi)[index_mu1], MUON_MASS);
+        ROOT::Math::PtEtaPhiMVector mu2BSC_nanoAOD((Muon_bsConstrainedPt)[index_mu2],
+                                        (Muon_eta)[index_mu2],
+                                        (Muon_phi)[index_mu2], MUON_MASS);
         // mu1.SetPtEtaPhiM((mu_pt_corr)[index_mu1], (Muon_eta)[index_mu1],
         //(Muon_phi)[index_mu1], MUON_MASS);
         // mu2.SetPtEtaPhiM((mu_pt_corr)[index_mu2], (Muon_eta)[index_mu2],
         //(Muon_phi)[index_mu2], MUON_MASS);
         dimu = mu1 + mu2;
         dimuBSC = mu1BSC + mu2BSC;
+        dimuBSC_nanoAOD = mu1BSC_nanoAOD + mu2BSC_nanoAOD;
         t_diMuon_pt = dimu.Pt();
         t_diMuon_eta = dimuBSC.Eta();
         t_diMuon_phi = dimuBSC.Phi();
@@ -642,22 +671,41 @@ void HmmAnalyzer::EventLoop() {
         t_diMuon_bsConstrainedPt = dimuBSC.Pt();
         t_diMuon_bsConstrainedMass = dimuBSC.M();
 
-        //std::cout << "looking at diMuon mass" << std::endl;
+        t_diMuon_bsConstrainedPt_nanoAOD = dimuBSC_nanoAOD.Pt();
+        t_diMuon_bsConstrainedMass_nanoAOD = dimuBSC_nanoAOD.M();
 
-        if ((include_Z && include_H) || (!include_Z && !include_H)){
-            if (t_diMuon_bsConstrainedMass < 70 || t_diMuon_bsConstrainedMass > 180){
-                continue;
-            }    
-        }
-        else if (include_Z){
-            if(t_diMuon_bsConstrainedMass < 76 || t_diMuon_bsConstrainedMass > 106){
-                continue;
+        //std::cout << "looking at diMuon mass" << std::endl;
+        if(!ifSync){
+            if ((include_Z && include_H) || (!include_Z && !include_H)){
+                if (t_diMuon_bsConstrainedMass < 70 || t_diMuon_bsConstrainedMass > 180){
+                    continue;
+                }    
+            }
+            else if (include_Z){
+                if(t_diMuon_bsConstrainedMass < 76 || t_diMuon_bsConstrainedMass > 106){
+                    continue;
+                }
+            }
+            else{
+                //in Higgs region
+                if(t_diMuon_bsConstrainedMass < 100 || t_diMuon_bsConstrainedMass > 180){
+                    continue;
+                }
             }
         }
         else{
-            //in Higgs region
-            if(t_diMuon_bsConstrainedMass < 100 || t_diMuon_bsConstrainedMass > 180){
-                continue;
+            if(!is_data){
+                if(t_diMuon_bsConstrainedMass_nanoAOD < 50 || t_diMuon_bsConstrainedMass_nanoAOD > 200){
+                    continue;
+                }
+            }
+            else{ //data blinding
+                if(t_diMuon_bsConstrainedMass_nanoAOD < 50 || t_diMuon_bsConstrainedMass_nanoAOD > 200){
+                    continue;
+                }
+                if(t_diMuon_bsConstrainedMass_nanoAOD > 115.0 && t_diMuon_bsConstrainedMass_nanoAOD < 135.0){
+                    continue;
+                }
             }
         }
 
@@ -1032,13 +1080,25 @@ void HmmAnalyzer::EventLoop() {
             t_Jet_nElectrons->push_back(Jet_nElectrons[j]);
             t_Jet_nMuons->push_back(Jet_nMuons[j]);
             // t_Jet_puId->push_back(Jet_puId[j]);
-            if (Jet_btagPNetB[j] > btagLoose_cut.at(yearst)) {
-                t_nbJet_Loose++;
-            }
 
-            if (!(Jet_btagPNetB[j] > btagMedium_cut.at(yearst))) {
-                continue; // medium WP
-            } // end of b-tag
+            if (NANOAOD_VERSION.at(year) == "v15"){
+                if (Jet_btagUParTAK4B[j] > btagLoose_cut.at(yearst)) {
+                    t_nbJet_Loose++;
+                }
+
+                if (!(Jet_btagUParTAK4B[j] > btagMedium_cut.at(yearst))) {
+                    continue; // medium WP
+                } // end of b-tag
+            }
+            else{
+                if (Jet_btagPNetB[j] > btagLoose_cut.at(yearst)) {
+                    t_nbJet_Loose++;
+                }
+
+                if (!(Jet_btagPNetB[j] > btagMedium_cut.at(yearst))) {
+                    continue; // medium WP
+                } // end of b-tag
+            }
             t_nbJet++;
             t_bJet_area->push_back(Jet_area[j]);
             t_bJet_btagDeepB->push_back(Jet_btagDeepFlavB[j]);
@@ -1080,7 +1140,15 @@ void HmmAnalyzer::EventLoop() {
             t_bJet_SFdown->push_back(jet_scalefactor_do);
         }
         if (veto_event_jvm) {
-            continue; 
+            if(!ifSync){
+                continue;
+            }
+            else{
+                t_pass_jet_veto = false;
+            }
+        }
+        else if(ifSync){
+            t_pass_jet_veto = true;
         }      
         h_nValidNotVetoedJets->Fill(0.5);
         t_leadJet_idx = leadJet_idx;
