@@ -26,6 +26,14 @@ const std::map<TString, float> CROSS_SECTION = {
     {"DYto2L-2Jets", 6244.8},
     {"DY50to120", 2219.},
     {"DY120to200", 21.65},
+    {"DYto2L-2Jets_0J", 5378.},
+    {"DYto2L-2Jets_1J", 1017.},
+    {"DYto2L-2Jets_2J", 385.5},
+    {"DYto2Mu-2Jets_0J", 5382.},
+    {"DYto2Mu-2Jets_1J", 975.5},
+    {"DYto2Mu-2Jets_2J", 374.},
+    {"DYto2Mu-2Jets_105to160", 49.03},
+    {"DYto2Mu-2Jets_105to160_VBFFilter", 3.131},
     // ***** EWK ***** //
     {"EWK_2L2J", 1.410},
     // ***** TT ***** //

@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 import os
+import re
 import sys
 import json
 sys.path.append('../list')
@@ -23,7 +24,7 @@ skip_dataset = [
 skip_pattern = [
     ## Unwanted sets
     "DYJetstoLL",
-    "DYto2L-2Jets",
+    "DYto2L-2Jets_Summer",  # old inclusive FxFx entries (the 0J/1J/2J ones are used)
     "TWminusto4Q",
     "TWminustoLNu2Q",
     "Tbar",
@@ -34,7 +35,9 @@ skip_pattern = [
     "WWto4Q",
     "WWtoLNu2Q",
     "WZtoLNu2Q",
-    "DYto2Mu-2Jets",
+    #"DYto2Mu-2Jets",
+    "DY50to120",
+    "DY120to200",
 ]
 
 
@@ -42,32 +45,124 @@ skip_pattern = [
 
 list_datasets = datasets_info.keys()
 # # Use in case you want to run over a specific list of datasets!
+
 list_datasets = [
-    "Muon0_2024H",
-    "Muon1_2024H",
- #   "VBF_Summer22",
+    #'DY50to120_Summer22',
+    #"DY120to200_Summer22",
+    #"DYto2Mu-2Jets_105to160_VBFFilter_Summer22",
+    #"DYto2Mu-2Jets_105to160_Summer22",
+    #"DYto2L-2Jets_0J_Summer22",
+    #"DYto2L-2Jets_1J_Summer22",
+    #"DYto2L-2Jets_2J_Summer22",
+    #'DY50to120_Summer22EE',
+    #"DY120to200_Summer22EE",
+    #"DYto2Mu-2Jets_105to160_VBFFilter_Summer22EE",
+    #"DYto2Mu-2Jets_105to160_Summer22EE",
+    #"DYto2L-2Jets_0J_Summer22EE",
+    #"DYto2L-2Jets_1J_Summer22EE",
+    #"DYto2L-2Jets_2J_Summer22EE",
+    #'DY50to120_Summer23',
+    #"DY120to200_Summer23",
+    #"DYto2Mu-2Jets_105to160_VBFFilter_Summer23",
+    #"DYto2Mu-2Jets_105to160_Summer23",
+    #"DYto2L-2Jets_0J_Summer23",
+    #"DYto2L-2Jets_1J_Summer23",
+    #"DYto2L-2Jets_2J_Summer23",
+    #'DY50to120_Summer23BPix',
+    #"DY120to200_Summer23BPix",
+    #"DYto2Mu-2Jets_105to160_VBFFilter_Summer23BPix",
+    #"DYto2Mu-2Jets_105to160_Summer23BPix",
+    #"DYto2L-2Jets_0J_Summer23BPix",
+    #"DYto2L-2Jets_1J_Summer23BPix",
+    #"DYto2L-2Jets_2J_Summer23BPix",
+    # POWHEG DY is no longer used (all-aMC@NLO DY, lib/DYStitching.h); v2.6 tuples kept for comparison
+    #'DY50to120_Summer24',
+    #"DY120to200_Summer24",
+    "DYto2Mu-2Jets_0J_Summer24",
+    "DYto2Mu-2Jets_0J_Summer24_ext1",
+    "DYto2Mu-2Jets_0J_Summer24_ext2",
+    "DYto2Mu-2Jets_1J_Summer24",
+    "DYto2Mu-2Jets_1J_Summer24_ext1",
+    "DYto2Mu-2Jets_1J_Summer24_ext2",
+    "DYto2Mu-2Jets_2J_Summer24",
+    "DYto2Mu-2Jets_2J_Summer24_ext1",
+    "DYto2Mu-2Jets_2J_Summer24_ext2",
+    "DYto2Mu-2Jets_105to160_VBFFilter_Summer24",
+    "DYto2Mu-2Jets_105to160_Summer24",
+    "DYto2Mu-2Jets_105to160_Summer24_ext1",
+    #"DY50to120_Summer25",
+    #"DY120to200_Summer25",
+    #"DYto2Mu-2Jets_105to160_VBFFilter_Summer25",
+    #"DYto2Mu-2Jets_105to160_Summer25",
+    #"DYto2Mu-2Jets_105to160_Summer25_ext1",
+    #"DYto2Mu-2Jets_0J_Summer25",
+    #"DYto2Mu-2Jets_0J_Summer25_ext1",
+    #"DYto2Mu-2Jets_0J_Summer25_ext2",
+    #"DYto2Mu-2Jets_1J_Summer25",
+    #"DYto2Mu-2Jets_1J_Summer25_ext1",
+    #"DYto2Mu-2Jets_1J_Summer25_ext2",
+    #"DYto2Mu-2Jets_2J_Summer25",
+    #"DYto2Mu-2Jets_2J_Summer25_ext1",
+    #"DYto2Mu-2Jets_2J_Summer25_ext2",
+    #"DY120to200_Summer24",
+    #"EWK_2L2J_Summer24",
+    #"Muon_2022E",
+    #"Muon0_2024H",
+    #"Muon1_2024H",
+    #"Muon0_2023C_v1",
+    #"Muon0_2024I_v2",
+    #"Muon0_2025B",
+    #"Muon0_2025G",
+    #"TTto2L2Nu_Summer23",
+    #"TTtoLNu2Q_Summer22_ext1",
+    #"TTtoLNu2Q_Summer22",
+    #"TTtoLNu2Q_Summer24",
+    #"TTto2L2Nu_Summer24",
+    #"VBF_Summer22",
+    #"WZZ_Summer23BPix",
+    #"VBF_Summer22",
     #"VBF_Summer22EE",
     #"VBF_Summer23",
     #"VBF_Summer23BPix",
-    "VBF_Summer24",
-    "VBF_Summer24_ext1",
+    #"VBF_Summer24_ext1",
+    #"VBF_Summer24",
+    #"VBF_Summer25_ext1",
+    #"VBF_Summer25",
+    #"ggH_Summer24",
+    #"ggH_Summer24_ext1",
+    #"ggH_Summer25",
+    #"ggH_Summer25_ext1",
     #"ggH_Summer22",
     #"ggH_Summer22EE",
     #"ggH_Summer23",
     #"ggH_Summer23BPix",
-    #"ggH_Summer24",
-     #"DY120to200_Summer24v13",
-     #"DY50to120_Summer24v13",
-     #"Muon0_2024E",
-    # "Muon1_2024E",
-    "ggH_Summer24",
+    #"WWtoLNu2Q_Summer22",
+    #"Muon_2022C",
+#    "Muon_2022D",
+#    "SingleMuon_2022C",
+    "Muon0_2024C",
+    "Muon0_2024D",
+    "Muon0_2024E",
+    "Muon0_2024F",
+    "Muon0_2024G",
+    "Muon0_2024H",
+    "Muon0_2024I_v1",
+    "Muon0_2024I_v2",
+    "Muon1_2024C",
+    "Muon1_2024D",
+    "Muon1_2024E",
+    "Muon1_2024F",
+    "Muon1_2024G",
+    "Muon1_2024H",
+    "Muon1_2024I_v1",
+    "Muon1_2024I_v2",
 ]
 
 
 include_Z = "F"
-include_H = "T"
+include_H = "T" 
 jet_syst = "nominal"
-ifSync = "T"
+ifSync = "F"
 
 muon_pt_syst = os.getenv("MUON_PT_SYST", "nominal")
 valid_muon_pt_systs = [
@@ -219,17 +314,27 @@ for dataset_name in list_datasets:
     os.system("mkdir -p " + JOB_DIR + "/err/")
 
 
+    # One job per analyzer output that exists on EOS (HiggsMuMu_<version>_<I>.root): the same files
+    # ComputeWeights.py sums into SumGenWeight.root, so the tuples and the normalisation always match, also
+    # when analyzer jobs were dropped (e.g. lost input blocks) or the list was regenerated after the analyzer
     n_runs_in_job = 0
-    n_jobs = 1
+    n_jobs_from_list = 1
     for run in list_all_runs:
-        # Close current list of runs and open the next one
         if n_runs_in_job >= max_runs_per_job:
             n_runs_in_job = 0
-            n_jobs += 1
-
-        # Save run path in list
+            n_jobs_from_list += 1
         n_runs_in_job += 1
-    # Pack all txt files in a single tar file
+
+    input_directory = "/eos/uscms/" + os.path.dirname(INPUT_FILE)
+    output_pattern = re.compile(r"^HiggsMuMu_" + re.escape(v.ANALYZER_VERSION_NUMBER) + r"_(\d+)\.root$")
+    job_numbers = sorted(int(m.group(1)) for m in map(output_pattern.match, os.listdir(input_directory)) if m)
+    if not job_numbers:
+        print("[WARNING] No analyzer outputs in " + input_directory + ". Skipping!")
+        continue
+    if len(job_numbers) != n_jobs_from_list:
+        print("[WARNING] The list gives %i jobs, but there are %i analyzer outputs on EOS: using the outputs"
+              % (n_jobs_from_list, len(job_numbers)))
+    n_jobs = len(job_numbers)
 
     total_job_number += n_jobs
 
@@ -263,7 +368,7 @@ for dataset_name in list_datasets:
     jobfile_JDL.write("RequestMemory = 2000 \n\n# Jobs selection\n")
 
     jobfile_JDL.write("Queue I from (")
-    for i in range(1, n_jobs+1):
+    for i in job_numbers:
         jobfile_JDL.write(str(i)+"\n")
     jobfile_JDL.write(")\n")
     jobfile_JDL.close()

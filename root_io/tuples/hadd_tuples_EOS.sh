@@ -210,9 +210,12 @@ merge Data_2022_tuples.root \
     ${EOS_PATH}Muon_2022{C..D}/*.root \
     ${EOS_PATH}SingleMuon_2022C/*.root
 
+# All-aMC@NLO DY (stitch_weight is already in the weights, lib/DYStitching.h): jet-binned 0J/1J/2J
+# everywhere + 105to160 and VBFFilter inside LHE mll [105, 160). No POWHEG.
 merge DY_2022_tuples.root \
-    ${EOS_PATH}DY50to120_Summer22/*.root \
-    ${EOS_PATH}DY120to200_Summer22/*.root
+    ${EOS_PATH}DYto2L-2Jets_{0,1,2}J_Summer22/*.root \
+    ${EOS_PATH}DYto2Mu-2Jets_105to160_Summer22/*.root \
+    ${EOS_PATH}DYto2Mu-2Jets_105to160_VBFFilter_Summer22/*.root
 
 merge EWK_2022_tuples.root \
     ${EOS_PATH}EWK_2L2J_Summer22/*.root
@@ -252,9 +255,12 @@ echo "############################################################"
 merge Data_2022EE_tuples.root \
     ${EOS_PATH}Muon*_2022{E..G}/*.root
 
+# All-aMC@NLO DY (stitch_weight is already in the weights, lib/DYStitching.h): jet-binned 0J/1J/2J
+# everywhere + 105to160 and VBFFilter inside LHE mll [105, 160). No POWHEG.
 merge DY_2022EE_tuples.root \
-    ${EOS_PATH}DY50to120_Summer22EE/*.root \
-    ${EOS_PATH}DY120to200_Summer22EE/*.root
+    ${EOS_PATH}DYto2L-2Jets_{0,1,2}J_Summer22EE/*.root \
+    ${EOS_PATH}DYto2Mu-2Jets_105to160_Summer22EE/*.root \
+    ${EOS_PATH}DYto2Mu-2Jets_105to160_VBFFilter_Summer22EE/*.root
 
 merge EWK_2022EE_tuples.root \
     ${EOS_PATH}EWK_2L2J_Summer22EE/*.root
@@ -294,9 +300,12 @@ echo "############################################################"
 merge Data_2023_tuples.root \
     ${EOS_PATH}Muon*_2023C*/*.root
 
+# All-aMC@NLO DY (stitch_weight is already in the weights, lib/DYStitching.h): jet-binned 0J/1J/2J
+# everywhere + 105to160 and VBFFilter inside LHE mll [105, 160). No POWHEG.
 merge DY_2023_tuples.root \
-    ${EOS_PATH}DY50to120_Summer23/*.root \
-    ${EOS_PATH}DY120to200_Summer23/*.root
+    ${EOS_PATH}DYto2L-2Jets_{0,1,2}J_Summer23/*.root \
+    ${EOS_PATH}DYto2Mu-2Jets_105to160_Summer23/*.root \
+    ${EOS_PATH}DYto2Mu-2Jets_105to160_VBFFilter_Summer23/*.root
 
 merge EWK_2023_tuples.root \
     ${EOS_PATH}EWK_2L2J_Summer23/*.root
@@ -332,9 +341,12 @@ echo "############################################################"
 merge Data_2023BPix_tuples.root \
     ${EOS_PATH}Muon*_2023D*/*.root
 
+# All-aMC@NLO DY (stitch_weight is already in the weights, lib/DYStitching.h): jet-binned 0J/1J/2J
+# everywhere + 105to160 and VBFFilter inside LHE mll [105, 160). No POWHEG.
 merge DY_2023BPix_tuples.root \
-    ${EOS_PATH}DY50to120_Summer23BPix/*.root \
-    ${EOS_PATH}DY120to200_Summer23BPix/*.root
+    ${EOS_PATH}DYto2L-2Jets_{0,1,2}J_Summer23BPix/*.root \
+    ${EOS_PATH}DYto2Mu-2Jets_105to160_Summer23BPix/*.root \
+    ${EOS_PATH}DYto2Mu-2Jets_105to160_VBFFilter_Summer23BPix/*.root
 
 merge EWK_2023BPix_tuples.root \
     ${EOS_PATH}EWK_2L2J_Summer23BPix/*.root
@@ -369,9 +381,14 @@ echo "############################################################"
 merge Data_2024_tuples.root \
     ${EOS_PATH}Muon*_2024*/*.root
 
+# All-aMC@NLO DY (stitch_weight is already in the weights, lib/DYStitching.h): jet-binned 0J/1J/2J
+# everywhere + 105to160 and VBFFilter inside LHE mll [105, 160). No POWHEG.
 merge DY_2024_tuples.root \
-    ${EOS_PATH}DY50to120_Summer24/*.root \
-    ${EOS_PATH}DY120to200_Summer24/*.root
+    ${EOS_PATH}DYto2Mu-2Jets_{0,1,2}J_Summer24/*.root \
+    ${EOS_PATH}DYto2Mu-2Jets_{0,1,2}J_Summer24_ext{1,2}/*.root \
+    ${EOS_PATH}DYto2Mu-2Jets_105to160_Summer24/*.root \
+    ${EOS_PATH}DYto2Mu-2Jets_105to160_Summer24_ext1/*.root \
+    ${EOS_PATH}DYto2Mu-2Jets_105to160_VBFFilter_Summer24/*.root
 
 merge EWK_2024_tuples.root \
     ${EOS_PATH}EWK_2L2J_Summer24/*.root
@@ -411,9 +428,14 @@ echo "############################################################"
 merge Data_2025_tuples.root \
     ${EOS_PATH}Muon*_2025*/*.root
 
+# All-aMC@NLO DY (stitch_weight is already in the weights, lib/DYStitching.h): jet-binned 0J/1J/2J
+# everywhere + 105to160 and VBFFilter inside LHE mll [105, 160). No POWHEG.
 merge DY_2025_tuples.root \
-    ${EOS_PATH}DY50to120_Summer25/*.root \
-    ${EOS_PATH}DY120to200_Summer25/*.root
+    ${EOS_PATH}DYto2Mu-2Jets_{0,1,2}J_Summer25/*.root \
+    ${EOS_PATH}DYto2Mu-2Jets_{0,1,2}J_Summer25_ext{1,2}/*.root \
+    ${EOS_PATH}DYto2Mu-2Jets_105to160_Summer25/*.root \
+    ${EOS_PATH}DYto2Mu-2Jets_105to160_Summer25_ext1/*.root \
+    ${EOS_PATH}DYto2Mu-2Jets_105to160_VBFFilter_Summer25/*.root
 
 merge EWK_2025_tuples.root \
     ${EOS_PATH}EWK_2L2J_Summer25/*.root

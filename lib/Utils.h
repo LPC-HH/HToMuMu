@@ -34,6 +34,27 @@ long double GetGenWeightSum(const TString &input_name) {
     return gen_weight_sum;
 }
 
+double GetSingleBinValue(const TString &input_name, const TString &histogram_name) {
+
+    std::unique_ptr<TFile> histogram_file(TFile::Open(input_name, "READ"));
+
+    if (!histogram_file || histogram_file->IsZombie()) {
+        throw std::runtime_error(
+            "Histogram file was not found or is is Zombie: " +
+            std::string(input_name));
+    }
+    TH1 *histogram = histogram_file->Get<TH1>(histogram_name);
+
+    if (!histogram) {
+        throw std::runtime_error("Histogram " + std::string(histogram_name) +
+                                 " WAS NOT found in " + std::string(input_name));
+    }
+
+    double value = histogram->GetBinContent(1);
+    histogram_file->Close();
+    return value;
+}
+
 double GetScaleFactor(const float &luminosity, const float &cross_section,
                       const long double &gen_weight_sum) {
     return luminosity * (cross_section * 1000) / gen_weight_sum;

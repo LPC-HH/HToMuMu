@@ -38,7 +38,7 @@ skip_pattern = [
     # "Summer22EE",
     # "_2022",
     "DYJetstoLL",
-    "DYto2L-2Jets",
+    "DYto2L-2Jets_Summer",  # old inclusive FxFx entries (the 0J/1J/2J ones are used)
     "TWminusto4Q",
     "TWminustoLNu2Q",
     "Tbar",
@@ -48,11 +48,14 @@ skip_pattern = [
     "ZZto2Nu2Q",
     "WWto4Q",
     "v13"
+    "DY50to120",
+    "DY120to200",
 ]
 
 list_datasets = datasets_info.keys()
 # # Use in case you want to run over a specific list of datasets!
 #list_datasets = [
+#    "DYto2Mu-2Jets_105to160_VBFFilter_Summer22",
 #     "DY50to120_Summer24",
 #     "DY120to200_Summer24",
      #"WWtoLNu2Q_Summer23BPix",
@@ -94,6 +97,14 @@ for dataset_name in list_datasets:
         pdf_edges = None
         scale_edges = None
 
+        # Pre-selection gen-mll and stitching-cell sums and generator filter counts, for the DY stitching
+        stitch_hist_names = ["h_sumOfgenWeight_genMll", "h_sumOfgenWeight_genMll_VBFFilter",
+                             "h_sumOfgenWeight_stitchCells", "h_sumOfgenWeight2_stitchCells"]
+        stitch_totals = {}
+        stitch_edges = {}
+        genFilter_passed = 0
+        genFilter_total = 0
+
         for analyzer_file in analyzer_output_files:
 
             file_path = FILESDIR + "/" + analyzer_file
@@ -128,6 +139,21 @@ for dataset_name in list_datasets:
 
                 totalLHEScaleWeight += scale_values
 
+                for name in stitch_hist_names:
+                    if name not in input_file:
+                        continue
+                    h = input_file[name]
+                    if name not in stitch_totals:
+                        stitch_totals[name] = np.zeros_like(h.values(), dtype=np.float64)
+                        stitch_edges[name] = h.axis().edges()
+                    stitch_totals[name] += h.values()
+
+                if "LuminosityBlocks" in input_file:
+                    lumi_tree = input_file["LuminosityBlocks"]
+                    if "GenFilter_numEventsTotal" in lumi_tree:
+                        genFilter_passed += int(lumi_tree["GenFilter_numEventsPassed"].array(library="np").sum())
+                        genFilter_total += int(lumi_tree["GenFilter_numEventsTotal"].array(library="np").sum())
+
 
         print(
             f"Total generator weight for {dataset_name}: {totalGenWeight}"
@@ -158,5 +184,18 @@ for dataset_name in list_datasets:
             scale_edges
         )
 
+
+        for name, values in stitch_totals.items():
+            f[name] = (values, stitch_edges[name])
+
+        if genFilter_total > 0:
+            print(
+                f"GenFilter passed/total for {dataset_name}: {genFilter_passed}/{genFilter_total}"
+                f" = {genFilter_passed / genFilter_total:.5f}"
+            )
+            f["h_genFilter_counts"] = (
+                np.array([genFilter_passed, genFilter_total], dtype=np.float64),
+                np.array([0.0, 1.0, 2.0])
+            )
 
         print(FILESDIR + "/SumGenWeight.root CREATED")

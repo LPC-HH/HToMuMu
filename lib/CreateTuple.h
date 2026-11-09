@@ -5,6 +5,7 @@
 #include "Run3Constants.h"
 #include "TF1.h"
 #include "Utils.h"
+#include "DYStitching.h"
 #include <TChain.h>
 #include <TFile.h>
 #include <TH1F.h>
@@ -15,11 +16,18 @@
 #include <cmath>
 #include <algorithm>
 #include <iostream>
+#include <memory>
 #include <map>
 #include <math.h>
 #include <stdexcept>
 #include <string>
 #include <vector>
+
+// All-aMC@NLO DY stitching (lib/DYStitching.h): jet-binned 0J/1J/2J MLL-50 everywhere, combined with
+// DYto2Mu-2Jets_105to160 (+ VBFFilter where the emulated filter passes) inside LHE mll [105, 160). The
+// cross sections and per-cell fractions are written into the SumGenWeight.root files by
+// scripts/compute_DY_stitching.py; any dataset that has them gets stitch_weight = fraction of its cell.
+constexpr bool DO_DY_STITCHING = true;
 
 std::map<TString, int> MC_CAMPAIGN_MAP = {{"2022", 1}, {"2022EE", 2},
                                           {"2023", 3}, {"2023BPix", 4},
@@ -96,6 +104,8 @@ class CreateTuple {
     static std::string JetPtBranchName(const std::string &jet_syst);
     static std::string JetMassBranchName(const std::string &jet_pt_branch);
     bool passesJetPtSelection(size_t index) const;
+    void setupDYStitching(const TString &channel, float scale_luminosity);
+    bool passesDYStitching();
 
   private:
     TChain *tree_input; /**< Pointer to input TChain. */
@@ -108,7 +118,7 @@ class CreateTuple {
     long double
         gen_weight_sum;     /**< Sum of generator weights for normalization. */
     const float luminosity; /**< Luminosity of the era. */
-    const float cross_section; /**< Cross-section of the process. */
+    float cross_section; /**< Cross-section of the process (overridden by the DY stitching). */
     TString input_name;        /**< Path of the input file. */
     TString weight_name;        /**< Path of the weight file. */
     TString output_name;       /**< Name of the output file. */
@@ -195,6 +205,15 @@ class CreateTuple {
 
     //selection variables
     Bool_t pass_muon_trigger_match, pass_jet_veto;
+
+    // DY stitching
+    bool dy_stitch = false; /**< true if the weight file has the stitch_* values of this dataset */
+    std::vector<double> dy_stitch_frac; /**< fraction of this dataset per stitching cell (0: event dropped) */
+    float lhe_mll;
+    Int_t lhe_n_partons;
+    Bool_t pass_VBF_filter;
+    double stitch_weight;
+    Int_t stitch_cell;
 
     //std::vector<Bool_t> *pass_valid_jet, *pass_jet_seperation;
 
@@ -326,11 +345,10 @@ CreateTuple::CreateTuple(TString input, TString weightFile, TString output, TStr
               << ", cross section: " << cross_section << std::endl;
     if (!is_data) {
         gen_weight_sum = GetGenWeightSum(weight_name);
-        if(era == "2025"){
-            scale_factor = GetScaleFactor(luminosity + LUMINOSITY.at("2026"), cross_section, gen_weight_sum);
-        }
-        else{
-            scale_factor = GetScaleFactor(luminosity, cross_section, gen_weight_sum);
+        float scale_luminosity = (era == "2025") ? luminosity + LUMINOSITY.at("2026") : luminosity;
+        scale_factor = GetScaleFactor(scale_luminosity, cross_section, gen_weight_sum);
+        if (DO_DY_STITCHING) {
+            setupDYStitching(channel, scale_luminosity);
         }
         // is_data_int = 0;
         //scale_factor = GetScaleFactor(luminosity, cross_section, gen_weight_sum);
@@ -470,6 +488,8 @@ void CreateTuple::setBranchesAddressesOutput() {
     tree_output->Branch("weight", &weight, "weight/D");
     tree_output->Branch("weight_no_eff_sf", &weight_no_eff_sf, "weight_no_eff_sf/D");
     tree_output->Branch("weight_no_lumi", &weight_no_lumi, "weight_no_lumi/D");
+    tree_output->Branch("stitch_weight", &stitch_weight, "stitch_weight/D");
+    tree_output->Branch("stitch_cell", &stitch_cell, "stitch_cell/I");
     // tree_output->Branch("is_data", &is_data_int, "is_data/i");
     // tree_output->Branch("is_signal", &is_signal_int, "signal/i");
     tree_output->Branch("rho", &rho, "rho/F");
@@ -781,6 +801,14 @@ void CreateTuple::setBranchesAddressesInput() {
 
     tree_input->SetBranchStatus("t_genWeight", 1);
     tree_input->SetBranchAddress("t_genWeight", &gen_weight);
+    if (dy_stitch) {
+        tree_input->SetBranchStatus("t_LHE_mll", 1);
+        tree_input->SetBranchAddress("t_LHE_mll", &lhe_mll);
+        tree_input->SetBranchStatus("t_LHE_NpNLO", 1);
+        tree_input->SetBranchAddress("t_LHE_NpNLO", &lhe_n_partons);
+        tree_input->SetBranchStatus("t_pass_VBF_filter", 1);
+        tree_input->SetBranchAddress("t_pass_VBF_filter", &pass_VBF_filter);
+    }
     // DiMuon variables
     tree_input->SetBranchStatus("t_diMuon_bsConstrainedMass", 1);
     tree_input->SetBranchAddress("t_diMuon_bsConstrainedMass",
@@ -926,10 +954,12 @@ void CreateTuple::setBranchesAddressesInput() {
     tree_input->SetBranchAddress("t_Mu_tightId", &mu_tightID);
     tree_input->SetBranchStatus("t_Jet_mass_nanoAOD", 1);
     tree_input->SetBranchAddress("t_Jet_mass_nanoAOD", &jet_mass_nanoAOD);
-    tree_input->SetBranchStatus("t_pass_muon_trigger_match", 1);
-    tree_input->SetBranchAddress("t_pass_muon_trigger_match", &pass_muon_trigger_match);
-    tree_input->SetBranchStatus("t_pass_jet_veto", 1);
-    tree_input->SetBranchAddress("t_pass_jet_veto", &pass_jet_veto);
+    if(ifSync){
+        tree_input->SetBranchStatus("t_pass_muon_trigger_match", 1);
+        tree_input->SetBranchAddress("t_pass_muon_trigger_match", &pass_muon_trigger_match);
+        tree_input->SetBranchStatus("t_pass_jet_veto", 1);
+        tree_input->SetBranchAddress("t_pass_jet_veto", &pass_jet_veto);
+    }
 
     std::cout << "Input Branches addressed setted" << std::endl;
 }
@@ -950,6 +980,8 @@ void CreateTuple::fillOutputTree() {
     std::cout << include_H << std::endl;
     for (int event_index = 0; event_index < total_entries; event_index++) {
         tree_input->GetEntry(event_index);
+        if (!passesDYStitching())
+            continue;
         if(!ifSync){
             if ((include_Z && include_H) || (!include_Z && !include_H)){
                 if (diMuon_bsConstrainedMass < 70 || diMuon_bsConstrainedMass > 180)
@@ -1058,10 +1090,10 @@ void CreateTuple::fillOutputTree() {
 
             weight =
                 GetEventWeight(gen_weight, pileup_weight, scale_factor,
-                               mu_trig_eff_SF, mu_ID_eff_SF, mu_ISO_eff_SF);
+                               mu_trig_eff_SF, mu_ID_eff_SF, mu_ISO_eff_SF) * stitch_weight;
             weight_no_eff_sf =
                 GetEventWeight(gen_weight, pileup_weight, scale_factor,
-                               1, 1, 1);
+                               1, 1, 1) * stitch_weight;
             weight_no_lumi = weight / luminosity;
 
         } else {
@@ -1477,6 +1509,49 @@ void CreateTuple::saveTree() {
     std::cout << "Tuple saved" << std::endl;
 }
 
+void CreateTuple::setupDYStitching(const TString &channel, float scale_luminosity) {
+    // Channel is the dataset name without the campaign, so the extensions of a sample map to the same channel
+    // and share its normalisation (cross section and sum of gen weights over all extensions)
+    bool is_FxFx_DY = channel.BeginsWith("DYto2Mu-2Jets") || channel.BeginsWith("DYto2L-2Jets");
+    std::unique_ptr<TFile> weight_file(TFile::Open(weight_name, "READ"));
+    TH1 *frac_histogram = weight_file ? weight_file->Get<TH1>("stitch_frac") : nullptr;
+    if (!frac_histogram) {
+        if (is_FxFx_DY)
+            throw std::runtime_error("No stitch_frac in " + std::string(weight_name) +
+                                     ": run scripts/compute_DY_stitching.py (the aMC@NLO DY samples overlap)");
+        if (channel.BeginsWith("DY"))
+            std::cout << "[WARNING] " << channel << " is not part of the DY stitching (comparison only)" << std::endl;
+        return;
+    }
+    if (frac_histogram->GetNbinsX() != dy_stitch::N_CELLS)
+        throw std::runtime_error("stitch_frac has a different number of cells than lib/DYStitching.h");
+    dy_stitch = true;
+    dy_stitch_frac.clear();
+    for (int c = 0; c < dy_stitch::N_CELLS; c++)
+        dy_stitch_frac.push_back(frac_histogram->GetBinContent(c + 1));
+    weight_file->Close();
+
+    cross_section = GetSingleBinValue(weight_name, "stitch_sigma");
+    gen_weight_sum = GetSingleBinValue(weight_name, "stitch_sumw");
+    scale_factor = GetScaleFactor(scale_luminosity, cross_section, gen_weight_sum);
+    std::cout << "DY stitching: cross section " << cross_section << " pb, sum of gen weights (all extensions) "
+              << gen_weight_sum << ", fraction per cell:";
+    for (double frac : dy_stitch_frac)
+        std::cout << " " << frac;
+    std::cout << std::endl;
+}
+
+bool CreateTuple::passesDYStitching() {
+    // Returns false if the event's cell is covered by other DY samples only, and sets stitch_weight
+    stitch_weight = 1.;
+    stitch_cell = -1;
+    if (!dy_stitch)
+        return true;
+    stitch_cell = dy_stitch::Cell(lhe_mll, lhe_n_partons, pass_VBF_filter);
+    stitch_weight = dy_stitch_frac[stitch_cell];
+    return stitch_weight > 0.;
+}
+
 int CreateTuple::isggHCategory() {
 
     if ((n_bjet == 0) && (elec_pt->size() == 0)) {
@@ -1518,7 +1593,7 @@ int CreateTuple::isVBFCategory() {
 
     if ((n_bjet == 0) && (n_bjet_Loose < 2) &&
         (elec_pt->size() == 0) && (n_jet >= 2) && leading_jet_pt > 35 &&
-        (diJet_mass >= 400) && (delta_eta_diJet > 2.5) && (ifSync && subleading_jet_pt > 30)) {
+        (diJet_mass >= 400) && (delta_eta_diJet > 2.5) && (!ifSync || subleading_jet_pt > 30.0)) {
         h_nVBFCat->Fill(0.5);
         is_VBF_category = 1;
         return 1;

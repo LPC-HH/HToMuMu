@@ -37,7 +37,7 @@ int main(int argc, char *argv[]) {
     if (argc != 10) {
         std::cerr << "Please give 9 arguments: runList outputFileName dataset "
           << "dataType(T/F) year include_Z(T/F) include_H(T/F) "
-          << "muon_pt_syst" << "ifSync(T/F)" << std::endl;
+          << "muon_pt_syst" << " ifSync(T/F)" << std::endl;
         return -1;
     }
     const char *inputFileList = argv[1];
@@ -74,6 +74,79 @@ int main(int argc, char *argv[]) {
     Hmm.EventLoop();
 
     return 0;
+}
+
+void HmmAnalyzer::ComputeGenStitchingInfo(float &gen_mll, bool &pass_VBF_filter, float &lhe_mll,
+                                          int &lhe_n_partons) {
+    // pass_VBF_filter: emulation of VBFGenJetFilter with leadJetsNoLepMass (see the
+    // DYto2Mu-2Jets_105to160_VBFFilter GEN fragment): the two leading gen jets not within
+    // dR < 0.3 of a hard-process e/mu/tau must have mjj > 300 GeV. NanoAOD GenJets have pT > 10 GeV while the filter has no pT cut, so the emulation is a subset of the filter.
+    // lhe_mll: mass of the outgoing LHE muons, the variable the MLL-105to160 samples are generated in.
+    // lhe_n_partons: LHE_NpNLO, the Born parton multiplicity that defines the FxFx 0J/1J/2J samples
+    // (LHE_Njets also counts the real-emission parton, so it does not).
+    gen_mll = FLOAT_NULL_VALUE;
+    pass_VBF_filter = false;
+    lhe_mll = FLOAT_NULL_VALUE;
+    lhe_n_partons = INT_NULL_VALUE;
+
+    if (has_LHE_info) {
+        lhe_n_partons = LHE_NpNLO;
+        TLorentzVector lheMuPlus, lheMuMinus;
+        bool foundLheMuPlus = false;
+        bool foundLheMuMinus = false;
+        for (int i = 0; i < nLHEPart; i++) {
+            if (LHEPart_status[i] != 1)
+                continue;
+            if (LHEPart_pdgId[i] == -13 && !foundLheMuPlus) {
+                lheMuPlus.SetPtEtaPhiM(LHEPart_pt[i], LHEPart_eta[i], LHEPart_phi[i], LHEPart_mass[i]);
+                foundLheMuPlus = true;
+            } else if (LHEPart_pdgId[i] == 13 && !foundLheMuMinus) {
+                lheMuMinus.SetPtEtaPhiM(LHEPart_pt[i], LHEPart_eta[i], LHEPart_phi[i], LHEPart_mass[i]);
+                foundLheMuMinus = true;
+            }
+        }
+        if (foundLheMuPlus && foundLheMuMinus)
+            lhe_mll = (lheMuPlus + lheMuMinus).M();
+    }
+
+    std::vector<TLorentzVector> filteredGenLeptons;
+    TLorentzVector lepVec, muPlus, muMinus;
+    bool foundMuPlus = false;
+    bool foundMuMinus = false;
+    for (int i = 0; i < nGenPart; i++) {
+        int absPdgId = abs(GenPart_pdgId[i]);
+        bool isHardProcess = GenPart_statusFlags[i] & (1 << 7);
+        if (!isHardProcess || !(absPdgId == 11 || absPdgId == 13 || absPdgId == 15))
+            continue;
+        lepVec.SetPtEtaPhiM(GenPart_pt[i], GenPart_eta[i], GenPart_phi[i], GenPart_mass[i]);
+        filteredGenLeptons.push_back(lepVec);
+        if (GenPart_pdgId[i] == -13 && !foundMuPlus) {
+            muPlus = lepVec;
+            foundMuPlus = true;
+        } else if (GenPart_pdgId[i] == 13 && !foundMuMinus) {
+            muMinus = lepVec;
+            foundMuMinus = true;
+        }
+    }
+    if (foundMuPlus && foundMuMinus)
+        gen_mll = (muPlus + muMinus).M();
+
+    std::vector<TLorentzVector> filteredGenJets;
+    TLorentzVector jetVec;
+    for (int i = 0; i < nGenJet && filteredGenJets.size() < 2; i++) {
+        jetVec.SetPtEtaPhiM(GenJet_pt[i], GenJet_eta[i], GenJet_phi[i], GenJet_mass[i]);
+        bool lepClean = true;
+        for (const auto &lepton : filteredGenLeptons) {
+            if (DeltaR(lepton.Eta(), lepton.Phi(), jetVec.Eta(), jetVec.Phi()) < 0.3) {
+                lepClean = false;
+                break;
+            }
+        }
+        if (lepClean)
+            filteredGenJets.push_back(jetVec);
+    }
+    if (filteredGenJets.size() == 2 && (filteredGenJets[0] + filteredGenJets[1]).M() > 300.0)
+        pass_VBF_filter = true;
 }
 
 void HmmAnalyzer::EventLoop() {
@@ -225,6 +298,18 @@ void HmmAnalyzer::EventLoop() {
             h_pileup_nTrue->Fill(Pileup_nTrueInt);
 
             value_h_sumOfgpw = value_h_sumOfgpw + genWeight * puWeight;
+
+            // Before any selection, so the stitching sums cover all generated events
+            bool pass_VBF_filter;
+            ComputeGenStitchingInfo(t_gen_mll, pass_VBF_filter, t_LHE_mll, t_LHE_NpNLO);
+            t_pass_VBF_filter = pass_VBF_filter;
+            float stitch_mll = has_LHE_info ? t_LHE_mll : t_gen_mll;
+            h_sumOfgw_genMll->Fill(stitch_mll, genWeight);
+            if (t_pass_VBF_filter)
+                h_sumOfgw_genMll_VBFFilter->Fill(stitch_mll, genWeight);
+            int stitch_cell = dy_stitch::Cell(t_LHE_mll, t_LHE_NpNLO, t_pass_VBF_filter);
+            h_sumOfgw_stitchCells->Fill(stitch_cell + 0.5, genWeight);
+            h_sumOfgw2_stitchCells->Fill(stitch_cell + 0.5, genWeight * genWeight);
 
             for (unsigned int i = 0; i < nLHEPdfWeight; i++) {
                 t_LHEPdfWeight->push_back(LHEPdfWeight[i]);
@@ -1260,6 +1345,7 @@ void HmmAnalyzer::EventLoop() {
 
         if (!is_data) {
             t_genWeight = genWeight;
+            t_GenFilter_Efficiency = gen_filter_efficiency;
             // t_puWeight = 1.0;     // puWeight;
             // t_puWeightUp = 1.0;   // puWeightUp;
             // t_puWeightDown = 1.0; // puWeightDown;
@@ -1274,7 +1360,6 @@ void HmmAnalyzer::EventLoop() {
             t_PrefireWeight_Down = 1.0;
             //}
             for (int i = 0; i < nGenPart; i++) {
-
                 if ((abs(GenPart_pdgId[i]) >= 11 &&
                      abs(GenPart_pdgId[i]) <= 16) ||
                     (abs(GenPart_pdgId[i]) >= 23 &&

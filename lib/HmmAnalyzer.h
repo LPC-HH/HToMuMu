@@ -24,6 +24,7 @@
 // Header file for the classes stored in the TTree if any.
 #include "../src/BTagCalibrationStandalone.cpp"
 #include "BTagCalibrationStandalone.h"
+#include "DYStitching.h"
 #include "LeptonEfficiencyCorrector.h"
 #include "MainEvent.h"
 #include "TAxis.h"
@@ -308,6 +309,9 @@ class HmmAnalyzer : public MainEvent {
     // label);
 
     Bool_t FillChain(TChain *chain, const TString &inputFileList);
+    void ComputeGenFilterEfficiency();
+    void WriteGenFilterInfo();
+    void ComputeGenStitchingInfo(float &gen_mll, bool &pass_VBF_filter, float &lhe_mll, int &lhe_n_partons);
     Long64_t LoadTree(Long64_t entry);
     void getPileupHistograms();
     float getPileupWeight(int);
@@ -324,6 +328,8 @@ class HmmAnalyzer : public MainEvent {
     void clearTreeVectors();
     void BookTreeBranches();
     bool is_data;
+    TString input_file_list;
+    float gen_filter_efficiency = FLOAT_NULL_VALUE; /**< sum passed / sum total over all lumi blocks (MC only) */
     TString year;
     bool include_Z; /**< Flag indicating if save Z region. */
     bool include_H; /**< Flag indicating if save H region. */
@@ -339,6 +345,17 @@ class HmmAnalyzer : public MainEvent {
     TH1D *h_sumOfgpw =
         new TH1D("h_sumOfgenpuWeight", "h_sumOfgenpuWeight", 1, 0, 1);
     TH1D *h_pileup = new TH1D("h_pileup", "h_pileup", 99, 0, 99);
+    // Pre-selection sum of genWeight vs LHE dimuon mass (hard-process mass if there is no LHE info), for
+    // the DY stitching. 1 GeV bins so that the 105 and 160 GeV sample boundaries are bin edges.
+    TH1D *h_sumOfgw_genMll =
+        new TH1D("h_sumOfgenWeight_genMll", "h_sumOfgenWeight_genMll", 200, 50, 250);
+    TH1D *h_sumOfgw_genMll_VBFFilter =
+        new TH1D("h_sumOfgenWeight_genMll_VBFFilter", "h_sumOfgenWeight_genMll_VBFFilter", 200, 50, 250);
+    // Pre-selection sum of genWeight and of genWeight^2 per DY stitching cell (lib/DYStitching.h)
+    TH1D *h_sumOfgw_stitchCells = new TH1D("h_sumOfgenWeight_stitchCells", "h_sumOfgenWeight_stitchCells",
+                                           dy_stitch::N_CELLS, 0, dy_stitch::N_CELLS);
+    TH1D *h_sumOfgw2_stitchCells = new TH1D("h_sumOfgenWeight2_stitchCells", "h_sumOfgenWeight2_stitchCells",
+                                            dy_stitch::N_CELLS, 0, dy_stitch::N_CELLS);
     TH1D *h_pileup_nTrue = new TH1D("h_pileup_nTrue", "h_pileup_nTrue", 99, 0, 99);
     TH1D *h_sumOfLHEPdfWeight =
         new TH1D(
@@ -390,6 +407,7 @@ class HmmAnalyzer : public MainEvent {
     uint t_luminosityBlock;
     ulong t_event;
     float t_genWeight;
+    float t_GenFilter_Efficiency;
     std::vector<float> *t_LHEPdfWeight;
     std::vector<float> *t_LHEScaleWeight;
     float t_pileup;
@@ -634,6 +652,11 @@ class HmmAnalyzer : public MainEvent {
     Bool_t t_pass_jet_veto;
 
     //jets
+    //VBFFiltering
+    Bool_t t_pass_VBF_filter;
+    float t_gen_mll; /**< mass of the two hard-process gen muons */
+    float t_LHE_mll; /**< mass of the two LHE muons (FLOAT_NULL_VALUE if not a mumu event or no LHE info) */
+    int t_LHE_NpNLO; /**< Born parton multiplicity of the FxFx samples (INT_NULL_VALUE if no LHE info) */
 
 };
 
@@ -647,6 +670,7 @@ HmmAnalyzer::HmmAnalyzer(const TString &inputFileList, const char *outFileName,
     // used to generate this class and read the Tree.
 
     is_data = is_data_input;
+    input_file_list = inputFileList;
     year = year_num;
     include_Z = include_Z_;
     include_H = include_H_;
@@ -728,6 +752,7 @@ HmmAnalyzer::HmmAnalyzer(const TString &inputFileList, const char *outFileName,
     //tree->Scan("Jet_jetId","","",5);
     if (!is_data) {
         MainEvent::InitSimulationVariables(tree);
+        ComputeGenFilterEfficiency();
     }
     oFile = new TFile(outFileName, "recreate");
     TString histname(outFileName);
@@ -992,6 +1017,64 @@ bool HmmAnalyzer::FillChain(TChain *chain, const TString &inputFileList) {
     return kTRUE;
 }
 
+void HmmAnalyzer::ComputeGenFilterEfficiency() {
+    // Generator filter efficiency of the input files, sum passed / sum total over the
+    // NanoAOD LuminosityBlocks tree. Stays FLOAT_NULL_VALUE if the info is missing. MC only.
+    if (is_data)
+        return;
+
+    TChain lumi_chain("LuminosityBlocks");
+    if (!FillChain(&lumi_chain, input_file_list) || lumi_chain.GetEntries() == 0 ||
+        !lumi_chain.GetBranch("GenFilter_numEventsTotal")) {
+        std::cout << "No GenFilter info in LuminosityBlocks, efficiency not set" << std::endl;
+        return;
+    }
+
+    lumi_chain.SetBranchStatus("*", 0);
+    lumi_chain.SetBranchStatus("GenFilter_numEventsTotal", 1);
+    lumi_chain.SetBranchStatus("GenFilter_numEventsPassed", 1);
+    Int_t num_events_total = 0;
+    Int_t num_events_passed = 0;
+    lumi_chain.SetBranchAddress("GenFilter_numEventsTotal", &num_events_total);
+    lumi_chain.SetBranchAddress("GenFilter_numEventsPassed", &num_events_passed);
+    long long sum_total = 0;
+    long long sum_passed = 0;
+    for (Long64_t i = 0; i < lumi_chain.GetEntries(); i++) {
+        lumi_chain.GetEntry(i);
+        sum_total += num_events_total;
+        sum_passed += num_events_passed;
+    }
+    if (sum_total > 0)
+        gen_filter_efficiency = double(sum_passed) / sum_total;
+    std::cout << "GenFilter: " << lumi_chain.GetEntries() << " lumi blocks, passed/total = "
+              << sum_passed << "/" << sum_total << " = " << gen_filter_efficiency << std::endl;
+}
+
+void HmmAnalyzer::WriteGenFilterInfo() {
+    // Copies the per-lumi-block generator filter info (NanoAOD LuminosityBlocks tree) to the
+    // output, needed for the DY VBF-filter stitching. MC only; data output is unchanged.
+    if (is_data)
+        return;
+
+    TChain lumi_chain("LuminosityBlocks");
+    if (!FillChain(&lumi_chain, input_file_list) || lumi_chain.GetEntries() == 0 ||
+        !lumi_chain.GetBranch("GenFilter_numEventsTotal")) {
+        std::cout << "No GenFilter info in LuminosityBlocks, not stored" << std::endl;
+        return;
+    }
+
+    lumi_chain.SetBranchStatus("*", 0);
+    for (const char *name : {"run", "luminosityBlock", "GenFilter_numEventsTotal",
+                             "GenFilter_numEventsPassed", "GenFilter_filterEfficiency",
+                             "GenFilter_filterEfficiencyError"}) {
+        lumi_chain.SetBranchStatus(name, 1);
+    }
+
+    // The clone lives in oFile and is written by the oFile->Write() in the destructor
+    oFile->cd();
+    lumi_chain.CloneTree(-1);
+}
+
 HmmAnalyzer::~HmmAnalyzer() {
     if (!fChain)
         return;
@@ -1001,6 +1084,10 @@ HmmAnalyzer::~HmmAnalyzer() {
     h_sumOfgpw->Write();
     h_pileup->Write();
     h_pileup_nTrue->Write();
+    h_sumOfgw_genMll->Write();
+    h_sumOfgw_genMll_VBFFilter->Write();
+    h_sumOfgw_stitchCells->Write();
+    h_sumOfgw2_stitchCells->Write();
     if (h_sumOfLHEPdfWeight != nullptr)
         h_sumOfLHEPdfWeight->Write();
     if (h_sumOfLHEScaleWeight != nullptr)
@@ -1021,7 +1108,9 @@ HmmAnalyzer::~HmmAnalyzer() {
     h_nValidJets->Write();
     h_nValidSeperatedJets->Write();
     h_nValidNotVetoedJets->Write();
-    
+
+    WriteGenFilterInfo();
+
     oFile->Write();
     oFile->Close();
     if (!is_data) {
@@ -1048,6 +1137,7 @@ void HmmAnalyzer::clearTreeVectors() {
     t_luminosityBlock = 0;
     t_event = 0;
     t_genWeight = FLOAT_NULL_VALUE;
+    t_GenFilter_Efficiency = FLOAT_NULL_VALUE;
     t_LHEPdfWeight->clear();
     t_LHEScaleWeight->clear();
     t_pileup = FLOAT_NULL_VALUE;
@@ -1300,6 +1390,12 @@ void HmmAnalyzer::clearTreeVectors() {
     //syncronization values
     t_pass_muon_trigger_match = false;
     t_pass_jet_veto = false;
+
+    //VBF Filter
+    t_pass_VBF_filter = false;
+    t_gen_mll = FLOAT_NULL_VALUE;
+    t_LHE_mll = FLOAT_NULL_VALUE;
+    t_LHE_NpNLO = INT_NULL_VALUE;
 }
 
 void HmmAnalyzer::BookTreeBranches() {
@@ -1312,6 +1408,7 @@ void HmmAnalyzer::BookTreeBranches() {
                  "t_luminosityBlock/i");
     tree->Branch("t_event", &t_event, "t_event/l");
     tree->Branch("t_genWeight", &t_genWeight, "t_genWeight/F");
+    tree->Branch("t_GenFilter_Efficiency", &t_GenFilter_Efficiency, "t_GenFilter_Efficiency/F");
     
     t_LHEPdfWeight = new std::vector<float>();
     t_LHEScaleWeight = new std::vector<float>();
@@ -1808,9 +1905,13 @@ void HmmAnalyzer::BookTreeBranches() {
     tree->Branch("t_GenJet_pt", "vector<float>", &t_GenJet_pt);
 
     //synchronization branches
-   if(ifSync){
+    if(ifSync){
         tree->Branch("t_pass_muon_trigger_match", &t_pass_muon_trigger_match, "t_pass_muon_trigger_match/O");
         tree->Branch("t_pass_jet_veto", &t_pass_jet_veto, "t_pass_jet_veto/O");
     }
+    tree->Branch("t_pass_VBF_filter", &t_pass_VBF_filter, "t_pass_VBF_filter/O");
+    tree->Branch("t_gen_mll", &t_gen_mll, "t_gen_mll/F");
+    tree->Branch("t_LHE_mll", &t_LHE_mll, "t_LHE_mll/F");
+    tree->Branch("t_LHE_NpNLO", &t_LHE_NpNLO, "t_LHE_NpNLO/I");
 }
 #endif // #ifdef HmmAnalyzer_cxx

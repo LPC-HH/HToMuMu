@@ -179,6 +179,20 @@ for block in "$DIR"/*; do
         [[ -e "$file" ]] || continue
 
         job_i=$(get_job_I_from_filename "$file")
+
+        # Corrupted input reads (e.g. R__unzipLZMA): the job still exits 0 with garbage in the affected entries.
+        # A resubmit fixes a corrupted transfer; if the source file itself is bad (adler32 matches DAS), drop it
+        # from the job's input_list.tgz and from list/ before resubmitting.
+        n_corrupt=$(grep -cE 'R__unzip|ReadBasketBuffers|TBranch::GetBasket' "$file")
+        if (( n_corrupt > 0 )); then
+            bad_inputs=$(grep -oE 'File: [^ ,]+\.root' "$file" | sed 's#.*/##' | sort -u | tr '\n' ' ')
+            blockError=true
+            ((fail_count++))
+            echo "$file has $n_corrupt corrupted-read errors, bad input: ${bad_inputs:-unknown}" >> "$OUTFILE"
+            mark_failed_job "$failed_jobs_file" "$job_i"
+            continue
+        fi
+
         last_line=$(tail -n 1 "$file")
 
         # This is the one known harmless message
