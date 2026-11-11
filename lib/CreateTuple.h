@@ -339,6 +339,8 @@ CreateTuple::CreateTuple(TString input, TString weightFile, TString output, TStr
         //} else {
         // is_signal_int = 0;
         //}
+    } else {
+        scale_factor = 1.0;
     }
     // else {
     // is_data_int = 1;
@@ -654,6 +656,8 @@ void CreateTuple::setBranchesAddressesOutput() {
                             "leading_jet_btagUParTAK4B/F");
         tree_output->Branch("subleading_jet_btagUParTAK4B", &subleading_jet_btagUParTAK4B,
                             "subleading_jet_btagUParTAK4B/F");
+        tree_output->Branch("leading_jet_btagPNetB", &leading_jet_btagPNetB, "leading_jet_btagPNetB/F");
+        tree_output->Branch("subleading_jet_btagPNetB", &subleading_jet_btagPNetB, "subleading_jet_btagPNetB/F");
     }
     // diJet variables
     tree_output->Branch("diJet_mass", &diJet_mass, "diJet_mass/F");
@@ -677,8 +681,11 @@ void CreateTuple::setBranchesAddressesOutput() {
     tree_output->Branch("min_delta_phi_diMuon_jet", &min_delta_phi_diMuon_jet,
                         "min_delta_phi_diMuon_jet/F");
     
-    if(ifSync){
-        //muon variables
+    if (ifSync) {
+        // Selected muon indices
+        tree_output->Branch("mu1_index", &mu1_index, "mu1_index/I");
+        tree_output->Branch("mu2_index", &mu2_index, "mu2_index/I");
+        tree_output->Branch("mu_charge", &mu_charge);
         tree_output->Branch("mu_pt", &mu_bsConstrainedPt);
         tree_output->Branch("mu_pt_nanoAOD", &mu_bsConstrainedPt_nanoAOD);
         tree_output->Branch("mu_phi", &mu_phi);
@@ -696,6 +703,7 @@ void CreateTuple::setBranchesAddressesOutput() {
         tree_output->Branch("jet_phi", &jet_phi);
         tree_output->Branch("jet_eta", &jet_eta);
         tree_output->Branch("jet_btagUParTAK4B", &jet_btagUParTAK4B);
+        tree_output->Branch("jet_btagPNetB", &jet_btagPNetB);
         //tree_output->Branch("pass_valid_jet", &pass_valid_jet);
         //tree_output->Branch("pass_jet_seperation", &pass_jet_seperation);
 
@@ -1066,6 +1074,10 @@ void CreateTuple::fillOutputTree() {
 
         } else {
 
+            gen_weight = 1.0f;
+            pileup_weight = 1.0f;
+            pileup_weight_up = 1.0f;
+            pileup_weight_down = 1.0f;
             mu_trig_eff_SF = 1;
             mu_ID_eff_SF = 1;
             mu_ISO_eff_SF = 1;
@@ -1075,7 +1087,6 @@ void CreateTuple::fillOutputTree() {
             mu_trig_eff_SF_up = 1;
             mu_ID_eff_SF_up= 1;
             mu_ISO_eff_SF_up= 1;
-            
             weight = 1;
             weight_no_lumi = 1;
             weight_no_eff_sf= 1;
@@ -1224,15 +1235,15 @@ void CreateTuple::fillOutputTree() {
 
 
 
-            const float btag_score =
-                jet_btag_for_selection->at(jet_index);
-
-            if (btag_score > btag_loose_cut) {
-                ++n_bjet_Loose;
-            }
-
-            if (btag_score > btag_medium_cut) {
-                ++n_bjet;
+            if (!ifSync || fabs(jet_eta->at(jet_index)) < 2.5) {
+                const float btag_score =
+                    jet_btag_for_selection->at(jet_index);
+                if (btag_score > btag_loose_cut) {
+                    ++n_bjet_Loose;
+                }
+                if (btag_score > btag_medium_cut) {
+                    ++n_bjet;
+                }
             }
 
             if (leading_jet_index < 0 ||
@@ -1324,7 +1335,7 @@ void CreateTuple::fillOutputTree() {
             leading_jet_area = jet_area->at(leading_jet_index);
             leading_jet_phi = jet_phi->at(leading_jet_index);
             leading_jet_btagPNetB = jet_btagPNetB->at(leading_jet_index);
-            leading_jet_btagPNetB = jet_btagUParTAK4B->at(leading_jet_index);
+            leading_jet_btagUParTAK4B = jet_btagUParTAK4B->at(leading_jet_index);
             leading_jet_btagPNetQvG = jet_btagPNetQvG->at(leading_jet_index);
             leading_jet_btagUParTAK4QvG = jet_btagUParTAK4QvG->at(leading_jet_index);
             leading_jet_btagDeepFlavQG = jet_btagDeepFlavQG->at(leading_jet_index);
@@ -1350,7 +1361,7 @@ void CreateTuple::fillOutputTree() {
             subleading_jet_area = jet_area->at(subleading_jet_index);
             subleading_jet_phi = jet_phi->at(subleading_jet_index);
             subleading_jet_btagPNetB = jet_btagPNetB->at(subleading_jet_index);
-            subleading_jet_btagPNetB = jet_btagUParTAK4B->at(subleading_jet_index);
+            subleading_jet_btagUParTAK4B = jet_btagUParTAK4B->at(subleading_jet_index);
             subleading_jet_btagPNetQvG = jet_btagPNetQvG->at(subleading_jet_index);
             subleading_jet_btagUParTAK4QvG = jet_btagUParTAK4QvG->at(subleading_jet_index);
             subleading_jet_btagDeepFlavQG = jet_btagDeepFlavQG->at(subleading_jet_index);
@@ -1479,10 +1490,28 @@ void CreateTuple::saveTree() {
 
 int CreateTuple::isggHCategory() {
 
+    if (ifSync) {
+        const bool pass_baseline =
+            (n_bjet == 0) &&
+            (n_bjet_Loose <= 1) &&
+            (elec_pt->size() == 0);
+        const bool pass_vbf =
+            (n_jet >= 2) &&
+            (std::fabs(leading_jet_eta - subleading_jet_eta) > 2.5) &&
+            (diJet_mass > 400.0);
+        if (pass_baseline && !pass_vbf) {
+            is_ggH_category = 1;
+            h_nggHCat->Fill(0.5);
+            return 1;
+        }
+        is_ggH_category = 0;
+        return 2;
+    }
+
     if ((n_bjet == 0) && (elec_pt->size() == 0)) {
         if (n_jet >= 2) {
             if ((diJet_mass < 400) ||
-                (delta_eta_diJet < 2.5) || (leading_jet_pt < 35.0) || (ifSync && subleading_jet_pt < 30.0)) {
+                (delta_eta_diJet < 2.5) || (leading_jet_pt < 35.0)) {
                 h_nggHEtaSeperated->Fill(0.5);
                 h_nggHCat->Fill(0.5);
                 is_ggH_category = 1;
@@ -1502,6 +1531,25 @@ int CreateTuple::isggHCategory() {
 }
 
 int CreateTuple::isVBFCategory() {
+    if (ifSync) {
+        const bool pass_baseline =
+            (n_bjet == 0) &&
+            (n_bjet_Loose <= 1) &&
+            (elec_pt->size() == 0);
+        const bool pass_vbf =
+            (n_jet >= 2) &&
+            (std::fabs(leading_jet_eta - subleading_jet_eta) > 2.5) &&
+            (diJet_mass > 400.0);
+        if (pass_baseline && pass_vbf) {
+            is_VBF_category = 1;
+            h_nVBFCat->Fill(0.5);
+            return 1;
+        }
+        is_VBF_category = 0;
+        return 2;
+    }
+
+
     if((n_bjet == 0) && (n_bjet_Loose < 2) && (n_jet >= 2)){
         h_n2Jets->Fill(0.5);
         h_nBothVBFJets->Fill(0.5);
@@ -1518,7 +1566,7 @@ int CreateTuple::isVBFCategory() {
 
     if ((n_bjet == 0) && (n_bjet_Loose < 2) &&
         (elec_pt->size() == 0) && (n_jet >= 2) && leading_jet_pt > 35 &&
-        (diJet_mass >= 400) && (delta_eta_diJet > 2.5) && (ifSync && subleading_jet_pt > 30)) {
+        (diJet_mass >= 400) && (delta_eta_diJet > 2.5)) {
         h_nVBFCat->Fill(0.5);
         is_VBF_category = 1;
         return 1;

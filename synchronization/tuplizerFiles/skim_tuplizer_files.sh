@@ -4,6 +4,7 @@
 
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 skim_script="$dir/../skim_tree.py"
+mkdir -p "$dir/combinedSkims"
 
 for path in data/Muon0_2024H/Muon0_2024H data/Muon1_2024H/Muon1_2024H signal/ggH/ggH signal/VBF/VBF; do
     input="$dir/${path}_CombinedTuples.root"
@@ -14,5 +15,9 @@ for path in data/Muon0_2024H/Muon0_2024H data/Muon1_2024H/Muon1_2024H signal/ggH
         continue
     fi
     echo "Skimming $input -> $output"
-    python3 "$skim_script" "$input" "$output" --tuples --tree tree_output || echo "FAILED: $input"
+    python3 "$skim_script" "$input" "$output" \
+        --tuples \
+        --tree tree_output \
+        --cut "pass_muon_trigger_match == 1 && pass_jet_veto == 1" \
+        || echo "FAILED: $input"
 done

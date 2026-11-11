@@ -45,6 +45,8 @@ BRANCHES_TUPLES = {
     "run": None,
     "luminosityBlock": None,
     "event": None,
+    "mc_campaign": None,
+    "channel": "sample",
     "is_ggH_category": None,
     "is_VBF_category": None,
     "pass_muon_trigger_match": "event_pass_muon_trigger_match",
@@ -84,6 +86,8 @@ BRANCHES_TUPLES = {
     "mu2_mediumID": None,
     "mu1_tightID": None,
     "mu2_tightID": None,
+    "mu1_index": None,
+    "mu2_index": None,
 
     #all muon info
     "mu_pt": None,
@@ -94,6 +98,7 @@ BRANCHES_TUPLES = {
     "mu_looseID": None,
     "mu_mediumID": None,
     "mu_tightID": None,
+    "mu_charge": None,
 
     #diMuon info
     "diMuon_bsConstrainedMass": "diMuon_bscMass",
@@ -105,6 +110,8 @@ BRANCHES_TUPLES = {
 
     #physics jet info
     "n_jet": None,
+    "n_bjet": None,
+    "n_bjet_Loose": None,
     "leading_jet_index": None,
     "leading_jet_pt": None,
     "leading_jet_pt_nanoAOD": "leading_jet_pt_noCorr",
@@ -136,6 +143,7 @@ BRANCHES_TUPLES = {
     "jet_eta": None,
     "jet_phi": None,
     "jet_btagUParTAK4B": None,
+    "jet_btagPNetB": None,
 
     #MET info
     "PuppiMET_phi": None,
@@ -147,10 +155,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("input", help="input ROOT file")
     parser.add_argument("output", help="output ROOT file (overwritten)")
-    parser.add_argument("--tree", default="tree", help="tree name in input and output (default: tree)")
+    parser.add_argument("--tree", default=None, help="tree name in input and output")
     parser.add_argument("--cut", default=None, help="optional cut string")
     parser.add_argument("--tuples", default=False, action="store_true", help="optional if skimming tuples files")
     args = parser.parse_args()
+    if args.tree is None:
+        args.tree = "tree_output" if args.tuples else "tree"
 
     branches = BRANCHES_TUPLES if args.tuples else BRANCHES
     #print(branches)

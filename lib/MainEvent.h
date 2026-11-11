@@ -1105,17 +1105,17 @@ public :
    // Bool_t          Flag_hcalLaserEventFilter;
    Bool_t          Flag_EcalDeadCellTriggerPrimitiveFilter;
    // Bool_t          Flag_EcalDeadCellBoundaryEnergyFilter;
-   // Bool_t          Flag_ecalBadCalibFilter;
+   Bool_t          Flag_ecalBadCalibFilter;
    Bool_t          Flag_goodVertices;
-   // Bool_t          Flag_eeBadScFilter;
+   Bool_t          Flag_eeBadScFilter;
    // Bool_t          Flag_ecalLaserCorrFilter;
    // Bool_t          Flag_trkPOGFilters;
    // Bool_t          Flag_chargedHadronTrackResolutionFilter;
    // Bool_t          Flag_muonBadTrackFilter;
    Bool_t          Flag_BadChargedCandidateFilter;
    Bool_t          Flag_BadPFMuonFilter;
-   // Bool_t          Flag_BadPFMuonDzFilter;
-   // Bool_t          Flag_hfNoisyHitsFilter;
+   Bool_t          Flag_BadPFMuonDzFilter;
+   Bool_t          Flag_hfNoisyHitsFilter;
    // Bool_t          Flag_BadChargedCandidateSummer16Filter;
    // Bool_t          Flag_BadPFMuonSummer16Filter;
    // Bool_t          Flag_trkPOG_manystripclus53X;
@@ -2953,17 +2953,17 @@ public :
    // TBranch        *b_Flag_hcalLaserEventFilter;   //!
    TBranch        *b_Flag_EcalDeadCellTriggerPrimitiveFilter;   //!
    // TBranch        *b_Flag_EcalDeadCellBoundaryEnergyFilter;   //!
-   // TBranch        *b_Flag_ecalBadCalibFilter;   //!
+   TBranch        *b_Flag_ecalBadCalibFilter;   //!
    TBranch        *b_Flag_goodVertices;   //!
-   // TBranch        *b_Flag_eeBadScFilter;   //!
+   TBranch        *b_Flag_eeBadScFilter;   //!
    // TBranch        *b_Flag_ecalLaserCorrFilter;   //!
    // TBranch        *b_Flag_trkPOGFilters;   //!
    // TBranch        *b_Flag_chargedHadronTrackResolutionFilter;   //!
    // TBranch        *b_Flag_muonBadTrackFilter;   //!
    TBranch        *b_Flag_BadChargedCandidateFilter;   //!
    TBranch        *b_Flag_BadPFMuonFilter;   //!
-   // TBranch        *b_Flag_BadPFMuonDzFilter;   //!
-   // TBranch        *b_Flag_hfNoisyHitsFilter;   //!
+   TBranch        *b_Flag_BadPFMuonDzFilter;   //!
+   TBranch        *b_Flag_hfNoisyHitsFilter;   //!
    // TBranch        *b_Flag_BadChargedCandidateSummer16Filter;   //!
    // TBranch        *b_Flag_BadPFMuonSummer16Filter;   //!
    // TBranch        *b_Flag_trkPOG_manystripclus53X;   //!
@@ -5594,12 +5594,12 @@ void MainEvent::Init(TTree *tree, TString nanoAODVersion)
    fChain->SetBranchAddress("Flag_EcalDeadCellTriggerPrimitiveFilter", &Flag_EcalDeadCellTriggerPrimitiveFilter, &b_Flag_EcalDeadCellTriggerPrimitiveFilter);
    // fChain->SetBranchStatus("Flag_EcalDeadCellBoundaryEnergyFilter", 1);
    // fChain->SetBranchAddress("Flag_EcalDeadCellBoundaryEnergyFilter", &Flag_EcalDeadCellBoundaryEnergyFilter, &b_Flag_EcalDeadCellBoundaryEnergyFilter);
-   // fChain->SetBranchStatus("Flag_ecalBadCalibFilter", 1);
-   // fChain->SetBranchAddress("Flag_ecalBadCalibFilter", &Flag_ecalBadCalibFilter, &b_Flag_ecalBadCalibFilter);
+   fChain->SetBranchStatus("Flag_ecalBadCalibFilter", 1);
+   fChain->SetBranchAddress("Flag_ecalBadCalibFilter", &Flag_ecalBadCalibFilter, &b_Flag_ecalBadCalibFilter);
    fChain->SetBranchStatus("Flag_goodVertices", 1);
    fChain->SetBranchAddress("Flag_goodVertices", &Flag_goodVertices, &b_Flag_goodVertices);
-   // fChain->SetBranchStatus("Flag_eeBadScFilter", 1);
-   // fChain->SetBranchAddress("Flag_eeBadScFilter", &Flag_eeBadScFilter, &b_Flag_eeBadScFilter);
+   fChain->SetBranchStatus("Flag_eeBadScFilter", 1);
+   fChain->SetBranchAddress("Flag_eeBadScFilter", &Flag_eeBadScFilter, &b_Flag_eeBadScFilter);
    // fChain->SetBranchStatus("Flag_ecalLaserCorrFilter", 1);
    // fChain->SetBranchAddress("Flag_ecalLaserCorrFilter", &Flag_ecalLaserCorrFilter, &b_Flag_ecalLaserCorrFilter);
    // fChain->SetBranchStatus("Flag_trkPOGFilters", 1);
@@ -5612,10 +5612,10 @@ void MainEvent::Init(TTree *tree, TString nanoAODVersion)
    fChain->SetBranchAddress("Flag_BadChargedCandidateFilter", &Flag_BadChargedCandidateFilter, &b_Flag_BadChargedCandidateFilter);
    fChain->SetBranchStatus("Flag_BadPFMuonFilter", 1);
    fChain->SetBranchAddress("Flag_BadPFMuonFilter", &Flag_BadPFMuonFilter, &b_Flag_BadPFMuonFilter);
-   // fChain->SetBranchStatus("Flag_BadPFMuonDzFilter", 1);
-   // fChain->SetBranchAddress("Flag_BadPFMuonDzFilter", &Flag_BadPFMuonDzFilter, &b_Flag_BadPFMuonDzFilter);
-   // fChain->SetBranchStatus("Flag_hfNoisyHitsFilter", 1);
-   // fChain->SetBranchAddress("Flag_hfNoisyHitsFilter", &Flag_hfNoisyHitsFilter, &b_Flag_hfNoisyHitsFilter);
+   fChain->SetBranchStatus("Flag_BadPFMuonDzFilter", 1);
+   fChain->SetBranchAddress("Flag_BadPFMuonDzFilter", &Flag_BadPFMuonDzFilter, &b_Flag_BadPFMuonDzFilter);
+   fChain->SetBranchStatus("Flag_hfNoisyHitsFilter", 1);
+   fChain->SetBranchAddress("Flag_hfNoisyHitsFilter", &Flag_hfNoisyHitsFilter, &b_Flag_hfNoisyHitsFilter);
    // fChain->SetBranchStatus("Flag_BadChargedCandidateSummer16Filter", 1);
    // fChain->SetBranchAddress("Flag_BadChargedCandidateSummer16Filter", &Flag_BadChargedCandidateSummer16Filter, &b_Flag_BadChargedCandidateSummer16Filter);
    // fChain->SetBranchStatus("Flag_BadPFMuonSummer16Filter", 1);

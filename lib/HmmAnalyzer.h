@@ -314,7 +314,7 @@ class HmmAnalyzer : public MainEvent {
     float getPileupWeightUp(int);
     float getPileupWeightDown(int);
     //bool passesJetPtSelection(int index, float corrected_pt);
-    bool passesJetIdTightLepVeto(int index);
+    bool passesJetIdTightLepVeto(int index, bool applyLepVeto = true);
     bool isValidJet(int index, float corrected_pt);
     void EventLoop();
 
@@ -833,7 +833,7 @@ float HmmAnalyzer::getPileupWeightDown(int NPU) {
     //}
 //}
 
-bool HmmAnalyzer::passesJetIdTightLepVeto(int index) {
+bool HmmAnalyzer::passesJetIdTightLepVeto(int index, bool applyLepVeto) {
 
     bool Jet_passJetIdTight = false;
     bool Jet_passJetIdTightLepVeto = false;
@@ -916,24 +916,25 @@ bool HmmAnalyzer::passesJetIdTightLepVeto(int index) {
         }
     }
 
-    return Jet_passJetIdTightLepVeto;
+    return applyLepVeto ? Jet_passJetIdTightLepVeto : Jet_passJetIdTight;
 }
 
 
 bool HmmAnalyzer::isValidJet(int index, float corrected_pt) {
 
-    if(!ifSync){
+    if (!ifSync) {
         return (
             corrected_pt > 15. &&
             fabs(Jet_eta[index]) < 4.7 &&
             passesJetIdTightLepVeto(index)
         );
     }
-    else{
+    else {
+        // Synchronization selection
         return (
-            corrected_pt > 30. &&
+            corrected_pt > 25. &&
             fabs(Jet_eta[index]) < 4.7 &&
-            passesJetIdTightLepVeto(index) 
+            passesJetIdTightLepVeto(index, false)
         );
     }
 }
