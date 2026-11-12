@@ -2,6 +2,8 @@ import os
 import sys
 import uproot
 import numpy as np
+import re
+import shutil
 
 sys.path.append('../condor/utils')
 import version as v
@@ -59,6 +61,9 @@ list_datasets = datasets_info.keys()
 #]
 
 for dataset_name in list_datasets:
+
+    if re.search(r"_ext_?\d+$", dataset_name):
+        continue
     match_pattern = [True for pattern in skip_pattern if pattern in dataset_name]
     if (dataset_name in skip_dataset) or (True in match_pattern):
         continue
@@ -76,12 +81,36 @@ for dataset_name in list_datasets:
         print("No folder found for " + dataset_name + " :(. Skipping.")
         continue
     
-    analyzer_output_files = [file for file in os.listdir(FILESDIR) if "Higgs" in file]
+    # Find extension directories alongside the nominal dataset
+    parent_dir = os.path.dirname(FILESDIR)
+
+    ext_dirs = sorted(
+        os.path.join(parent_dir, name)
+        for name in os.listdir(parent_dir)
+        if re.fullmatch(rf"{re.escape(dataset_name)}_ext_?\d+", name)
+        and os.path.isdir(os.path.join(parent_dir, name))
+    )
+
+    all_dirs = [FILESDIR] + ext_dirs
+
+    print("Combining datasets:")
+    for directory in all_dirs:
+        print("  ", directory)
+
+    # Collect analyzer files from nominal + extensions
+    analyzer_output_files = [
+        os.path.join(directory, filename)
+        for directory in all_dirs
+        for filename in os.listdir(directory)
+        if "Higgs" in filename and filename.endswith(".root")
+    ]
     outputFile = FILESDIR + "/SumGenWeight.root"
 
-    SumGenWeight_exists = os.path.exists(FILESDIR + "/SumGenWeight.root")
-    if SumGenWeight_exists and not recreate_weight_file:
-        print("SumGenWeight already exists!")
+    if not recreate_weight_file and all(
+        os.path.exists(os.path.join(directory, "SumGenWeight.root"))
+        for directory in all_dirs
+    ):
+        print("SumGenWeight already exists in all directories!")
         continue
     
     with uproot.recreate(FILESDIR + "/SumGenWeight.root") as f:
@@ -95,8 +124,7 @@ for dataset_name in list_datasets:
         scale_edges = None
 
         for analyzer_file in analyzer_output_files:
-
-            file_path = FILESDIR + "/" + analyzer_file
+            file_path = analyzer_file
 
             with uproot.open(file_path) as input_file:
 
@@ -160,3 +188,9 @@ for dataset_name in list_datasets:
 
 
         print(FILESDIR + "/SumGenWeight.root CREATED")
+
+    # Copy the combined SumGenWeight.root into every extension directory
+    for ext_dir in ext_dirs:
+        destination = os.path.join(ext_dir, "SumGenWeight.root")
+        shutil.copyfile(outputFile, destination)
+        print(f"Copied combined weights to {destination}")

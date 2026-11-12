@@ -69,6 +69,12 @@ BRANCHES_TUPLES = {
     #"mu_ISO_eff_SF_down": None,
     #"mu_ISO_eff_SF_up": None,
 
+    "weight_generator": None,
+    "weight_norm": None,
+    "weight_pileup": None,
+    "weight_muon_idiso": None,
+    "weight_trigger": None,
+    "weight_total": None,
     #Physics muon info
     "mu1_bsConstrainedPt": "mu1_bscPt",
     "mu1_bsConstrainedPt_nanoAOD": "mu1_bscPt_noCorr",

@@ -202,6 +202,7 @@ class CreateTuple {
     double scale_factor; // luminosity * cross_section / gen_weight_sum
     Double_t weight, weight_no_eff_sf;
     double weight_no_lumi;
+    float weight_muon_idiso;
     float mu_trig_eff_SF, mu_trig_eff_SF_down, mu_trig_eff_SF_up;
     float mu_ID_eff_SF, mu_ID_eff_SF_down, mu_ID_eff_SF_up;
     float mu_ISO_eff_SF, mu_ISO_eff_SF_down, mu_ISO_eff_SF_up;
@@ -289,7 +290,16 @@ inline std::string CreateTuple::JetMassBranchName(const std::string &jet_syst) {
 CreateTuple::CreateTuple(TString input, TString weightFile, TString output, TString era,
                          TString channel, bool is_data_, bool is_signal_, bool include_Z_,
                          bool include_H_, TString jet_syst, bool ifSync_)
-    : luminosity(LUMINOSITY.at(era)), cross_section(CROSS_SECTION.at(channel)) {
+    : luminosity(
+      (ifSync_ && era == "2024")
+          ? 5.440f
+          : LUMINOSITY.at(era)),
+      cross_section(
+      (ifSync_ && era == "2024" && channel.BeginsWith("ggH"))
+          ? 0.01117152f
+          : (ifSync_ && era == "2024" && channel.BeginsWith("VBF"))
+              ? 0.000888192f
+              : CROSS_SECTION.at(channel)) {
 
     tree_input = new TChain("tree");
     tree_output = new TTree("tree_output", "tree_output");
@@ -472,6 +482,14 @@ void CreateTuple::setBranchesAddressesOutput() {
     tree_output->Branch("weight", &weight, "weight/D");
     tree_output->Branch("weight_no_eff_sf", &weight_no_eff_sf, "weight_no_eff_sf/D");
     tree_output->Branch("weight_no_lumi", &weight_no_lumi, "weight_no_lumi/D");
+    if (ifSync) {
+        tree_output->Branch("weight_generator", &gen_weight, "weight_generator/F");
+        tree_output->Branch("weight_norm", &scale_factor, "weight_norm/D");
+        tree_output->Branch("weight_pileup", &pileup_weight, "weight_pileup/F");
+        tree_output->Branch("weight_muon_idiso", &weight_muon_idiso, "weight_muon_idiso/F");
+        tree_output->Branch("weight_trigger", &mu_trig_eff_SF, "weight_trigger/F");
+        tree_output->Branch("weight_total", &weight, "weight_total/D");
+    }
     // tree_output->Branch("is_data", &is_data_int, "is_data/i");
     // tree_output->Branch("is_signal", &is_signal_int, "signal/i");
     tree_output->Branch("rho", &rho, "rho/F");
@@ -1093,6 +1111,7 @@ void CreateTuple::fillOutputTree() {
         
         }
         
+        weight_muon_idiso = mu_ID_eff_SF * mu_ISO_eff_SF;
         // Muon variables
         mu1_vector.SetPtEtaPhiM((*mu_pt)[mu1_index], (*mu_eta)[mu1_index],
                                 (*mu_phi)[mu1_index], MUON_MASS);
@@ -1495,10 +1514,12 @@ int CreateTuple::isggHCategory() {
             (n_bjet == 0) &&
             (n_bjet_Loose <= 1) &&
             (elec_pt->size() == 0);
-        const bool pass_vbf =
-            (n_jet >= 2) &&
-            (std::fabs(leading_jet_eta - subleading_jet_eta) > 2.5) &&
-            (diJet_mass > 400.0);
+    const bool pass_vbf =
+        (n_jet >= 2) &&
+        (leading_jet_pt > 35.0) &&
+        (subleading_jet_pt > 25.0) &&
+        (std::fabs(leading_jet_eta - subleading_jet_eta) > 2.5) &&
+        (diJet_mass > 400.0);
         if (pass_baseline && !pass_vbf) {
             is_ggH_category = 1;
             h_nggHCat->Fill(0.5);
@@ -1538,6 +1559,8 @@ int CreateTuple::isVBFCategory() {
             (elec_pt->size() == 0);
         const bool pass_vbf =
             (n_jet >= 2) &&
+            (leading_jet_pt > 35.0) &&
+            (subleading_jet_pt > 25.0) &&
             (std::fabs(leading_jet_eta - subleading_jet_eta) > 2.5) &&
             (diJet_mass > 400.0);
         if (pass_baseline && pass_vbf) {
