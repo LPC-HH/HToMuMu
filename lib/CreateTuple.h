@@ -5,6 +5,7 @@
 #include "Run3Constants.h"
 #include "TF1.h"
 #include "Utils.h"
+#include "SyncEventDebug.h"
 #include <TChain.h>
 #include <TFile.h>
 #include <TH1F.h>
@@ -976,6 +977,21 @@ void CreateTuple::fillOutputTree() {
     std::cout << include_H << std::endl;
     for (int event_index = 0; event_index < total_entries; event_index++) {
         tree_input->GetEntry(event_index);
+        const bool debug_sync = SyncEventDebug::selected(ifSync, run, luminosityBlock, event);
+        const SyncEventDebug::Trace sync_debug(debug_sync, "tuplizer", run, luminosityBlock, event);
+        if (debug_sync) sync_debug.log("BEGIN; selected stored muon indices=", mu1_index, ",", mu2_index,
+            " mc_campaign=", mc_campaign, " electronCount=", elec_pt->size());
+        if (debug_sync) sync_debug.check("upstream trigger matching (applied by final skim)", pass_muon_trigger_match);
+        if (debug_sync) sync_debug.check("upstream jet_veto_map (applied by final skim)", pass_jet_veto);
+        if (debug_sync) sync_debug.check("upstream electron veto", elec_pt->empty());
+        if (debug_sync) {
+            if (debug_sync) sync_debug.log("corrected dimuon mass=", diMuon_bsConstrainedMass);
+            for (size_t i = 0; i < mu_bsConstrainedPt->size(); ++i)
+                if (debug_sync) sync_debug.log("stored muon[", i, "] correctedPt=", mu_bsConstrainedPt->at(i),
+                    " eta=", mu_eta->at(i), " phi=", mu_phi->at(i),
+                    " charge=", int(mu_charge->at(i)), " iso04=", mu_RelIso04->at(i),
+                    " mediumId=", mu_mediumID->at(i), " tightId=", mu_tightID->at(i));
+        }
         if(!ifSync){
             if ((include_Z && include_H) || (!include_Z && !include_H)){
                 if (diMuon_bsConstrainedMass < 70 || diMuon_bsConstrainedMass > 180)
@@ -1245,6 +1261,12 @@ void CreateTuple::fillOutputTree() {
 
         for (size_t jet_index = 0; jet_index < jet_count; ++jet_index) {
             
+            if (debug_sync) sync_debug.log("jet[", jet_index, "] pt=", jet_pt->at(jet_index),
+                " eta=", jet_eta->at(jet_index), " phi=", jet_phi->at(jet_index),
+                " passesPtEtaMitigation=", passesJetPtSelection(jet_index),
+                " btag=", jet_btag_for_selection->at(jet_index),
+                " looseThreshold=", btag_loose_cut, " mediumThreshold=", btag_medium_cut,
+                " btagEtaEligible=", fabs(jet_eta->at(jet_index)) < 2.5);
             if (!passesJetPtSelection(jet_index)) {
                 //pass_valid_jet[event_index][jet_index] = false;
                 continue;
@@ -1275,6 +1297,9 @@ void CreateTuple::fillOutputTree() {
             }
         }
 
+        if (debug_sync) sync_debug.log("n_jet=", n_jet, " n_bjet=", n_bjet, " n_bjet_Loose=", n_bjet_Loose,
+            " leadingIndex=", leading_jet_index, " subleadingIndex=", subleading_jet_index);
+        if (debug_sync) sync_debug.check("b-tag veto", !(n_bjet_Loose > 1 || n_bjet > 0));
         if (n_bjet_Loose > 1 || n_bjet > 0) {
             continue;
         }
@@ -1467,6 +1492,14 @@ void CreateTuple::fillOutputTree() {
         isggHCategory();
         isVBFCategory();
 
+        if (debug_sync) sync_debug.log("category inputs: n_jet=", n_jet, " leadingPt=", leading_jet_pt,
+            " subleadingPt=", subleading_jet_pt, " leadingEta=", leading_jet_eta,
+            " subleadingEta=", subleading_jet_eta, " mjj=", diJet_mass,
+            " VBF thresholds: pT>35/25, abs(deta)>2.5, mjj>400");
+        if (debug_sync) sync_debug.log("WRITE tuple; is_ggH_category=", is_ggH_category,
+            " is_VBF_category=", is_VBF_category, " pass_muon_trigger_match=", pass_muon_trigger_match,
+            " pass_jet_veto=", pass_jet_veto);
+        if (debug_sync) sync_debug.check("final skim flags", pass_muon_trigger_match && pass_jet_veto);
         tree_output->Fill();
     }
 

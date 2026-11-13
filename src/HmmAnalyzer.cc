@@ -1,5 +1,6 @@
 #define HmmAnalyzer_cxx
 #include "../lib/HmmAnalyzer.h"
+#include "../lib/SyncEventDebug.h"
 #include <Math/Vector4D.h>
 #include <TCanvas.h>
 #include <TH2.h>
@@ -189,6 +190,9 @@ void HmmAnalyzer::EventLoop() {
 
         nb = fChain->GetEntry(jentry);
         nbytes += nb;
+        const bool debug_sync = SyncEventDebug::selected(ifSync, run, luminosityBlock, event);
+        const SyncEventDebug::Trace sync_debug(debug_sync, "analyzer", run, luminosityBlock, event);
+        if (debug_sync) sync_debug.log("BEGIN; downstream selections are NOT EVALUATED after an event rejection");
 
         if (!ifSync) {
             if (!is_data && yearst == "2024" && event % 2 == 0) {
@@ -276,6 +280,14 @@ void HmmAnalyzer::EventLoop() {
         bool run_trig_checks =
             trig_decision && pass_event_filters && (PV_npvsGood > 0);
 
+        if (debug_sync) sync_debug.log("HLT_IsoMu24=", HLT_IsoMu24, " PV_npvsGood=", PV_npvsGood,
+            " goodVertices=", Flag_goodVertices, " halo=", Flag_globalSuperTightHalo2016Filter,
+            " EcalDeadCell=", Flag_EcalDeadCellTriggerPrimitiveFilter,
+            " BadPFMuon=", Flag_BadPFMuonFilter, " BadPFMuonDz=", Flag_BadPFMuonDzFilter,
+            " hfNoisyHits=", Flag_hfNoisyHitsFilter, " eeBadSc=", Flag_eeBadScFilter,
+            " ecalBadCalib=", Flag_ecalBadCalibFilter);
+        if (debug_sync) sync_debug.check("HLT / filters / PV", run_trig_checks);
+        if (debug_sync) sync_debug.log("nMuon=", nMuon);
         if (!run_trig_checks) {
             continue;
         }
@@ -283,6 +295,7 @@ void HmmAnalyzer::EventLoop() {
         h_nTrigger->Fill(0.5);
 
         // Require at least two reconstructed muons
+        if (debug_sync) sync_debug.check("nMuon >= 2", nMuon >= 2);
         if (nMuon < 2) {
             continue;
         }
@@ -358,6 +371,11 @@ void HmmAnalyzer::EventLoop() {
 
             mu_pt_corr[i] = pt_corr;
             mu_ptErr_corr[i] = ptErr_corr;
+            if (debug_sync) sync_debug.log("muon[", i, "] nanoPt=", Muon_pt[i],
+                " bscPt=", pt_raw, " correctedPt=", pt_corr, " eta=", Muon_eta[i],
+                " phi=", Muon_phi[i], " charge=", int(Muon_charge[i]),
+                " mediumId=", Muon_mediumId[i], " tightId=", Muon_tightId[i],
+                " iso04=", Muon_pfRelIso04_all[i], " passesSyncMuon=", passesSyncMuon(i));
 
             if (!ifSync) {
                 if (pt_corr > 10 && fabs(Muon_eta[i]) < 2.4 &&
@@ -372,6 +390,8 @@ void HmmAnalyzer::EventLoop() {
             }
         }
 
+        if (debug_sync) sync_debug.log("n_good_muons=", n_valid_muons);
+        if (debug_sync) sync_debug.check("at least two good muons", n_valid_muons >= 2);
         if (n_valid_muons < 2) {
             continue;
         }
@@ -416,6 +436,10 @@ void HmmAnalyzer::EventLoop() {
                               mu_pt_corr[muon_index_2]) >
                      muon_pt_cut.at(yearst));
 
+                if (debug_sync) sync_debug.log("pair indices=", muon_index_1, ",", muon_index_2,
+                    " chargeProduct=", int(Muon_charge[muon_index_1]) * int(Muon_charge[muon_index_2]),
+                    " maxCorrectedPt=", std::max(mu_pt_corr[muon_index_1], mu_pt_corr[muon_index_2]),
+                    " leadingPtThreshold=", muon_pt_cut.at(yearst), " passesPair=", pass_mu2);
                 if (!pass_mu2) {
                     continue;
                 }
@@ -441,12 +465,15 @@ void HmmAnalyzer::EventLoop() {
             }
         }
         // std::cout << "Checking 2 valid muons" << std::endl;
+        if (debug_sync) sync_debug.check("opposite-sign good pair and leading pT", two_valid_muons);
+        if (debug_sync) sync_debug.log("selected NanoAOD muon indices=", index_mu1, ",", index_mu2);
         if (!two_valid_muons) {
             continue;
         }
         h_nTwoMuons->Fill(0.5);
 
         // Ensure only 3 Muons
+        if (debug_sync) sync_debug.check("exactly two good muons", n_valid_muons == 2);
         if (n_valid_muons > 2) {
             continue;
         }
@@ -454,6 +481,9 @@ void HmmAnalyzer::EventLoop() {
         h_nNoExtraMuon->Fill(0.5);
 
         for (int i = 0; i < nElectron; i++) {
+            if (debug_sync) sync_debug.log("electron[", i, "] pt=", Electron_pt[i], " eta=", Electron_eta[i],
+                " mvaIso_WP90=", Electron_mvaIso_WP90[i], " vetoEligible=",
+                (Electron_pt[i] > 10.0 && fabs(Electron_eta[i]) < 2.4 && Electron_mvaIso_WP90[i]));
             if (!ifSync) {
                 if ((fabs(Electron_eta[i]) > 2.5 || Electron_pt[i] < 10.0 ||
                      fabs(Electron_dz[i]) > 1.0 ||
@@ -498,6 +528,8 @@ void HmmAnalyzer::EventLoop() {
             // t_Electron_mvaFall17noIso_WPL->push_back(Electron_mvaFall17V2noIso_WPL[i]);
         }
 
+        if (debug_sync) sync_debug.log("n_veto_electrons=", t_El_pt->size());
+        if (debug_sync) sync_debug.check("electron veto", t_El_pt->empty());
         if (t_El_pt->size() > 0) {
             continue;
         }
@@ -511,6 +543,12 @@ void HmmAnalyzer::EventLoop() {
                 ifSync ? ((TrigObj_filterBits[trigger_index] & 8) != 0)
                        : ((TrigObj_filterBits[trigger_index] & (1 << 1)) != 0);
 
+            if (debug_sync) sync_debug.log("TrigObj[", trigger_index, "] id=", int(TrigObj_id[trigger_index]),
+                " filterBits=", TrigObj_filterBits[trigger_index], " eligible=",
+                (TrigObj_id[trigger_index] == 13 && pass_filter_bits),
+                " eta=", TrigObj_eta[trigger_index], " phi=", TrigObj_phi[trigger_index],
+                " dR_mu1=", DeltaR(Muon_eta[index_mu1], Muon_phi[index_mu1], TrigObj_eta[trigger_index], TrigObj_phi[trigger_index]),
+                " dR_mu2=", DeltaR(Muon_eta[index_mu2], Muon_phi[index_mu2], TrigObj_eta[trigger_index], TrigObj_phi[trigger_index]));
             if (TrigObj_id[trigger_index] != 13 || !pass_filter_bits) {
                 continue;
             }
@@ -541,6 +579,9 @@ void HmmAnalyzer::EventLoop() {
             }
         } // end of triger match, end of loop over trigger objects
         trig_match = trig_match_mu1 || trig_match_mu2;
+        if (debug_sync) sync_debug.log("trigger matched mu1=", trig_match_mu1, " mu2=", trig_match_mu2,
+            " nTrigObj=", nTrigObj, "; failed flag is retained until final skim");
+        if (debug_sync) sync_debug.check("trigger matching", trig_match);
 
         // std::cout << "Checking trig match" << std::endl;
         if (!trig_match) {
@@ -722,6 +763,11 @@ void HmmAnalyzer::EventLoop() {
             // BSC + ScaRe corrected mass
             const float mass_sync = t_diMuon_bsConstrainedMass;
 
+            // Do not dump data signal-region kinematics in diagnostic logs.
+            const bool blinded_debug = is_data && mass_sync > 115.0 && mass_sync < 135.0;
+            if (!blinded_debug) sync_debug.log("corrected dimuon mass=", mass_sync);
+            if (debug_sync) sync_debug.check("60 < corrected mass < 160", mass_sync > 60.0 && mass_sync < 160.0);
+            if (debug_sync) sync_debug.check("data blinding", !blinded_debug);
             if (mass_sync <= 60.0 || mass_sync >= 160.0) {
                 continue;
             }
@@ -962,10 +1008,20 @@ void HmmAnalyzer::EventLoop() {
                 }
             }
 
-            if (passesJetIdTightLepVeto(j) &&
+            const bool jet_vetoed = passesJetIdTightLepVeto(j) &&
                 jvm_checker.checkJetInVetoRegion(
                     Jet_eta[j], Jet_phi[j], corrected_jet_pt, Jet_jetId[j],
-                    Jet_chEmEF[j], Jet_neEmEF[j])) {
+                    Jet_chEmEF[j], Jet_neEmEF[j]);
+            if (debug_sync) sync_debug.log("jet[", j, "] nanoPt=", Jet_pt[j],
+                " correctedPt=", corrected_jet_pt, " eta=", Jet_eta[j], " phi=", Jet_phi[j],
+                " jetId=", int(Jet_jetId[j]), " tight=", passesJetIdTightLepVeto(j, false),
+                " tightLepVeto=", passesJetIdTightLepVeto(j),
+                " chEmEF=", Jet_chEmEF[j], " neEmEF=", Jet_neEmEF[j],
+                " muEF=", Jet_muEF[j], " neHEF=", Jet_neHEF[j], " chHEF=", Jet_chHEF[j],
+                " chMult=", Jet_chMultiplicity[j], " neMult=", Jet_neMultiplicity[j],
+                " validAnalysisJet=", isValidJet(j, corrected_jet_pt), " vetoMapReject=", jet_vetoed);
+            if (jet_vetoed) {
+                if (debug_sync) sync_debug.log("jet loop stops at vetoing jet; later jets NOT EVALUATED");
 
                 veto_event_jvm = true;
                 break;
@@ -987,6 +1043,8 @@ void HmmAnalyzer::EventLoop() {
                                 Jet_eta[j], Jet_phi[j]);
             double dR2 = DeltaR(Muon_eta[index_mu2], Muon_phi[index_mu2],
                                 Jet_eta[j], Jet_phi[j]);
+            if (debug_sync) sync_debug.log("jet[", j, "] dR_mu1=", dR1, " dR_mu2=", dR2,
+                " passesMuonCleaning=", !(dR1 < 0.4 || dR2 < 0.4));
             if (dR1 < 0.4 || dR2 < 0.4) {
                 // std::cout << "Jet " << j << " not well seperated" <<
                 // std::endl;
@@ -1145,6 +1203,7 @@ void HmmAnalyzer::EventLoop() {
             t_bJet_SFup->push_back(jet_scalefactor_up);
             t_bJet_SFdown->push_back(jet_scalefactor_do);
         }
+        if (debug_sync) sync_debug.check("jet_veto_map", !veto_event_jvm);
         if (veto_event_jvm) {
             if (!ifSync) {
                 continue;
@@ -1298,6 +1357,8 @@ void HmmAnalyzer::EventLoop() {
                 t_GenJet_pt->push_back(GenJet_pt[i]);
             }
         }
+        if (debug_sync) sync_debug.log("WRITE analyzer event; pass_muon_trigger_match=", t_pass_muon_trigger_match,
+            " pass_jet_veto=", t_pass_jet_veto, " storedJets=", t_nJet);
         tree->Fill();
     }
     auto end_time = std::chrono::high_resolution_clock::now();

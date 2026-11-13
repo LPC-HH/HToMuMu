@@ -105,6 +105,8 @@ $(JERC_OBJECTS): %.o: $(SRC)/%.cc $(LIB)/%.h
 	@echo "Compiling $<..."
 	$(CXX) $(FLAGS) -c $< -o $@
 
+HmmAnalyzer.o CreateTuple.o: $(LIB)/SyncEventDebug.h
+
 HmmAnalyzer.o: $(LIB)/JecApplication.h $(LIB)/JecConfigReader.h $(LIB)/JvmApplication.h $(LIB)/JvmConfigReader.h
 
 # Special rule for SkimTuplesggH.o without a header file
