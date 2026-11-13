@@ -53,7 +53,7 @@ skip_pattern = [
 
 list_datasets = datasets_info.keys()
 # # Use in case you want to run over a specific list of datasets!
-list_datasets = [
+'''list_datasets = [
     #'DY50to120_Summer22',
     #"DY120to200_Summer22",
     #"DYto2Mu-2Jets_105to160_VBFFilter_Summer22",
@@ -131,12 +131,12 @@ list_datasets = [
     #"VBF_Summer22EE",
     #"VBF_Summer23",
     #"VBF_Summer23BPix",
-    #"VBF_Summer24_ext1",
-    #"VBF_Summer24",
+    "VBF_Summer24_ext1",
+    "VBF_Summer24",
     #"VBF_Summer25_ext1",
     #"VBF_Summer25",
-    #"ggH_Summer24",
-    #"ggH_Summer24_ext1",
+    "ggH_Summer24",
+    "ggH_Summer24_ext1",
     #"ggH_Summer25",
     #"ggH_Summer25_ext1",
     #"ggH_Summer22",
@@ -163,10 +163,16 @@ list_datasets = [
     "Muon1_2024H",
     "Muon1_2024I_v1",
     "Muon1_2024I_v2",
+]'''
+
+list_datasets = [
+    #"EWK_2L2J_Summer24",
+    "EWK_2L2J_Summer24_ext1",
+    "EWK_2Mu2J_Summer24",
+    "EWK_2Mu2J_Summer24_ext1",
+    "EWK_2Mu2J_pythia_Summer24",
+    "EWK_2Mu2J_pythia_Summer24_ext1",
 ]
-
-list_datasets = ["DYto2Mu-2Jets_0J_Summer24_ext2", "DYto2Mu-2Jets_2J_Summer24"]
-
 
 include_Z = "F"
 include_H = "T"

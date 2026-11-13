@@ -145,29 +145,35 @@ for era in "${ERAS[@]}"; do
         continue
     fi
 
-    dataset_dir="${PROCESS}_${dataset_era}_${SYST}"
+    # The dataset and its extensions (hadded together, normalised together by CreateTuple:
+    # h_sumOfgenWeight_sample from scripts/ComputeWeights.py)
+    for ext in "" _ext1 _ext2; do
 
-    eos_dir="${EOS_BASE}/${dataset_dir}"
+        dataset_dir="${PROCESS}_${dataset_era}${ext}_${SYST}"
 
-    echo "------------------------------------------------------------"
-    echo "Era       : ${era}"
-    echo "Directory : ${eos_dir}"
+        eos_dir="${EOS_BASE}/${dataset_dir}"
 
-    # List files remotely
-    mapfile -t files < <(
-        xrdfs "${EOS_REDIRECTOR}" ls "${eos_dir}/" 2>/dev/null \
-        | grep '\.root$' || true
-    )
+        echo "------------------------------------------------------------"
+        echo "Era       : ${era}"
+        echo "Directory : ${eos_dir}"
 
-    if (( ${#files[@]} == 0 )); then
-        echo "[WARNING] No ROOT files found."
-        continue
-    fi
+        # List files remotely
+        mapfile -t files < <(
+            xrdfs "${EOS_REDIRECTOR}" ls "${eos_dir}/" 2>/dev/null \
+            | grep '\.root$' || true
+        )
 
-    echo "Found ${#files[@]} ROOT files"
+        if (( ${#files[@]} == 0 )); then
+            # extensions are optional; CreateTuple normalises nominal + extensions together
+            [[ -z "${ext}" ]] && echo "[WARNING] No ROOT files found."
+            continue
+        fi
 
-    for f in "${files[@]}"; do
-        INPUT_FILES+=("${EOS_REDIRECTOR}/${f}")
+        echo "Found ${#files[@]} ROOT files"
+
+        for f in "${files[@]}"; do
+            INPUT_FILES+=("${EOS_REDIRECTOR}/${f}")
+        done
     done
 
 done
