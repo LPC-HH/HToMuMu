@@ -5,6 +5,7 @@ import mplhep as hep
 import numpy as np
 import matplotlib.pyplot as plt
 import uproot as ur
+from uproot.source.xrootd import XRootDSource
 
 from .labels import x_labels, n_bins, x_range, variables_type
 from .colors import get_color_list
@@ -39,8 +40,22 @@ STEP_SIZE = "200 MB"
 # empty bins are trimmed at draw time. Values outside are clipped into the edge bins.
 WEIGHT_BINS = np.logspace(-10, 6, 161)
 
-# Wide mass range for the hand-off check at LHE mll 105 / 160 GeV, jet-binned J <-> J + U (tuples keep 70-180)
-MASS_WIDE_BINS = (110, (70.0, 180.0))
+# Wide mass range: the whole tuple range (50-180 GeV when the analyzer/CreateTuple keep the Z and Higgs regions;
+# Higgs-only tuples start at 100 GeV and leave the low part empty). Also shows the hand-off at LHE mll 105 / 160.
+MASS_WIDE_BINS = (130, (50.0, 180.0))
+# Finer mass histograms around the Z peak and around the 105 GeV hand-off (J only <-> J + U + F)
+MASS_ZPEAK_BINS = (80, (70.0, 110.0))
+MASS_HANDOFF_BINS = (40, (95.0, 115.0))
+
+# Extra mass regions in which every variable is filled ("<region>_<variable>"), next to the 110-150 window
+# ("shape_" / "blinded_"). MC always has 120-130 removed too, so it covers the same region as the blinded data.
+# A region is only drawn if the tuples cover its lower edge (see mass_coverage).
+REGIONS = {
+    "full": (50.0, 180.0),     # inclusive
+    "zpeak": (76.0, 106.0),    # Z peak (same window as the analyzer's h_nInZPeak / Z-only mode)
+    "handoff": (95.0, 115.0),  # around LHE mll 105 GeV, where the stitching switches from J only to J + U + F
+}
+ZPEAK_SELECTION = "76-106"
 
 # Per-event "views" of a file: name -> (needs stitch_weight, function(chunk) -> (mask, weights)).
 # stitch_weight (CreateTuple, all-aMC@NLO DY stitching, lib/DYStitching.h) is the fraction stitch_frac[cell]
@@ -60,11 +75,31 @@ def cell_view(cells, raw=False):
     return ("cells", tuple(int(cell) for cell in cells), bool(raw))
 
 
+def selection_view(scale=1.0, lhe_mll_window=None):
+    """View of all events, or with lhe_mll_window=(low, high) of those with low <= LHE_mll < high (CreateTuple's
+    LHE mumu mass, null for events without an LHE mumu pair), with the weights multiplied by `scale`. The scale lets
+    the extensions of a sample share one normalisation (sumw_i / sum over the extensions) for tuples older than v2.8.1,
+    where CreateTuple normalised every non-DY dataset with its own sum. Plain tuple, picklable like cell_view."""
+    window = None if lhe_mll_window is None else (float(lhe_mll_window[0]), float(lhe_mll_window[1]))
+    return ("selection", float(scale), window)
+
+
 def _resolve_view(view):
-    """(needs stitch_weight, function(chunk) -> (mask, weights), extra branches) of a VIEWS key or a cell_view"""
+    """(needs stitch_weight, function(chunk) -> (mask, weights), extra branches) of a VIEWS key, a cell_view or a
+    selection_view"""
     if isinstance(view, str):
         needs, function = VIEWS[view]
         return needs, function, []
+    if view[0] == "selection":
+        _, scale, window = view
+
+        def selection(c):
+            if window is None:
+                mask = np.ones(len(c["weight"]), dtype=bool)
+            else:
+                mask = (c["LHE_mll"] >= window[0]) & (c["LHE_mll"] < window[1])
+            return mask, c["weight"] * scale
+        return False, selection, ([] if window is None else ["LHE_mll"])
     _, cells, raw = view
     cells = np.asarray(cells)
 
@@ -76,7 +111,7 @@ def _resolve_view(view):
 
 
 # Summary columns: N raw, sum w, sum w^2, N(w < 0), sum |w|
-SUMMARY_SELECTIONS = ["all mass", "110-150"]
+SUMMARY_SELECTIONS = ["all mass", "110-150", ZPEAK_SELECTION]
 
 
 def select(branches, mask):
@@ -93,6 +128,12 @@ def category_mask(branches, category):
 def mass_window_mask(branches):
     mass = branches[MASS_VARIABLE]
     return (mass > MASS_WINDOW[0]) & (mass < MASS_WINDOW[1])
+
+
+def region_mask(branches, region):
+    low, high = REGIONS[region]
+    mass = branches[MASS_VARIABLE]
+    return (mass > low) & (mass < high)
 
 
 def blind_window_mask(branches):
@@ -214,15 +255,24 @@ def _fill_chunk(hset, chunk, categories, variables, neff_variables, is_data):
         bins, hist_range = get_binning(MASS_VARIABLE, category)
         hset.fill(category, "mass", in_category[MASS_VARIABLE], in_category["weight"], bins, hist_range)
         hset.fill(category, "mass_wide", in_category[MASS_VARIABLE], in_category["weight"], *MASS_WIDE_BINS)
+        hset.fill(category, "mass_zpeak", in_category[MASS_VARIABLE], in_category["weight"], *MASS_ZPEAK_BINS)
+        hset.fill(category, "mass_handoff", in_category[MASS_VARIABLE], in_category["weight"],
+                  *MASS_HANDOFF_BINS)
+        # Extra regions, with 120-130 removed (no-op for data, which is blinded at read time)
+        unblinded = select(in_category, ~blind_window_mask(in_category))
+        regions = {region: select(unblinded, region_mask(unblinded, region)) for region in REGIONS}
         for variable in variables:
             bins, hist_range = get_binning(variable, category)
             hset.fill(category, "shape_" + variable, *_cleaned(window, variable), bins, hist_range)
             hset.fill(category, "blinded_" + variable, *_cleaned(blinded, variable), bins, hist_range)
+            for region, selected in regions.items():
+                hset.fill(category, region + "_" + variable, *_cleaned(selected, variable), bins, hist_range)
         if is_data:
             continue
 
         hset.fill_summary(category, "all mass", in_category["weight"])
         hset.fill_summary(category, "110-150", window["weight"])
+        hset.fill_summary(category, ZPEAK_SELECTION, regions["zpeak"]["weight"])
         for variable in neff_variables:
             bins, hist_range = get_neff_binning(variable, category)
             hset.fill(category, "neff_" + variable, *_cleaned(window, variable), bins, hist_range)
@@ -231,6 +281,9 @@ def _fill_chunk(hset, chunk, categories, variables, neff_variables, is_data):
         positive, negative = weights > 0, weights < 0
         hset.fill(category, "weights_pos", abs_weights[positive], np.ones(np.sum(positive)), WEIGHT_BINS)
         hset.fill(category, "weights_neg", abs_weights[negative], np.ones(np.sum(negative)), WEIGHT_BINS)
+
+
+XROOTD_TIMEOUT = 60  # seconds per xrootd request
 
 
 def fill_from_file(path, label, branches, categories, variables, neff_variables,
@@ -255,12 +308,15 @@ def fill_from_file(path, label, branches, categories, variables, neff_variables,
     hset = HistogramSet()
     view_sets = {name: HistogramSet() for name in views} if views is not None else None
     start = time.time()
-    with ur.open(path) as file:
+    # xrootd paths go through uproot's own XRootD source (the XRootD bindings of the CMSSW python), since the default
+    # fsspec-xrootd handler is not installed; a stalled request then raises after XROOTD_TIMEOUT instead of hanging
+    open_options = {"handler": XRootDSource, "timeout": XROOTD_TIMEOUT} if path.startswith("root://") else {}
+    with ur.open(path, **open_options) as file:
         tree = file["tree_output"]
         total = tree.num_entries
         if verbose:
-            print(f"[{label}] Reading {total / 1e6:.2f}M entries from {path} "
-                  f"({os.path.getsize(path) / 1024**3:.2f} GB)", flush=True)
+            size = "" if path.startswith("root://") else f" ({os.path.getsize(path) / 1024**3:.2f} GB)"
+            print(f"[{label}] Reading {total / 1e6:.2f}M entries from {path}{size}", flush=True)
         for chunk, report in tree.iterate(branches, cut=cut, step_size=step_size,
                                           library="np", report=True):
             if view_sets is None:
@@ -294,6 +350,8 @@ def print_summary(samples, category, era):
     print(f"{'sample':<22}{'selection':<14}{'N raw':>12}{'sum w':>14}{'N_eff':>14}{'neg frac':>10}")
     for label, hset in samples.items():
         for selection in SUMMARY_SELECTIONS:
+            if (category, selection) not in hset.summary:
+                continue
             n_raw, sumw, sumw2, n_neg, _ = hset.summary[(category, selection)]
             neff = sumw**2 / sumw2 if sumw2 > 0 else 0.0
             neg_frac = n_neg / n_raw if n_raw else 0.0
@@ -625,3 +683,62 @@ def write_closure_table(first_label, first, second_label, second, categories, va
     print("\n".join(lines[:2] + [line for line in lines[2:] if line.split()[1:2] in
                                  [["diMuon_pt"], ["diJet_mass"], ["n_jet"]]]), flush=True)
     print(f"Closure table written to {path}", flush=True)
+
+
+def mass_coverage(hset, category="inclusive"):
+    """Lowest mass (GeV) with entries in the "mass_wide" histogram of `hset`, i.e. where the tuples start
+    (about 50 for Z + Higgs tuples, 100 for Higgs-only ones). None if the histogram is empty or missing."""
+    if (category, "mass_wide") not in hset.hists:
+        return None
+    sumw, _, edges = hset.get(category, "mass_wide")
+    filled = np.flatnonzero(sumw != 0)
+    return float(edges[filled[0]]) if len(filled) else None
+
+
+def covers(hset, region, category="inclusive", tolerance=1.0):
+    """True if the tuples behind `hset` reach the lower edge of `region` (within `tolerance` GeV). The tuple mass
+    range is a property of the files, so use the inclusive category (sparse categories can miss the lowest bins)"""
+    start = mass_coverage(hset, category)
+    return start is not None and start <= REGIONS[region][0] + tolerance
+
+
+def _window_yield(hset, category, name, low, high):
+    """(sum w, sum w^2) of histogram `name` between low and high (bin edges must align)"""
+    sumw, sumw2, edges = hset.get(category, name)
+    inside = (edges[:-1] >= low - 1e-6) & (edges[1:] <= high + 1e-6)
+    return float(np.sum(sumw[inside])), float(np.sum(sumw2[inside]))
+
+
+def write_normalisation_table(mc_samples, components, data, categories, era, path):
+    """Z-peak (REGIONS["zpeak"]) yields of each MC prediction (label -> HistogramSet), of data and data / MC,
+    and the fraction of the stitched prediction from each component (label -> HistogramSet), per category.
+    Uses the "mass_zpeak" histograms, whose bin edges align with the Z-peak window."""
+    low, high = REGIONS["zpeak"]
+    lines = [f"Z-peak normalisation, era {era}, diMuon_bsConstrainedMass {low:.0f}-{high:.0f} GeV "
+             f"(stat. uncertainties only)"]
+    for category in categories:
+        lines.append(f"\n[{category}]")
+        data_yield = None
+        if data is not None and (category, "mass_zpeak") in data.hists:
+            data_yield = _window_yield(data, category, "mass_zpeak", low, high)[0]
+            lines.append(f"  {'Data':<34}{data_yield:>14.0f} +- {np.sqrt(data_yield):<10.0f}")
+        for label, hset in mc_samples.items():
+            if (category, "mass_zpeak") not in hset.hists:
+                continue
+            sumw, sumw2 = _window_yield(hset, category, "mass_zpeak", low, high)
+            row = f"  {label:<34}{sumw:>14.1f} +- {np.sqrt(sumw2):<10.1f}"
+            if data_yield and sumw > 0:
+                ratio = data_yield / sumw
+                error = ratio * np.sqrt(1.0 / data_yield + sumw2 / sumw**2)
+                row += f"  data/MC = {ratio:.4f} +- {error:.4f}"
+            lines.append(row)
+        total = sum(_window_yield(hset, category, "mass_zpeak", low, high)[0] for hset in components.values())
+        if total:
+            fractions = ", ".join(f"{label} {_window_yield(hset, category, 'mass_zpeak', low, high)[0] / total:.4f}"
+                                  for label, hset in components.items())
+            lines.append(f"  composition of the stitched prediction: {fractions}")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as output:
+        output.write("\n".join(lines) + "\n")
+    print("\n".join(lines), flush=True)
+    print(f"Z-peak normalisation table written to {path}", flush=True)

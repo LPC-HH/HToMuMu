@@ -227,7 +227,10 @@ datasets_info = {
     "EWK_2L2J_Summer22": ["F", 2, "2022", "MC_background",
             "/EWK_2L2J_TuneCH3_13p6TeV_madgraph-herwig7/Run3Summer22NanoAODv12-130X_mcRun3_2022_realistic_v5-v2/NANOAODSIM"],
     #"LLJJ_SM_M105-160_MJJ120_13p6TeV_dipole_Summer22":["F", 2, "2022", "MC_background", ""],
-
+    "EWK_2Mu2J_Summer22": ["F", 2, "2022", "MC_background",
+            "/EWK_2Mu2J_Bin-MLL-105to160_TuneCH3_13p6TeV_madgraph-herwig7/Run3Summer22NanoAODv12-130X_mcRun3_2022_realistic_v5-v2/NANOAODSIM"],
+    "EWK_2Mu2J_pythia_Summer22": ["F", 2, "2022", "MC_background",
+            "/EWK-2Mu2J_M2Mu-105to160_M2J-120_TuneCP5_13p6TeV_madgraph-pythia8/Run3Summer22NanoAODv12-130X_mcRun3_2022_realistic_v5-v2/NANOAODSIM"],
     
     # Top Backgrounds
     "TTto2L2Nu_Summer22": ["F", 1, "2022", "MC_background",
@@ -360,6 +363,12 @@ datasets_info = {
     # EWK Backgrounds
     "EWK_2L2J_Summer22EE": ["F", 2, "2022EE", "MC_background",
             "/EWK_2L2J_TuneCH3_13p6TeV_madgraph-herwig7/Run3Summer22EENanoAODv12-130X_mcRun3_2022_realistic_postEE_v6-v2/NANOAODSIM"],
+    
+    "EWK_2Mu2J_Summer22EE": ["F", 2, "2022EE", "MC_background",
+            "/EWK_2Mu2J_Bin-MLL-105to160_TuneCH3_13p6TeV_madgraph-herwig7/Run3Summer22EENanoAODv12-130X_mcRun3_2022_realistic_postEE_v6-v2/NANOAODSIM"],
+    "EWK_2Mu2J_pythia_Summer22EE": ["F", 2, "2022EE", "MC_background",
+            "/EWK-2Mu2J_M2Mu-105to160_M2J-120_TuneCP5_13p6TeV_madgraph-pythia8/Run3Summer22EENanoAODv12-130X_mcRun3_2022_realistic_postEE_v6-v2/NANOAODSIM"],
+
     # Top Backgrounds
     "TTto2L2Nu_Summer22EE": ["F", 1, "2022EE", "MC_background",
             "/TTto2L2Nu_TuneCP5_13p6TeV_powheg-pythia8/Run3Summer22EENanoAODv12-130X_mcRun3_2022_realistic_postEE_v6-v2/NANOAODSIM"],
@@ -482,9 +491,16 @@ datasets_info = {
             "/DYto2L-2Jets_MLL-50_1J_TuneCP5_13p6TeV_amcatnloFXFX-pythia8/Run3Summer23NanoAODv12-130X_mcRun3_2023_realistic_v14-v4/NANOAODSIM"],
     "DYto2L-2Jets_2J_Summer23": ["F", 2, "2023", "MC_background",
             "/DYto2L-2Jets_MLL-50_2J_TuneCP5_13p6TeV_amcatnloFXFX-pythia8/Run3Summer23NanoAODv12-130X_mcRun3_2023_realistic_v14-v4/NANOAODSIM"],
+    
     # EWK Backgrounds
     "EWK_2L2J_Summer23": ["F", 2, "2023", "MC_background",
             "/EWK_2L2J_TuneCH3_13p6TeV_madgraph-herwig7/Run3Summer23NanoAODv12-130X_mcRun3_2023_realistic_v15-v2/NANOAODSIM"],
+
+    "EWK_2Mu2J_Summer23": ["F", 2, "2023", "MC_background",
+            "/EWK_2Mu2J_Bin-MLL-105to160_TuneCH3_13p6TeV_madgraph-herwig7/Run3Summer23NanoAODv12-130X_mcRun3_2023_realistic_v15-v2/NANOAODSIM"],
+    "EWK_2Mu2J_pythia_Summer23": ["F", 2, "2023", "MC_background",
+            "/EWK-2Mu2J_M2Mu-105to160_M2J-120_TuneCP5_13p6TeV_madgraph-pythia8/Run3Summer23NanoAODv12-130X_mcRun3_2023_realistic_v15-v2/NANOAODSIM"],
+
     # Top Backgrounds
     "TTto2L2Nu_Summer23": ["F", 2, "2023", "MC_background",
             "/TTto2L2Nu_TuneCP5_13p6TeV_powheg-pythia8/Run3Summer23NanoAODv12-130X_mcRun3_2023_realistic_v14-v2/NANOAODSIM"],
@@ -574,6 +590,12 @@ datasets_info = {
     # EWK Backgrounds
     "EWK_2L2J_Summer23BPix": ["F", 2, "2023BPix", "MC_background",
             "/EWK_2L2J_TuneCH3_13p6TeV_madgraph-herwig7/Run3Summer23BPixNanoAODv12-130X_mcRun3_2023_realistic_postBPix_v6-v2/NANOAODSIM"],
+    "EWK_2Mu2J_Summer23BPix": ["F", 2, "2023BPix", "MC_background",
+            "/EWK_2Mu2J_Bin-MLL-105to160_TuneCH3_13p6TeV_madgraph-herwig7/Run3Summer23BPixNanoAODv12-130X_mcRun3_2023_realistic_postBPix_v6-v2/NANOAODSIM"],
+    "EWK_2Mu2J_pythia_Summer23BPix": ["F", 2, "2023BPix", "MC_background",
+            "/EWK-2Mu2J_M2Mu-105to160_M2J-120_TuneCP5_13p6TeV_madgraph-pythia8/Run3Summer23BPixNanoAODv12-130X_mcRun3_2023_realistic_postBPix_v6-v3/NANOAODSIM"],
+
+
     # Top Backgrounds
     "TTto2L2Nu_Summer23BPix": ["F", 2, "2023BPix", "MC_background",
             "/TTto2L2Nu_TuneCP5_13p6TeV_powheg-pythia8/Run3Summer23BPixNanoAODv12-130X_mcRun3_2023_realistic_postBPix_v2-v3/NANOAODSIM"],
@@ -682,7 +704,20 @@ datasets_info = {
     # EWK Backgrounds
     "EWK_2L2J_Summer24": ["F", 2, "2024", "MC_background",
             "/EWK-2L2J_Bin-MLL-50-MJJ-120_TuneCH3_13p6TeV_madgraph-herwig7/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v2/NANOAODSIM"],
-
+    "EWK_2L2J_Summer24_ext1": ["F", 2, "2024", "MC_background",
+            "/EWK-2L2J_Bin-MLL-50-MJJ-120_TuneCH3_13p6TeV_madgraph-herwig7/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2_ext1-v2/NANOAODSIM"],
+    
+    "EWK_2Mu2J_Summer24": ["F", 2, "2024", "MC_background",
+            "/EWK-2Mu2J_Bin-MLL-105to160_TuneCH3_13p6TeV_madgraph-herwig7/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v2/NANOAODSIM"],
+    "EWK_2Mu2J_Summer24_ext1": ["F", 2, "2024", "MC_background",
+            "/EWK-2Mu2J_Bin-MLL-105to160_TuneCH3_13p6TeV_madgraph-herwig7/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2_ext1-v2/NANOAODSIM"],
+    
+    #EWK pythia backgrounds
+    "EWK_2Mu2J_pythia_Summer24": ["F", 2, "2024", "MC_background",
+            "/EWK-2Mu2J_Bin-M2Mu-105to160-M2J-120_TuneCP5_13p6TeV_madgraph-pythia8/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v2/NANOAODSIM"],
+    "EWK_2Mu2J_pythia_Summer24_ext1": ["F", 2, "2024", "MC_background",
+            "/EWK-2Mu2J_Bin-M2Mu-105to160-M2J-120_TuneCP5_13p6TeV_madgraph-pythia8/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2_ext1-v2/NANOAODSIM"],
+    
     # Top Backgrounds
     "TTto2L2Nu_Summer24": ["F", 2, "2024", "MC_background",
             "/TTto2L2Nu_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v3/NANOAODSIM"],
@@ -782,7 +817,20 @@ datasets_info = {
     # EWK Backgrounds
     "EWK_2L2J_Summer25": ["F", 2, "2025", "MC_background",
             "/EWK-2L2J_Bin-MLL-50-MJJ-120_TuneCH3_13p6TeV_madgraph-herwig7/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v2/NANOAODSIM"],
-
+    "EWK_2L2J_Summer25_ext1": ["F", 2, "2025", "MC_background",
+            "/EWK-2L2J_Bin-MLL-50-MJJ-120_TuneCH3_13p6TeV_madgraph-herwig7/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2_ext1-v2/NANOAODSIM"],
+    
+    "EWK_2Mu2J_Summer25": ["F", 2, "2025", "MC_background",
+            "/EWK-2Mu2J_Bin-MLL-105to160_TuneCH3_13p6TeV_madgraph-herwig7/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v2/NANOAODSIM"],
+    "EWK_2Mu2J_Summer25_ext1": ["F", 2, "2025", "MC_background",
+            "/EWK-2Mu2J_Bin-MLL-105to160_TuneCH3_13p6TeV_madgraph-herwig7/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2_ext1-v2/NANOAODSIM"],
+    
+    #EWK pythia backgrounds
+    "EWK_2Mu2J_pythia_Summer25": ["F", 2, "2025", "MC_background",
+            "/EWK-2Mu2J_Bin-M2Mu-105to160-M2J-120_TuneCP5_13p6TeV_madgraph-pythia8/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v2/NANOAODSIM"],
+    "EWK_2Mu2J_pythia_Summer25_ext1": ["F", 2, "2025", "MC_background",
+            "/EWK-2Mu2J_Bin-M2Mu-105to160-M2J-120_TuneCP5_13p6TeV_madgraph-pythia8/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2_ext1-v2/NANOAODSIM"],
+    
     # Top Backgrounds
     "TTto2L2Nu_Summer25": ["F", 2, "2025", "MC_background",
             "/TTto2L2Nu_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24NanoAODv15-150X_mcRun3_2024_realistic_v2-v3/NANOAODSIM"],

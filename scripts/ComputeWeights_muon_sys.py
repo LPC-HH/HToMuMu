@@ -9,6 +9,8 @@ import version as v
 sys.path.append('../list')
 from listDatasets_Run3 import datasets_info
 
+from ComputeWeights import write_sample_sums  # sum over the extensions (h_sumOfgenWeight_sample)
+
 #EOS_PATH = f"/eos/uscms/store/group/lpchmumu/$USER/analyzer_HiggsMuMu_{v.ANALYZER_VERSION_NUMBER}/"
 
 # Arguments
@@ -132,3 +134,10 @@ for muon_pt_syst in muon_pt_syst_list:
             print(f"Total generator weight for {dataset_dir}: {totalGenWeight}")
             f["h_sumOfgenWeight"] = np.histogram(np.array([0.5]), bins=[0,1], weights=[totalGenWeight])
             print(outputFile + " CREATED")
+
+    # Normalisation shared by a dataset and its extensions (h_sumOfgenWeight_sample, used by CreateTuple)
+    suffix = "" if muon_pt_syst == "nominal" else "_" + muon_pt_syst
+    selected = [name for name in list_datasets
+                if name not in skip_dataset and not any(pattern in name for pattern in skip_pattern)
+                and (muon_pt_syst == "nominal" or datasets_info[name][3] == "MC_signal")]
+    write_sample_sums(selected, suffix)

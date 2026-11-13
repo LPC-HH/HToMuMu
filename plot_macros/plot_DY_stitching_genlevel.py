@@ -33,8 +33,10 @@ parser.add_argument("era", nargs="?", default="2024")
 era = parser.parse_args().era
 campaign = "Summer" + era[2:]
 
+#EOS_PATH = os.getenv("DY_STITCH_EOS_PATH", f"/eos/uscms/store/group/lpchmumu/{os.getenv('LOGNAME')}/"
+#                     f"analyzer_HiggsMuMu_{v.ANALYZER_VERSION_NUMBER}/MC_background")
 EOS_PATH = os.getenv("DY_STITCH_EOS_PATH", f"/eos/uscms/store/group/lpchmumu/{os.getenv('LOGNAME')}/"
-                     f"analyzer_HiggsMuMu_{v.ANALYZER_VERSION_NUMBER}/MC_background")
+                     f"analyzer_HiggsMuMu_v2.7/MC_background")
 MLL_LOW, MLL_HIGH = 105, 160
 N_PARTON_BINS = 3
 EXTENSIONS = ["", "_ext1", "_ext2"]

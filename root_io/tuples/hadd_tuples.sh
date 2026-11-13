@@ -1,10 +1,11 @@
 #!/bin/bash
 
-ANALYZER_VERSION="v2.4"
-TUPLES_VERSION="v2.4.2"
+ANALYZER_VERSION="v2.8"
+TUPLES_VERSION="v2.8.1"
 
 inEOS_PATH="/store/group/lpchmumu/$USER/analyzer_HiggsMuMu_$ANALYZER_VERSION/tuples_$TUPLES_VERSION/"
 EOS_HADD_PATH="root://cmseos.fnal.gov/${inEOS_PATH}haddTuples/"
+EOS_HADD_PATH="./"
 
 COPY_TO_EOS=false
 

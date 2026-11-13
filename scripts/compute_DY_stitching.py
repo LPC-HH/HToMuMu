@@ -198,6 +198,12 @@ for era in eras:
     sigma["U"] = sigma_W_J / U_frac_W
     print(f"J: sigma in W = {sigma_W_J:.4f} pb (McM sigma of the 105to160 sample: "
           f"{cross_sections['DYto2Mu-2Jets_105to160']} pb, ratio {sigma_W_J / cross_sections['DYto2Mu-2Jets_105to160']:.4f})")
+    # sigma_U is matched to J, so a wrong J cross section (e.g. the DYto2L value for the mumu-only DYto2Mu
+    # samples, 3x too large) would silently rescale all of DY: compare with the independent McM value of U
+    ratio_McM = sigma_W_J / cross_sections['DYto2Mu-2Jets_105to160']
+    if not 0.9 < ratio_McM < 1.1:
+        print(f"[WARNING] sigma in W from the jet-binned samples is {ratio_McM:.3f} x the McM sigma of the 105to160 "
+              f"sample: check the {prefix}_<p>J cross sections in lib/Run3Constants.h (mumu-only vs ll)")
     print(f"U: fraction of sum(genWeight) in W: {U_frac_W:.5f} (should be 1)")
     if abs(U_frac_W - 1) > 0.01:
         print("[WARNING] U is not contained in W: check the LHE info (t_LHE_mll) of the U sample")
