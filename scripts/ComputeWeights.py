@@ -5,6 +5,8 @@ import uproot
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 
+from eos_io import recreate_on_eos, open_eos  # never write ROOT files through the EOS FUSE mount
+
 sys.path.append('../condor/utils')
 import version as v
 
@@ -198,7 +200,7 @@ def write_dataset(dataset_name, outputFile, t):
 
     # Written only after all files were read: a crash while reading no longer leaves an empty
     # SumGenWeight.root behind (which a later run without T would skip as "already exists").
-    with uproot.recreate(outputFile) as f:
+    with recreate_on_eos(outputFile) as f:
 
         f["h_sumOfgenWeight"] = np.histogram(
             np.array([0.5]),
@@ -257,18 +259,18 @@ def write_sample_sums(dataset_names, dir_suffix=""):
             continue
         sums = {}
         for name, path in paths.items():
-            with uproot.open(path) as f:
+            with open_eos(path) as f:
                 sums[name] = float(f["h_sumOfgenWeight"].values()[0])
         total = sum(sums.values())
         n_written = 0
         for path in paths.values():
-            # EOS fuse does not support uproot.update: read everything and write it back (as add_stitch_values)
-            with uproot.open(path) as f:
+            # No uproot.update on EOS: read everything (over xrootd) and write it back via a local file
+            with open_eos(path) as f:
                 if "h_sumOfgenWeight_sample" in f and f["h_sumOfgenWeight_sample"].values()[0] == total:
                     continue
                 existing = {key.split(";")[0]: f[key] for key in f.keys(cycle=False)
                             if key.split(";")[0] != "h_sumOfgenWeight_sample"}
-            with uproot.recreate(path) as f:
+            with recreate_on_eos(path) as f:
                 for key, hist in existing.items():
                     f[key] = hist
                 f["h_sumOfgenWeight_sample"] = (np.array([total]), np.array([0.0, 1.0]))

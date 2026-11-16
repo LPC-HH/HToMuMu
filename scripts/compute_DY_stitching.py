@@ -37,6 +37,8 @@ import sys
 import numpy as np
 import uproot
 
+from eos_io import recreate_on_eos, open_eos  # never write ROOT files through the EOS FUSE mount
+
 sys.path.append('../condor/utils')
 import version as v
 
@@ -92,7 +94,7 @@ def read_sums(dataset):
     path = f"{EOS_PATH}/{dataset}/SumGenWeight.root"
     if not os.path.exists(path):
         return None
-    with uproot.open(path) as f:
+    with open_eos(path) as f:
         for name in ["h_sumOfgenWeight_stitchCells", "h_sumOfgenWeight2_stitchCells"]:
             if name not in f:
                 print(f"[ERROR] {name} missing in {path}. Re-run the analyzer (>= v2.7) and ComputeWeights.py")
@@ -155,14 +157,14 @@ def vbf_category_cells(dataset):
 
 
 def add_stitch_values(dataset, values):
-    """Rewrites the dataset's SumGenWeight.root with the stitch_* histograms added (EOS fuse does not
-    support uproot.update, so the existing histograms are read and written back)"""
+    """Rewrites the dataset's SumGenWeight.root with the stitch_* histograms added (no uproot.update on EOS:
+    the existing histograms are read over xrootd and written back via a local file + xrdcp, see eos_io.py)"""
     path = f"{EOS_PATH}/{dataset}/SumGenWeight.root"
     if dry_run:
         return
-    with uproot.open(path) as f:
+    with open_eos(path) as f:
         existing = {key.split(";")[0]: f[key] for key in f.keys(cycle=False) if not key.startswith("stitch_")}
-    with uproot.recreate(path) as f:
+    with recreate_on_eos(path) as f:
         for name, hist in existing.items():
             f[name] = hist
         for name, value in values.items():

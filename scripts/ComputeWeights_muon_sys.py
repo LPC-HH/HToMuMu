@@ -3,6 +3,8 @@ import sys
 import uproot
 import numpy as np
 
+from eos_io import recreate_on_eos  # never write ROOT files through the EOS FUSE mount
+
 sys.path.append('../condor/utils')
 import version as v
 
@@ -124,7 +126,7 @@ for muon_pt_syst in muon_pt_syst_list:
             print("SumGenWeight already exists!")
             continue
 
-        with uproot.recreate(outputFile) as f:
+        with recreate_on_eos(outputFile) as f:
             totalGenWeight = 0
             for analyzer_file in analyzer_output_files:
                 with uproot.open(FILESDIR + "/" + analyzer_file + ":h_sumOfgenWeight") as h:
