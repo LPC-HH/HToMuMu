@@ -19,14 +19,6 @@ sys.path.append("../condor/utils")
 import version as v
 
 # Generator-level closure of the all-aMC@NLO DY stitching (lib/DYStitching.h), from the histograms the
-# analyzer fills before any selection (in each dataset's SumGenWeight.root):
-#   h_sumOfgenWeight_genMll[_VBFFilter] : sum(genWeight) vs LHE mumu mll (all events / emulated filter pass)
-#   h_sumOfgenWeight[2]_stitchCells     : sum(genWeight) [and of genWeight^2] per stitching cell
-# and the stitch_sigma / stitch_sumw / stitch_frac values written by scripts/compute_DY_stitching.py:
-#   genmll_handoff : d(sigma)/d(LHE mll) of the jet-binned 0J+1J+2J samples (J) vs the 105-160 sample (U),
-#                    whose cross section is matched to J in 105-160, so the ratio tests the shape
-#   genmll_R       : the same in the filter region R, for J, U and the VBF-filtered sample (F)
-#   cell table     : sigma per cell (p, R) from each sample, with stat. uncertainties (sum w^2)
 # Usage: python3 plot_DY_stitching_genlevel.py [era]
 parser = argparse.ArgumentParser()
 parser.add_argument("era", nargs="?", default="2024")

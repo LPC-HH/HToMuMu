@@ -33,16 +33,7 @@ sys.path.append("../condor/utils")
 import version as v
 
 # Reco-level comparison of the EWK Z+2j samples (utils/ewk_comparison.py), modelled on plot_DY_stitching.py:
-#   - statistics: N_eff = (sum w)^2 / sum w^2 and the effective luminosity L_eff = L N_eff / sum w per category
-#     (inclusive / ggH / VBF), in the tuple mass range and in the 110-150 GeV window (statistics_<era>.txt, N_eff plots
-#     vs mass, diJet_mass and delta_eta_diJet), weight distributions
-#   - yields and unit-normalised shapes of the BDT inputs in 110-150 GeV, ratio to H7 2Mu2J
-#   - closure tables (chi2/ndf per variable): H7 2L2J restricted to LHE mumu 105-160 vs H7 2Mu2J (same generator and
-#     phase space: should close; it tests the cross sections and is the input for a later stitching), and P8 2Mu2J vs
-#     H7 2Mu2J (shower / hadronisation; P8 also has M2J > 120 at generator level, which the tuples cannot emulate,
-#     so outside the VBF category it differs by that acceptance too)
-# The extensions of a sample are normalised together (utils/ewk_comparison.py). MC only: no data is read.
-#  Usage: python3 plot_EWK_comparison.py [era] [-j N_JOBS] [--tuples-version X.Y.Z] [--max-files N] [--from-cache]
+# Usage: python3 plot_EWK_comparison.py [era] [-j N_JOBS] [--tuples-version X.Y.Z] [--max-files N] [--from-cache]
 parser = argparse.ArgumentParser()
 parser.add_argument("era", nargs="?", default="2024", choices=ewk.ERAS)
 parser.add_argument("-j", "--jobs", type=int, default=1,

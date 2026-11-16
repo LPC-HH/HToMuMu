@@ -20,17 +20,6 @@ sys.path.append("../condor/utils")
 import version as v
 
 # Generator-level comparison of the EWK Z+2j samples (utils/ewk_comparison.py), from the histograms the analyzer
-# fills before any selection (in each dataset's SumGenWeight.root, made by scripts/ComputeWeights.py), so it can run
-# before the tuples exist:
-#   h_sumOfgenWeight_genMll[_VBFFilter] : sum(genWeight) vs LHE mumu mll (all events / gen mjj > 300 emulation)
-#   h_sumOfgenWeight[2]_stitchCells     : sum(genWeight) [and of genWeight^2] per DY stitching cell; for these LO
-#                                         samples every event with 105 <= LHE mll < 160 is in cell 7
-# scaled with the cross sections CreateTuple uses (CROSS_SECTION, lib/Run3Constants.h), extensions summed.
-#   xs_table   : sigma, sigma(LHE mumu 105-160) +- stat and sigma(105-160, gen mjj > 300) per sample, and the ratio to
-#                H7 2Mu2J. H7 2L2J restricted to the window vs H7 2Mu2J tests the cross sections (same generator);
-#                P8 2Mu2J also has M2J > 120 at generator level, so it differs by that acceptance
-#   genmll     : d(sigma)/d(LHE mumu mll) of every sample, ratio to the reference
-#   genmll_R   : the same for events passing the gen mjj > 300 emulation (VBF-like phase space)
 # Usage: python3 plot_EWK_comparison_genlevel.py [era] [--analyzer-version X.Y]
 parser = argparse.ArgumentParser()
 parser.add_argument("era", nargs="?", default="2024", choices=ewk.ERAS)
