@@ -15,7 +15,7 @@
 # split into <name>_1.root.
 
 ANALYZER_VERSION="v2.8"
-TUPLES_VERSION="v2.8.1"
+TUPLES_VERSION="v2.8.0"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRATCH_DIR="/uscmst1b_scratch/lpc1/3DayLifetime/$USER/hadd_tuples_${TUPLES_VERSION}"
