@@ -4,6 +4,7 @@ import os
 import re
 import sys
 import json
+import subprocess
 sys.path.append('../list')
 from listDatasets_Run3 import datasets_info
 
@@ -158,6 +159,23 @@ list_datasets = datasets_info.keys()
     "Muon1_2024I_v2",
 ]'''
 
+'''list_datasets = [
+    "EWK_2Mu2J_Summer22",
+    "EWK_2Mu2J_pythia_Summer22",
+    "EWK_2Mu2J_Summer22EE",
+    "EWK_2Mu2J_pythia_Summer22EE",
+    "EWK_2Mu2J_Summer23",
+    "EWK_2Mu2J_pythia_Summer23",
+    "EWK_2Mu2J_Summer23BPix",
+    "EWK_2Mu2J_pythia_Summer23BPix",
+    "EWK_2L2J_Summer25",
+    "EWK_2L2J_Summer25_ext1",
+    "EWK_2Mu2J_Summer25",
+    "EWK_2Mu2J_Summer25_ext1",
+    "EWK_2Mu2J_pythia_Summer25",
+    "EWK_2Mu2J_pythia_Summer25_ext1",
+]'''
+
 
 include_Z = "F"
 include_H = "T" 
@@ -233,8 +251,10 @@ for dataset_name in list_datasets:
     else:
         WEIGHT_FILE = EOS_BASE_DIR + type_info + "/%s"%(dataset_name) + "_%s/"%(muon_pt_syst) + f"SumGenWeight.root"
 
-    if not os.path.exists("/eos/uscms/" + WEIGHT_FILE):
-        print("Merged file does not exist. Skipping!")
+    # Check over xrootd, not the /eos/uscms FUSE mount: ComputeWeights.py replaces SumGenWeight.root
+    if subprocess.call(["xrdfs", "root://cmseos.fnal.gov", "stat", "/" + WEIGHT_FILE.lstrip("/")],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) != 0:
+        print("SumGenWeight.root does not exist (" + WEIGHT_FILE + "). Skipping!")
         continue
 
     #if(isData=='T'):

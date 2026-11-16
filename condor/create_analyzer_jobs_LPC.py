@@ -165,14 +165,6 @@ list_datasets = datasets_info.keys()
     "Muon1_2024I_v2",
 ]'''
 
-list_datasets = [
-    #"EWK_2L2J_Summer24",
-    "EWK_2L2J_Summer24_ext1",
-    "EWK_2Mu2J_Summer24",
-    "EWK_2Mu2J_Summer24_ext1",
-    "EWK_2Mu2J_pythia_Summer24",
-    "EWK_2Mu2J_pythia_Summer24_ext1",
-]
 
 include_Z = "F"
 include_H = "T"
