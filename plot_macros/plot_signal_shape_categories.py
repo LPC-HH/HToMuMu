@@ -1,14 +1,4 @@
 """Signal mass shape per BDT category: beam-spot-constrained mass vs BSC + FSR recovery, each with a DCB fit.
-
-For one categorisation (ggH or VBF) the BDT-scored signal MC (signal_Combined.root = all signal production modes,
-inclusive) is split into the BDT categories stored in root_io/bdt_categories.json, and for every category the
-normalised diMuon_bsConstrainedMass and diMuon_bsConstrainedMass_FSR distributions are overlaid, each fitted with a
-double-sided Crystal Ball. A CSV summary and DCB-sigma / sigma_eff vs category plots show how the shape depends on
-the category.
-
-Signal MC only: no data file is ever opened (blinding, CLAUDE.md).
-
-Run from plot_macros/:
     python3 plot_signal_shape_categories.py ggH|VBF [--variant asimovFit_flatMassRes] [--era Combined]
 """
 

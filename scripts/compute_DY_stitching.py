@@ -1,7 +1,6 @@
 """
 Computes the per-era normalisation and stitching fractions of the all-aMC@NLO (FxFx) DY background:
-    J_p : DYto2{L,Mu}-2Jets MLL-50, p = 0J/1J/2J, binned in the Born parton multiplicity (LHE_NpNLO).
-          Disjoint, so outside W they are simply added (weight 1).
+    J_p : DYto2{L,Mu}-2Jets MLL-50, p = 0J/1J/2J
     U   : DYto2Mu-2Jets_105to160 (+ ext1), only inside W
     F   : DYto2Mu-2Jets_105to160_VBFFilter, only inside W where the emulated VBF filter passes (R)
 with W = {LHE mumu mll in [105, 160)}. The cells (lib/DYStitching.h, hardcoded below) are
@@ -10,22 +9,12 @@ with W = {LHE mumu mll in [105, 160)}. The cells (lib/DYStitching.h, hardcoded b
     7          : inside W with p outside 0..2 (empty for FxFx) -> U only
 Inside W the samples covering a cell c are combined with effective-luminosity fractions
     f_ic = Leff_ic / sum_j Leff_jc,   Leff_ic = Neff_ic / sigma_ic,   Neff = (sum w)^2 / sum w^2,
-i.e. the inverse-variance combination; the prediction does not depend on the fractions as long as they
-sum to 1, and samples with more negative weights (2J) get a smaller share.
 
 Normalisation: sigma_Jp from lib/Run3Constants.h. U is matched to J in W:
     sigma_U = sum_p sigma_Jp * sumw(J_p in W) / sumw(J_p)
 so that both predict the same cross section in every cell and there is no step at 105/160 GeV.
 sigma_F = sigma_U * eps_F, with eps_F the GenFilter efficiency (default) or the in-situ one (--insitu).
 F is normalised with sumw over ALL its events (those outside R are dropped by CreateTuple).
-
-Needs SumGenWeight.root from ComputeWeights.py for all the DY datasets of the era (analyzer >= v2.7, with
-h_sumOfgenWeight[2]_stitchCells). Writes one-bin stitch_sigma / stitch_sumw and the 8-bin stitch_frac
-histograms into each DY dataset's SumGenWeight.root, read by CreateTuple (DO_DY_STITCHING). Re-run whenever
-ComputeWeights.py recreates those files.
-
---coverage also reads the first N_COVERAGE_FILES analyzer files of each sample and prints how the reco VBF
-category (approximated by the jet cuts of CreateTuple::isVBFCategory) is distributed over the cells.
 
 Usage: python3 compute_DY_stitching.py [era|all] [--insitu] [--coverage] [--dry-run]
 """
