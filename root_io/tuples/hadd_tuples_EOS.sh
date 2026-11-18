@@ -301,8 +301,8 @@ merge()
 merge_selected()
 {
     local NAME="${1%_tuples.root}"
-    local TYPE="${NAME%%_*}"
-    local ERA="${NAME#*_}"
+    local TYPE="${NAME%%_*}"   # first field: EWK_pythia_2024 is selected by -t EWK
+    local ERA="${NAME##*_}"    # last field
     in_list "${TYPE}" "${SEL_TYPES}" && in_list "${ERA}" "${SEL_ERAS}" || return 0
     merge "$@"
 }
@@ -337,7 +337,11 @@ merge_selected DY_2022_tuples.root \
     ${EOS_PATH}DYto2Mu-2Jets_105to160_VBFFilter_Summer22{,_ext*}/*.root
 
 merge_selected EWK_2022_tuples.root \
-    ${EOS_PATH}EWK_2L2J_Summer22{,_ext*}/*.root
+    ${EOS_PATH}EWK_2Mu2J_Summer22{,_ext*}/*.root
+
+# Same EWK process showered with Pythia (alternative to the nominal Herwig7 2Mu2J sample)
+merge_selected EWK_pythia_2022_tuples.root \
+    ${EOS_PATH}EWK_2Mu2J_pythia_Summer22{,_ext*}/*.root
 
 merge_selected TT_2022_tuples.root \
     ${EOS_PATH}TTto2L2Nu_Summer22{,_ext*}/*.root \
@@ -379,7 +383,11 @@ merge_selected DY_2022EE_tuples.root \
     ${EOS_PATH}DYto2Mu-2Jets_105to160_VBFFilter_Summer22EE{,_ext*}/*.root
 
 merge_selected EWK_2022EE_tuples.root \
-    ${EOS_PATH}EWK_2L2J_Summer22EE{,_ext*}/*.root
+    ${EOS_PATH}EWK_2Mu2J_Summer22EE{,_ext*}/*.root
+
+# Same EWK process showered with Pythia (alternative to the nominal Herwig7 2Mu2J sample)
+merge_selected EWK_pythia_2022EE_tuples.root \
+    ${EOS_PATH}EWK_2Mu2J_pythia_Summer22EE{,_ext*}/*.root
 
 merge_selected TT_2022EE_tuples.root \
     ${EOS_PATH}TTto2L2Nu_Summer22EE{,_ext*}/*.root \
@@ -421,7 +429,11 @@ merge_selected DY_2023_tuples.root \
     ${EOS_PATH}DYto2Mu-2Jets_105to160_VBFFilter_Summer23{,_ext*}/*.root
 
 merge_selected EWK_2023_tuples.root \
-    ${EOS_PATH}EWK_2L2J_Summer23{,_ext*}/*.root
+    ${EOS_PATH}EWK_2Mu2J_Summer23{,_ext*}/*.root
+
+# Same EWK process showered with Pythia (alternative to the nominal Herwig7 2Mu2J sample)
+merge_selected EWK_pythia_2023_tuples.root \
+    ${EOS_PATH}EWK_2Mu2J_pythia_Summer23{,_ext*}/*.root
 
 merge_selected TT_2023_tuples.root \
     ${EOS_PATH}TTto2L2Nu_Summer23{,_ext*}/*.root \
@@ -459,7 +471,11 @@ merge_selected DY_2023BPix_tuples.root \
     ${EOS_PATH}DYto2Mu-2Jets_105to160_VBFFilter_Summer23BPix{,_ext*}/*.root
 
 merge_selected EWK_2023BPix_tuples.root \
-    ${EOS_PATH}EWK_2L2J_Summer23BPix{,_ext*}/*.root
+    ${EOS_PATH}EWK_2Mu2J_Summer23BPix{,_ext*}/*.root
+
+# Same EWK process showered with Pythia (alternative to the nominal Herwig7 2Mu2J sample)
+merge_selected EWK_pythia_2023BPix_tuples.root \
+    ${EOS_PATH}EWK_2Mu2J_pythia_Summer23BPix{,_ext*}/*.root
 
 merge_selected TT_2023BPix_tuples.root \
     ${EOS_PATH}TTto2L2Nu_Summer23BPix{,_ext*}/*.root \
@@ -497,6 +513,10 @@ merge_selected DY_2024_tuples.root \
 
 merge_selected EWK_2024_tuples.root \
     ${EOS_PATH}EWK_2Mu2J_Summer24{,_ext*}/*.root
+
+# Same EWK process showered with Pythia (alternative to the nominal Herwig7 2Mu2J sample)
+merge_selected EWK_pythia_2024_tuples.root \
+    ${EOS_PATH}EWK_2Mu2J_pythia_Summer24{,_ext*}/*.root
 
 merge_selected TT_2024_tuples.root \
     ${EOS_PATH}TTto2L2Nu_Summer24{,_ext*}/*.root \
@@ -538,7 +558,11 @@ merge_selected DY_2025_tuples.root \
     ${EOS_PATH}DYto2Mu-2Jets_105to160_VBFFilter_Summer25{,_ext*}/*.root
 
 merge_selected EWK_2025_tuples.root \
-    ${EOS_PATH}EWK_2L2J_Summer25{,_ext*}/*.root
+    ${EOS_PATH}EWK_2Mu2J_Summer25{,_ext*}/*.root
+
+# Same EWK process showered with Pythia (alternative to the nominal Herwig7 2Mu2J sample)
+merge_selected EWK_pythia_2025_tuples.root \
+    ${EOS_PATH}EWK_2Mu2J_pythia_Summer25{,_ext*}/*.root
 
 merge_selected TT_2025_tuples.root \
     ${EOS_PATH}TTto2L2Nu_Summer25{,_ext*}/*.root \

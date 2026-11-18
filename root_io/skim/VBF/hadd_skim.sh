@@ -56,7 +56,8 @@
 #hadd -f background_Combined_skim_Full.root background_2022Combined_skim_Full.root background_2023Combined_skim_Full.root background_2024_skim_Full.root
 #hadd background_Combined_skim_NoDY50.root background_2022Combined_skim_NoDY50.root background_2023Combined_skim_NoDY50.root 
 
-hadd -f background_Combined_skim_Full.root DY_Combined_skim.root EWK_Combined_skim.root TT_Combined_skim.root DiBoson_Combined_skim.root
+# EWK_merged = Herwig + Pythia EWK (scripts/merge_ewk.py), used for the BDT training only
+hadd -f background_Combined_skim_Full.root DY_Combined_skim.root EWK_merged_Combined_skim.root TT_Combined_skim.root DiBoson_Combined_skim.root
 
 #hadd -f signal_combined_skim_full.root signal_2022combined_skim_full.root signal_2023combined_skim_full.root signal_2024_skim_full.root
 #hadd -f signal_combined_skim_notth.root signal_2022combined_skim_notth.root signal_2023combined_skim_notth.root signal_2024_skim_notth.root
