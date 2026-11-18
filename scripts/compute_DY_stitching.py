@@ -37,7 +37,7 @@ import sys
 import numpy as np
 import uproot
 
-from eos_io import recreate_on_eos, open_eos  # never write ROOT files through the EOS FUSE mount
+from eos_io import recreate_on_eos, open_eos, exists_eos  # never write ROOT files through the EOS FUSE mount
 
 sys.path.append('../condor/utils')
 import version as v
@@ -92,7 +92,7 @@ def read_cross_sections():
 def read_sums(dataset):
     """Pre-selection sums of genWeight of one dataset: total, per cell, per cell of genWeight^2, GenFilter counts"""
     path = f"{EOS_PATH}/{dataset}/SumGenWeight.root"
-    if not os.path.exists(path):
+    if not exists_eos(path):
         return None
     with open_eos(path) as f:
         for name in ["h_sumOfgenWeight_stitchCells", "h_sumOfgenWeight2_stitchCells"]:

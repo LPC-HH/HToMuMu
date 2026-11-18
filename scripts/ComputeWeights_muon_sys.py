@@ -3,7 +3,7 @@ import sys
 import uproot
 import numpy as np
 
-from eos_io import recreate_on_eos  # never write ROOT files through the EOS FUSE mount
+from eos_io import recreate_on_eos, exists_eos  # never write ROOT files through the EOS FUSE mount
 
 sys.path.append('../condor/utils')
 import version as v
@@ -121,7 +121,7 @@ for muon_pt_syst in muon_pt_syst_list:
         analyzer_output_files = [file for file in os.listdir(FILESDIR) if "Higgs" in file]
         outputFile = FILESDIR + "/SumGenWeight.root"
 
-        SumGenWeight_exists = os.path.exists(outputFile)
+        SumGenWeight_exists = exists_eos(outputFile)
         if SumGenWeight_exists and not recreate_weight_file:
             print("SumGenWeight already exists!")
             continue

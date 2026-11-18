@@ -81,6 +81,7 @@ background_datasets= [
     "TT",
     "DiBoson",
     "EWK",
+    "EWK_merged",  # Herwig + Pythia EWK (scripts/merge_ewk.py): training background only
 ]
 
 signal_datasets= [

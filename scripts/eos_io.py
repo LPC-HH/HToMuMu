@@ -1,12 +1,5 @@
 """
 Safe ROOT file I/O on EOS for the weight scripts (ComputeWeights.py, compute_DY_stitching.py, ...).
-
-Writing ROOT files with uproot straight onto the /eos/uscms FUSE mount corrupted SumGenWeight.root files
-(zombie files, unreadable keys) in v2.8. So:
-  - recreate_on_eos(path) writes to a local temp file, copies it with xrdcp (end-to-end adler32 checksum),
-    then re-opens the EOS copy over xrootd and checks every key against the local file. Raises on any failure.
-  - open_eos(path) reads over xrootd instead of FUSE, so a freshly replaced file is never read back stale.
-Paths are given as /eos/uscms/store/... (as everywhere in the scripts) and converted internally.
 """
 import os
 import shutil
@@ -27,6 +20,11 @@ def to_xrootd(path):
     if not path.startswith(EOS_FUSE_PREFIX):
         raise ValueError(f"{path} is not under {EOS_FUSE_PREFIX}: cannot convert it to an xrootd URL")
     return XROOTD_PREFIX + path[len(EOS_FUSE_PREFIX):]
+
+
+def exists_eos(path):
+    return subprocess.run(["xrdfs", "root://cmseos.fnal.gov", "stat", "/store/" + to_xrootd(path).split("//store/", 1)[1]],
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
 
 
 def open_eos(path):

@@ -220,6 +220,34 @@ print("Running tuples version " + v.TUPLES_VERSION_NUMBER)
 
 # Create script to send all of the jobs directly
 send_all_jobs = open(CONDOR_BASE_DIR + "/condor_ctuple_job_sender.sh", "w+")
+# condor_submit can fail transiently (e.g. "ERROR: Failed to set ImageSize=7 for job N.-1 (110)", a schedd
+# timeout that aborts the whole submission): retry, and list the datasets that still failed at the end.
+send_all_jobs.write(r'''#!/bin/bash
+SUBMIT_MAX_TRIES=3
+SUBMIT_RETRY_DELAY=30
+FAILED_SUBMITS=()
+
+submit() {  # submit JOB_DIR
+    local job_dir="$1" n_logs try
+    cd "$job_dir" || { FAILED_SUBMITS+=("$job_dir (missing)"); return; }
+    for try in $(seq 1 $SUBMIT_MAX_TRIES); do
+        n_logs=$(ls log | wc -l)
+        condor_submit task.jdl && return
+        # A job log appearing means the cluster was created after all: retrying would submit it twice
+        if (( $(ls log | wc -l) != n_logs )); then
+            echo "[WARNING] condor_submit reported an error but jobs were created in ${job_dir}: not retrying"
+            FAILED_SUBMITS+=("$job_dir (check condor_q for partial submission)")
+            return
+        fi
+        if (( try < SUBMIT_MAX_TRIES )); then
+            echo "[WARNING] condor_submit failed for ${job_dir} (try ${try}/${SUBMIT_MAX_TRIES}), retrying in ${SUBMIT_RETRY_DELAY} s"
+            sleep $SUBMIT_RETRY_DELAY
+        fi
+    done
+    FAILED_SUBMITS+=("$job_dir")
+}
+
+''')
 
 total_job_number = 0
 
@@ -395,8 +423,7 @@ for dataset_name in list_datasets:
 
     print("Send single job with:")
     print(" > cd " + JOB_DIR + "; condor_submit task.jdl")
-    send_all_jobs.write("cd " + JOB_DIR + "\n")
-    send_all_jobs.write("condor_submit task.jdl" + "\n")
+    send_all_jobs.write("submit " + JOB_DIR + "\n")
 
 print("\n----- End -----")
 print("Run all generated jobs with:")
@@ -407,4 +434,15 @@ print("Expected number of jobs: {}".format(total_job_number))
 with open("expected_ctup_job_number.json", "w") as f:
     json.dump({"EXPECTED_CTUPLE_JOBS": total_job_number}, f)
 
+send_all_jobs.write(r'''
+echo
+if (( ${#FAILED_SUBMITS[@]} )); then
+    echo "============================================================"
+    echo "[ERROR] ${#FAILED_SUBMITS[@]} submission(s) failed. Resubmit with: cd <dir>; condor_submit task.jdl"
+    printf '    %s\n' "${FAILED_SUBMITS[@]}"
+    echo "============================================================"
+    exit 1
+fi
+echo "All submissions succeeded."
+''')
 send_all_jobs.close()

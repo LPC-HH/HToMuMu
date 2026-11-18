@@ -22,6 +22,19 @@
 #include "../lib/MuonScaRe.h"
 #include "correction.h"
 
+// ---------------------------------------------------------------------------------------------------------
+// FSR recovery selection (Run 2 H->mumu prescription,
+constexpr float FSR_PHOTON_PT_MIN = 2.0;      // producer-level (same value)
+constexpr float FSR_PHOTON_ABSETA_MAX = 2.4;  // producer-level (same value)
+constexpr float FSR_DR_MAX = 0.5;             // producer-level (same value)
+constexpr float FSR_RELISO03_MAX = 1.8;       // analysis-level (producer: 2.0)
+constexpr float FSR_DROVERET2_MAX = 0.012;    // analysis-level, GeV^-2 (producer: 0.05)
+constexpr float FSR_PT_RATIO_MAX = 0.4;       // analysis-level, pT(gamma)/pT(mu), suppresses H->Z(mumu)gamma
+// Muon isolation cone (pfRelIso04_all) and photon veto cone used to subtract the FSR photon from the isolation
+constexpr float FSR_MUON_ISO_CONE_DR = 0.4;
+constexpr float FSR_MUON_ISO_VETO_DR = 0.01;
+// ---------------------------------------------------------------------------------------------------------
+
 #ifdef MAKECINT
 #pragma link C++ class vector < float> + ;
 #endif
@@ -78,12 +91,7 @@ int main(int argc, char *argv[]) {
 
 void HmmAnalyzer::ComputeGenStitchingInfo(float &gen_mll, bool &pass_VBF_filter, float &lhe_mll,
                                           int &lhe_n_partons) {
-    // pass_VBF_filter: emulation of VBFGenJetFilter with leadJetsNoLepMass (see the
-    // DYto2Mu-2Jets_105to160_VBFFilter GEN fragment): the two leading gen jets not within
-    // dR < 0.3 of a hard-process e/mu/tau must have mjj > 300 GeV. NanoAOD GenJets have pT > 10 GeV while the filter has no pT cut, so the emulation is a subset of the filter.
-    // lhe_mll: mass of the outgoing LHE muons, the variable the MLL-105to160 samples are generated in.
-    // lhe_n_partons: LHE_NpNLO, the Born parton multiplicity that defines the FxFx 0J/1J/2J samples
-    // (LHE_Njets also counts the real-emission parton, so it does not).
+    // pass_VBF_filter: emulation of VBFGenJetFilter with leadJetsNoLepMass
     gen_mll = FLOAT_NULL_VALUE;
     pass_VBF_filter = false;
     lhe_mll = FLOAT_NULL_VALUE;
@@ -650,6 +658,7 @@ void HmmAnalyzer::EventLoop() {
             t_Mu_dz->push_back(Muon_dz[i]);
             t_Mu_dzErr->push_back(Muon_dzErr[i]);
             t_Mu_sip3d->push_back(Muon_sip3d[i]);
+            t_Mu_fsrPhotonIdx->push_back(Muon_fsrPhotonIdx[i]);
             t_Mu_pfRelIso03_all->push_back(Muon_pfRelIso03_all[i]);
             t_Mu_pfRelIso03_chg->push_back(Muon_pfRelIso03_chg[i]);
             t_Mu_pfRelIso04_all->push_back(Muon_pfRelIso04_all[i]);
@@ -759,10 +768,96 @@ void HmmAnalyzer::EventLoop() {
         t_diMuon_bsConstrainedPt_nanoAOD = dimuBSC_nanoAOD.Pt();
         t_diMuon_bsConstrainedMass_nanoAOD = dimuBSC_nanoAOD.M();
 
+        // ---------------- FSR recovery for mu1 and mu2 (stored only, nominal selection unchanged) ----------------
+        const int n_fsr = std::max(0, std::min<int>(nFsrPhoton, sizeof(FsrPhoton_pt) / sizeof(FsrPhoton_pt[0])));
+        t_nFsrPhoton = n_fsr;
+        std::vector<float> fsr_dR(n_fsr, FLOAT_NULL_VALUE);
+        std::vector<bool> fsr_pass(n_fsr, false);
+        auto pickFsr = [&](int nano_mu_idx, float mu_pt, int veto_photon_idx) {
+            int best = -1;
+            for (int j = 0; j < n_fsr; j++) {
+                if (FsrPhoton_muonIdx[j] != nano_mu_idx || FsrPhoton_electronIdx[j] >= 0 || j == veto_photon_idx)
+                    continue;
+                const float dR = DeltaR(Muon_eta[nano_mu_idx], Muon_phi[nano_mu_idx],
+                                        FsrPhoton_eta[j], FsrPhoton_phi[j]);
+                fsr_dR[j] = dR;
+                const bool pass = FsrPhoton_pt[j] > FSR_PHOTON_PT_MIN &&
+                                  fabs(FsrPhoton_eta[j]) < FSR_PHOTON_ABSETA_MAX &&
+                                  dR < FSR_DR_MAX &&
+                                  FsrPhoton_relIso03[j] < FSR_RELISO03_MAX &&
+                                  FsrPhoton_dROverEt2[j] < FSR_DROVERET2_MAX &&
+                                  mu_pt > 0 && FsrPhoton_pt[j] / mu_pt < FSR_PT_RATIO_MAX;
+                fsr_pass[j] = pass;
+                if (pass && (best < 0 || FsrPhoton_dROverEt2[j] < FsrPhoton_dROverEt2[best]))
+                    best = j;
+            }
+            return best;
+        };
+        t_mu1_fsrPhotonIdx_sel = pickFsr(index_mu1, mu_pt_corr[index_mu1], -1);
+        t_mu2_fsrPhotonIdx_sel = pickFsr(index_mu2, mu_pt_corr[index_mu2], t_mu1_fsrPhotonIdx_sel);
+        t_mu1_fsrPhotonIdx_nanoAOD = Muon_fsrPhotonIdx[index_mu1];
+        t_mu2_fsrPhotonIdx_nanoAOD = Muon_fsrPhotonIdx[index_mu2];
+        t_mu1_hasFSR = t_mu1_fsrPhotonIdx_sel >= 0;
+        t_mu2_hasFSR = t_mu2_fsrPhotonIdx_sel >= 0;
+        t_diMuon_nFSR = int(t_mu1_hasFSR) + int(t_mu2_hasFSR);
+
+        // Massless photon added as a full four-vector to the nominal (beamspot-constrained, corrected) muon
+        auto addFsr = [&](const ROOT::Math::PtEtaPhiMVector &mu, int photon_idx) {
+            if (photon_idx < 0)
+                return mu;
+            ROOT::Math::PtEtaPhiMVector photon(FsrPhoton_pt[photon_idx], FsrPhoton_eta[photon_idx],
+                                               FsrPhoton_phi[photon_idx], 0.0);
+            return ROOT::Math::PtEtaPhiMVector(mu + photon);
+        };
+        const ROOT::Math::PtEtaPhiMVector mu1BSC_FSR = addFsr(mu1BSC, t_mu1_fsrPhotonIdx_sel);
+        const ROOT::Math::PtEtaPhiMVector mu2BSC_FSR = addFsr(mu2BSC, t_mu2_fsrPhotonIdx_sel);
+        const ROOT::Math::PtEtaPhiMVector dimuBSC_FSR = mu1BSC_FSR + mu2BSC_FSR;
+        t_mu1_bsConstrainedPt_FSR = mu1BSC_FSR.Pt();
+        t_mu1_bsConstrainedEta_FSR = mu1BSC_FSR.Eta();
+        t_mu1_bsConstrainedPhi_FSR = mu1BSC_FSR.Phi();
+        t_mu2_bsConstrainedPt_FSR = mu2BSC_FSR.Pt();
+        t_mu2_bsConstrainedEta_FSR = mu2BSC_FSR.Eta();
+        t_mu2_bsConstrainedPhi_FSR = mu2BSC_FSR.Phi();
+        t_mu1_bsConstrainedMass_FSR = mu1BSC_FSR.M();
+        t_mu2_bsConstrainedMass_FSR = mu2BSC_FSR.M();
+        t_diMuon_bsConstrainedPt_FSR = dimuBSC_FSR.Pt();
+        t_diMuon_bsConstrainedMass_FSR = dimuBSC_FSR.M();
+        t_diMuon_eta_FSR = dimuBSC_FSR.Eta();
+        t_diMuon_phi_FSR = dimuBSC_FSR.Phi();
+
+        // pfRelIso04_all with the chosen FSR photon removed if it is inside the isolation cone. Approximate:
+        // [TODO] Stored only not used yet
+        auto isoFsr = [&](int nano_mu_idx, int photon_idx) {
+            const float iso = Muon_pfRelIso04_all[nano_mu_idx];
+            if (photon_idx < 0 || Muon_pt[nano_mu_idx] <= 0)
+                return iso;
+            const float dR = fsr_dR[photon_idx];
+            if (dR <= FSR_MUON_ISO_VETO_DR || dR >= FSR_MUON_ISO_CONE_DR)
+                return iso;
+            return std::max(0.f, iso - FsrPhoton_pt[photon_idx] / Muon_pt[nano_mu_idx]);
+        };
+        t_mu1_pfRelIso04_all_FSR = isoFsr(index_mu1, t_mu1_fsrPhotonIdx_sel);
+        t_mu2_pfRelIso04_all_FSR = isoFsr(index_mu2, t_mu2_fsrPhotonIdx_sel);
+
+        // Full NanoAOD FsrPhoton collection, with the analysis-level flags
+        for (int j = 0; j < n_fsr; j++) {
+            t_FsrPhoton_pt->push_back(FsrPhoton_pt[j]);
+            t_FsrPhoton_eta->push_back(FsrPhoton_eta[j]);
+            t_FsrPhoton_phi->push_back(FsrPhoton_phi[j]);
+            t_FsrPhoton_relIso03->push_back(FsrPhoton_relIso03[j]);
+            t_FsrPhoton_dROverEt2->push_back(FsrPhoton_dROverEt2[j]);
+            t_FsrPhoton_muonIdx->push_back(FsrPhoton_muonIdx[j]);
+            t_FsrPhoton_electronIdx->push_back(FsrPhoton_electronIdx[j]);
+            t_FsrPhoton_dR->push_back(fsr_dR[j]);
+            t_FsrPhoton_passSel->push_back(fsr_pass[j]);
+            t_FsrPhoton_isChosen->push_back(j == t_mu1_fsrPhotonIdx_sel || j == t_mu2_fsrPhotonIdx_sel);
+        }
+        // ---------------------------------------------------------------------------------------------------------
+
         //std::cout << "looking at diMuon mass" << std::endl;
         if(!ifSync){
             if ((include_Z && include_H) || (!include_Z && !include_H)){
-                if (t_diMuon_bsConstrainedMass < 70 || t_diMuon_bsConstrainedMass > 180){
+                if (t_diMuon_bsConstrainedMass < 50 || t_diMuon_bsConstrainedMass > 180){
                     continue;
                 }    
             }
@@ -1055,7 +1150,8 @@ void HmmAnalyzer::EventLoop() {
             //}
             //
             
-
+            
+            //[TODO] do jet cleaning with FSR kinematics instead
             double dR1 = DeltaR(Muon_eta[index_mu1], Muon_phi[index_mu1],
                                 Jet_eta[j], Jet_phi[j]);
             double dR2 = DeltaR(Muon_eta[index_mu2], Muon_phi[index_mu2],
@@ -1359,23 +1455,46 @@ void HmmAnalyzer::EventLoop() {
             t_PrefireWeight_Up = 1.0;
             t_PrefireWeight_Down = 1.0;
             //}
-            for (int i = 0; i < nGenPart; i++) {
-                if ((abs(GenPart_pdgId[i]) >= 11 &&
-                     abs(GenPart_pdgId[i]) <= 16) ||
-                    (abs(GenPart_pdgId[i]) >= 23 &&
-                     abs(GenPart_pdgId[i]) <= 25) ||
-                    (abs(GenPart_genPartIdxMother[i]) >= 23 &&
-                     abs(GenPart_genPartIdxMother[i]) <= 25) ||
-                    (abs(GenPart_genPartIdxMother[i]) >= 11 &&
-                     abs(GenPart_genPartIdxMother[i]) <= 16)) {
+            // Keep leptons/neutrinos (11-16), Z/W/H (23-25), and every particle whose *mother* is one of
+            {
+                auto keepPdg = [](int pdg) {
+                    const int a = abs(pdg);
+                    return (a >= 11 && a <= 16) || (a >= 23 && a <= 25);
+                };
+                // pass 1: decide what is kept and its position in the stored subset
+                std::vector<int> storedIdx(nGenPart, -1);
+                int nStored = 0;
+                for (int i = 0; i < nGenPart; i++) {
+                    const int mother = GenPart_genPartIdxMother[i];
+                    const bool motherKept = mother >= 0 && mother < nGenPart && keepPdg(GenPart_pdgId[mother]);
+                    if (keepPdg(GenPart_pdgId[i]) || motherKept)
+                        storedIdx[i] = nStored++;
+                }
+                // pass 2: store, with the mother index remapped into the stored subset
+                for (int i = 0; i < nGenPart; i++) {
+                    if (storedIdx[i] < 0)
+                        continue;
+                    const int mother = GenPart_genPartIdxMother[i];
                     t_GenPart_eta->push_back(GenPart_eta[i]);
                     t_GenPart_mass->push_back(GenPart_mass[i]);
                     t_GenPart_phi->push_back(GenPart_phi[i]);
                     t_GenPart_pt->push_back(GenPart_pt[i]);
                     t_GenPart_genPartIdxMother->push_back(
-                        GenPart_genPartIdxMother[i]);
+                        (mother >= 0 && mother < nGenPart) ? storedIdx[mother] : -1);
                     t_GenPart_pdgId->push_back(GenPart_pdgId[i]);
                     t_GenPart_status->push_back(GenPart_status[i]);
+                    t_GenPart_statusFlags->push_back(GenPart_statusFlags[i]);
+                }
+            }
+            if (has_GenDressedLepton) {
+                t_nGenDressedLepton = nGenDressedLepton;
+                for (int i = 0; i < nGenDressedLepton; i++) {
+                    t_GenDressedLepton_pt->push_back(GenDressedLepton_pt[i]);
+                    t_GenDressedLepton_eta->push_back(GenDressedLepton_eta[i]);
+                    t_GenDressedLepton_phi->push_back(GenDressedLepton_phi[i]);
+                    t_GenDressedLepton_mass->push_back(GenDressedLepton_mass[i]);
+                    t_GenDressedLepton_pdgId->push_back(GenDressedLepton_pdgId[i]);
+                    t_GenDressedLepton_hasTauAnc->push_back(GenDressedLepton_hasTauAnc[i]);
                 }
             }
             for (int i = 0; i < nGenJet; i++) {

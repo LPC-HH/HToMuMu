@@ -5,7 +5,7 @@ import uproot
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 
-from eos_io import recreate_on_eos, open_eos  # never write ROOT files through the EOS FUSE mount
+from eos_io import recreate_on_eos, open_eos, exists_eos  # never write ROOT files through the EOS FUSE mount
 
 sys.path.append('../condor/utils')
 import version as v
@@ -53,7 +53,7 @@ skip_pattern = [
     "s-channel",
     "ZZto2Nu2Q",
     "WWto4Q",
-    "v13"
+    "v13",
     "DY50to120",
     "DY120to200",
 ]
@@ -123,7 +123,7 @@ def find_dataset(dataset_name, recreate_weight_file):
 
     analyzer_output_files = [file for file in os.listdir(FILESDIR) if "Higgs" in file]
 
-    SumGenWeight_exists = os.path.exists(FILESDIR + "/SumGenWeight.root")
+    SumGenWeight_exists = exists_eos(FILESDIR + "/SumGenWeight.root")
     if SumGenWeight_exists and not recreate_weight_file:
         lines.append("SumGenWeight already exists!")
         return lines, None, []
@@ -252,7 +252,7 @@ def write_sample_sums(dataset_names, dir_suffix=""):
         for name in members:
             for dir_type in ["MC_background", "MC_signal"]:
                 path = EOS_PATH + "/%s/%s%s/SumGenWeight.root" % (dir_type, name, dir_suffix)
-                if os.path.exists(path):
+                if exists_eos(path):
                     paths[name] = path
                     break
         if not paths:

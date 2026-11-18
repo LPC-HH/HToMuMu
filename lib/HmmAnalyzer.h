@@ -497,6 +497,7 @@ class HmmAnalyzer : public MainEvent {
     std::vector<bool> *t_Mu_tightId;
     std::vector<int> *t_Mu_nStations;
     std::vector<int> *t_Mu_nTrackerLayers;
+    std::vector<int> *t_Mu_fsrPhotonIdx;
 
     float t_diMuon_pt;
     float t_diMuon_bsConstrainedPt;
@@ -530,6 +531,51 @@ class HmmAnalyzer : public MainEvent {
     //std::vector<int> *t_FatJet_jetId;
     std::vector<int> *t_FatJet_subJetIdx1;
     std::vector<int> *t_FatJet_subJetIdx2;
+
+    //FSR variables: full NanoAOD FsrPhoton collection + analysis-level flags (see FSR recovery in HmmAnalyzer.cc)
+    int t_nFsrPhoton;
+    std::vector<int> *t_FsrPhoton_electronIdx;
+    std::vector<int> *t_FsrPhoton_muonIdx;
+    std::vector<float> *t_FsrPhoton_dROverEt2;
+    std::vector<float> *t_FsrPhoton_eta;
+    std::vector<float> *t_FsrPhoton_phi;
+    std::vector<float> *t_FsrPhoton_pt;
+    std::vector<float> *t_FsrPhoton_relIso03;
+    std::vector<float> *t_FsrPhoton_dR;        // recomputed DeltaR to the associated NanoAOD muon (FLOAT_NULL_VALUE if none)
+    std::vector<bool> *t_FsrPhoton_passSel;    // passes the analysis-level FSR selection for its associated mu1/mu2
+    std::vector<bool> *t_FsrPhoton_isChosen;   // chosen as the FSR photon of mu1 or mu2
+
+    // FSR recovery for the two selected muons (beamspot-constrained, corrected momentum convention)
+    bool t_mu1_hasFSR;
+    bool t_mu2_hasFSR;
+    int t_mu1_fsrPhotonIdx_sel;      // NanoAOD FsrPhoton index chosen by the analysis selection (-1 if none)
+    int t_mu2_fsrPhotonIdx_sel;
+    int t_mu1_fsrPhotonIdx_nanoAOD;  // NanoAOD Muon_fsrPhotonIdx (lowest dR/ET2 with the loose producer cuts)
+    int t_mu2_fsrPhotonIdx_nanoAOD;
+    float t_mu1_bsConstrainedPt_FSR;
+    float t_mu1_bsConstrainedEta_FSR;
+    float t_mu1_bsConstrainedPhi_FSR;
+    float t_mu2_bsConstrainedPt_FSR;
+    float t_mu2_bsConstrainedEta_FSR;
+    float t_mu2_bsConstrainedPhi_FSR;
+    float t_mu1_bsConstrainedMass_FSR;  // invariant mass of muon + photon (MUON_MASS if no FSR)
+    float t_mu2_bsConstrainedMass_FSR;
+    float t_mu1_pfRelIso04_all_FSR;  // pfRelIso04_all with the chosen FSR photon removed (stored only, not used in selection)
+    float t_mu2_pfRelIso04_all_FSR;
+    float t_diMuon_bsConstrainedPt_FSR;
+    float t_diMuon_bsConstrainedMass_FSR;
+    float t_diMuon_eta_FSR;
+    float t_diMuon_phi_FSR;
+    int t_diMuon_nFSR;
+
+    // Generator-level dressed leptons (MC only, full collection)
+    int t_nGenDressedLepton;
+    std::vector<float> *t_GenDressedLepton_pt;
+    std::vector<float> *t_GenDressedLepton_eta;
+    std::vector<float> *t_GenDressedLepton_phi;
+    std::vector<float> *t_GenDressedLepton_mass;
+    std::vector<int> *t_GenDressedLepton_pdgId;
+    std::vector<bool> *t_GenDressedLepton_hasTauAnc;
 
     std::vector<float> *t_SubJet_btagCMVA;
     std::vector<float> *t_SubJet_btagCSVV2;
@@ -639,6 +685,7 @@ class HmmAnalyzer : public MainEvent {
     std::vector<int> *t_GenPart_genPartIdxMother;
     std::vector<int> *t_GenPart_pdgId;
     std::vector<int> *t_GenPart_status;
+    std::vector<int> *t_GenPart_statusFlags;
 
     std::vector<float> *t_GenJet_eta;
     std::vector<float> *t_GenJet_mass;
@@ -1193,9 +1240,53 @@ void HmmAnalyzer::clearTreeVectors() {
     t_Mu_genPartIdx->clear();
     t_Mu_genPartFlav->clear();
     t_Mu_charge->clear();
+    t_Mu_fsrPhotonIdx->clear();
     //t_Mu_EffSF_TRIG->clear();
     //t_Mu_EffSF_TRIG_up->clear();
     //t_Mu_EffSF_TRIG_down->clear();
+
+    //FSR variables
+    t_nFsrPhoton = 0;
+    t_FsrPhoton_electronIdx->clear();
+    t_FsrPhoton_muonIdx->clear();
+    t_FsrPhoton_dROverEt2->clear();
+    t_FsrPhoton_eta->clear();
+    t_FsrPhoton_phi->clear();
+    t_FsrPhoton_pt->clear();
+    t_FsrPhoton_relIso03->clear();
+    t_FsrPhoton_dR->clear();
+    t_FsrPhoton_passSel->clear();
+    t_FsrPhoton_isChosen->clear();
+
+    t_mu1_hasFSR = false;
+    t_mu2_hasFSR = false;
+    t_mu1_fsrPhotonIdx_sel = -1;
+    t_mu2_fsrPhotonIdx_sel = -1;
+    t_mu1_fsrPhotonIdx_nanoAOD = -1;
+    t_mu2_fsrPhotonIdx_nanoAOD = -1;
+    t_mu1_bsConstrainedPt_FSR = FLOAT_NULL_VALUE;
+    t_mu1_bsConstrainedEta_FSR = FLOAT_NULL_VALUE;
+    t_mu1_bsConstrainedPhi_FSR = FLOAT_NULL_VALUE;
+    t_mu2_bsConstrainedPt_FSR = FLOAT_NULL_VALUE;
+    t_mu2_bsConstrainedEta_FSR = FLOAT_NULL_VALUE;
+    t_mu2_bsConstrainedPhi_FSR = FLOAT_NULL_VALUE;
+    t_mu1_bsConstrainedMass_FSR = FLOAT_NULL_VALUE;
+    t_mu2_bsConstrainedMass_FSR = FLOAT_NULL_VALUE;
+    t_mu1_pfRelIso04_all_FSR = FLOAT_NULL_VALUE;
+    t_mu2_pfRelIso04_all_FSR = FLOAT_NULL_VALUE;
+    t_diMuon_bsConstrainedPt_FSR = FLOAT_NULL_VALUE;
+    t_diMuon_bsConstrainedMass_FSR = FLOAT_NULL_VALUE;
+    t_diMuon_eta_FSR = FLOAT_NULL_VALUE;
+    t_diMuon_phi_FSR = FLOAT_NULL_VALUE;
+    t_diMuon_nFSR = 0;
+
+    t_nGenDressedLepton = 0;
+    t_GenDressedLepton_pt->clear();
+    t_GenDressedLepton_eta->clear();
+    t_GenDressedLepton_phi->clear();
+    t_GenDressedLepton_mass->clear();
+    t_GenDressedLepton_pdgId->clear();
+    t_GenDressedLepton_hasTauAnc->clear();
     
     t_Mu_EffTRIG_DATA->clear();
     t_Mu_EffTRIG_DATA_up->clear();
@@ -1380,6 +1471,7 @@ void HmmAnalyzer::clearTreeVectors() {
     t_GenPart_genPartIdxMother->clear();
     t_GenPart_pdgId->clear();
     t_GenPart_status->clear();
+    t_GenPart_statusFlags->clear();
 
     t_GenJet_eta->clear();
     t_GenJet_mass->clear();
@@ -1548,6 +1640,7 @@ void HmmAnalyzer::BookTreeBranches() {
     t_Mu_tightId = new std::vector<bool>();
     t_Mu_nStations = new std::vector<int>();
     t_Mu_nTrackerLayers = new std::vector<int>();
+    t_Mu_fsrPhotonIdx = new std::vector<int>();
 
     tree->Branch("t_Mu_genPartIdx", "vector<int>", &t_Mu_genPartIdx);
     tree->Branch("t_Mu_genPartFlav", "vector<UChar_t>", &t_Mu_genPartFlav);
@@ -1600,6 +1693,7 @@ void HmmAnalyzer::BookTreeBranches() {
     tree->Branch("t_Mu_tightId", "vector<bool>", &t_Mu_tightId);
     tree->Branch("t_Mu_nStations", "vector<int>", &t_Mu_nStations);
     tree->Branch("t_Mu_nTrackerLayers", "vector<int>", &t_Mu_nTrackerLayers);
+    tree->Branch("t_Mu_fsrPhotonIdx", "vector<int>", &t_Mu_fsrPhotonIdx);
 
     tree->Branch("t_diMuon_pt", &t_diMuon_pt, "t_diMuon_pt/F");
     tree->Branch("t_diMuon_bsConstrainedPt", &t_diMuon_bsConstrainedPt, "t_diMuon_bsConstrainedPt/F");
@@ -1651,6 +1745,66 @@ void HmmAnalyzer::BookTreeBranches() {
     //tree->Branch("t_FatJet_jetId", "vector<int>", &t_FatJet_jetId);
     tree->Branch("t_FatJet_subJetIdx1", "vector<int>", &t_FatJet_subJetIdx1);
     tree->Branch("t_FatJet_subJetIdx2", "vector<int>", &t_FatJet_subJetIdx2);
+
+    //FSR variables
+    t_FsrPhoton_electronIdx = new std::vector<int>();
+    t_FsrPhoton_muonIdx = new std::vector<int>();
+    t_FsrPhoton_dROverEt2 = new std::vector<float>();
+    t_FsrPhoton_eta = new std::vector<float>();
+    t_FsrPhoton_phi = new std::vector<float>();
+    t_FsrPhoton_pt = new std::vector<float>();
+    t_FsrPhoton_relIso03 = new std::vector<float>();
+    t_FsrPhoton_dR = new std::vector<float>();
+    t_FsrPhoton_passSel = new std::vector<bool>();
+    t_FsrPhoton_isChosen = new std::vector<bool>();
+
+    tree->Branch("t_nFsrPhoton", &t_nFsrPhoton, "t_nFsrPhoton/I");
+    tree->Branch("t_FsrPhoton_electronIdx", "vector<int>", &t_FsrPhoton_electronIdx);
+    tree->Branch("t_FsrPhoton_muonIdx", "vector<int>", &t_FsrPhoton_muonIdx);
+    tree->Branch("t_FsrPhoton_dROverEt2", "vector<float>", &t_FsrPhoton_dROverEt2);
+    tree->Branch("t_FsrPhoton_eta", "vector<float>", &t_FsrPhoton_eta);
+    tree->Branch("t_FsrPhoton_phi", "vector<float>", &t_FsrPhoton_phi);
+    tree->Branch("t_FsrPhoton_pt", "vector<float>", &t_FsrPhoton_pt);
+    tree->Branch("t_FsrPhoton_relIso03", "vector<float>", &t_FsrPhoton_relIso03);
+    tree->Branch("t_FsrPhoton_dR", "vector<float>", &t_FsrPhoton_dR);
+    tree->Branch("t_FsrPhoton_passSel", "vector<bool>", &t_FsrPhoton_passSel);
+    tree->Branch("t_FsrPhoton_isChosen", "vector<bool>", &t_FsrPhoton_isChosen);
+
+    tree->Branch("t_mu1_hasFSR", &t_mu1_hasFSR, "t_mu1_hasFSR/O");
+    tree->Branch("t_mu2_hasFSR", &t_mu2_hasFSR, "t_mu2_hasFSR/O");
+    tree->Branch("t_mu1_fsrPhotonIdx_sel", &t_mu1_fsrPhotonIdx_sel, "t_mu1_fsrPhotonIdx_sel/I");
+    tree->Branch("t_mu2_fsrPhotonIdx_sel", &t_mu2_fsrPhotonIdx_sel, "t_mu2_fsrPhotonIdx_sel/I");
+    tree->Branch("t_mu1_fsrPhotonIdx_nanoAOD", &t_mu1_fsrPhotonIdx_nanoAOD, "t_mu1_fsrPhotonIdx_nanoAOD/I");
+    tree->Branch("t_mu2_fsrPhotonIdx_nanoAOD", &t_mu2_fsrPhotonIdx_nanoAOD, "t_mu2_fsrPhotonIdx_nanoAOD/I");
+    tree->Branch("t_mu1_bsConstrainedPt_FSR", &t_mu1_bsConstrainedPt_FSR, "t_mu1_bsConstrainedPt_FSR/F");
+    tree->Branch("t_mu1_bsConstrainedEta_FSR", &t_mu1_bsConstrainedEta_FSR, "t_mu1_bsConstrainedEta_FSR/F");
+    tree->Branch("t_mu1_bsConstrainedPhi_FSR", &t_mu1_bsConstrainedPhi_FSR, "t_mu1_bsConstrainedPhi_FSR/F");
+    tree->Branch("t_mu2_bsConstrainedPt_FSR", &t_mu2_bsConstrainedPt_FSR, "t_mu2_bsConstrainedPt_FSR/F");
+    tree->Branch("t_mu2_bsConstrainedEta_FSR", &t_mu2_bsConstrainedEta_FSR, "t_mu2_bsConstrainedEta_FSR/F");
+    tree->Branch("t_mu2_bsConstrainedPhi_FSR", &t_mu2_bsConstrainedPhi_FSR, "t_mu2_bsConstrainedPhi_FSR/F");
+    tree->Branch("t_mu1_bsConstrainedMass_FSR", &t_mu1_bsConstrainedMass_FSR, "t_mu1_bsConstrainedMass_FSR/F");
+    tree->Branch("t_mu2_bsConstrainedMass_FSR", &t_mu2_bsConstrainedMass_FSR, "t_mu2_bsConstrainedMass_FSR/F");
+    tree->Branch("t_mu1_pfRelIso04_all_FSR", &t_mu1_pfRelIso04_all_FSR, "t_mu1_pfRelIso04_all_FSR/F");
+    tree->Branch("t_mu2_pfRelIso04_all_FSR", &t_mu2_pfRelIso04_all_FSR, "t_mu2_pfRelIso04_all_FSR/F");
+    tree->Branch("t_diMuon_bsConstrainedPt_FSR", &t_diMuon_bsConstrainedPt_FSR, "t_diMuon_bsConstrainedPt_FSR/F");
+    tree->Branch("t_diMuon_bsConstrainedMass_FSR", &t_diMuon_bsConstrainedMass_FSR, "t_diMuon_bsConstrainedMass_FSR/F");
+    tree->Branch("t_diMuon_eta_FSR", &t_diMuon_eta_FSR, "t_diMuon_eta_FSR/F");
+    tree->Branch("t_diMuon_phi_FSR", &t_diMuon_phi_FSR, "t_diMuon_phi_FSR/F");
+    tree->Branch("t_diMuon_nFSR", &t_diMuon_nFSR, "t_diMuon_nFSR/I");
+
+    t_GenDressedLepton_pt = new std::vector<float>();
+    t_GenDressedLepton_eta = new std::vector<float>();
+    t_GenDressedLepton_phi = new std::vector<float>();
+    t_GenDressedLepton_mass = new std::vector<float>();
+    t_GenDressedLepton_pdgId = new std::vector<int>();
+    t_GenDressedLepton_hasTauAnc = new std::vector<bool>();
+    tree->Branch("t_nGenDressedLepton", &t_nGenDressedLepton, "t_nGenDressedLepton/I");
+    tree->Branch("t_GenDressedLepton_pt", "vector<float>", &t_GenDressedLepton_pt);
+    tree->Branch("t_GenDressedLepton_eta", "vector<float>", &t_GenDressedLepton_eta);
+    tree->Branch("t_GenDressedLepton_phi", "vector<float>", &t_GenDressedLepton_phi);
+    tree->Branch("t_GenDressedLepton_mass", "vector<float>", &t_GenDressedLepton_mass);
+    tree->Branch("t_GenDressedLepton_pdgId", "vector<int>", &t_GenDressedLepton_pdgId);
+    tree->Branch("t_GenDressedLepton_hasTauAnc", "vector<bool>", &t_GenDressedLepton_hasTauAnc);
 
     t_SubJet_btagCMVA = new std::vector<float>();
     t_SubJet_btagCSVV2 = new std::vector<float>();
@@ -1884,6 +2038,7 @@ void HmmAnalyzer::BookTreeBranches() {
     t_GenPart_genPartIdxMother = new std::vector<int>();
     t_GenPart_pdgId = new std::vector<int>();
     t_GenPart_status = new std::vector<int>();
+    t_GenPart_statusFlags = new std::vector<int>();
 
     t_GenJet_eta = new std::vector<float>();
     t_GenJet_mass = new std::vector<float>();
@@ -1898,6 +2053,7 @@ void HmmAnalyzer::BookTreeBranches() {
                  &t_GenPart_genPartIdxMother);
     tree->Branch("t_GenPart_pdgId", "vector<int>", &t_GenPart_pdgId);
     tree->Branch("t_GenPart_status", "vector<int>", &t_GenPart_status);
+    tree->Branch("t_GenPart_statusFlags", "vector<int>", &t_GenPart_statusFlags);
 
     tree->Branch("t_GenJet_eta", "vector<float>", &t_GenJet_eta);
     tree->Branch("t_GenJet_mass", "vector<float>", &t_GenJet_mass);

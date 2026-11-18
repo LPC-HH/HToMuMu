@@ -29,13 +29,18 @@ const std::map<TString, float> CROSS_SECTION = {
     {"DYto2L-2Jets_0J", 5378.},
     {"DYto2L-2Jets_1J", 1017.},
     {"DYto2L-2Jets_2J", 385.5},
-    {"DYto2Mu-2Jets_0J", 5382.},
-    {"DYto2Mu-2Jets_1J", 975.5},
-    {"DYto2Mu-2Jets_2J", 374.},
+    // [TODO]: GenXSecAnalyzer on these mumu-only FxFx samples reports the ll (ee+mumu+tautau) cross section
+    // Original (XSDB) values: 5382., 975.5, 374. Keep plain numbers: compute_DY_stitching.py parses this map.
+    {"DYto2Mu-2Jets_0J", 1794.},
+    {"DYto2Mu-2Jets_1J", 325.2},
+    {"DYto2Mu-2Jets_2J", 124.7},
     {"DYto2Mu-2Jets_105to160", 49.03},
-    {"DYto2Mu-2Jets_105to160_VBFFilter", 3.131},
+    {"DYto2Mu-2Jets_105to160_VBFFilter", 3.105},
     // ***** EWK ***** //
-    {"EWK_2L2J", 1.410},
+    // [TODO] CHECK THESE XSEC VALUES
+    {"EWK_2L2J", 1.418},
+    {"EWK_2Mu2J", 0.0635},
+    {"EWK_2Mu2J_pythia", 0.06447},
     // ***** TT ***** //
     {"TTto2L2Nu", 86.61},
     {"TTtoLNu2Q", 358.61},

@@ -100,6 +100,14 @@ If you want to add a variable to the tuples, you just need to go to ./lib/Create
 For the training, you will need a VPN to Fermilab, do that first because it can take some time. See how to do it in ./python/xgboost/README.md
 
 You need to have the tuples before continuing with this.
+## Merge the EWK samples (training only)
+
+The BDT is trained on the EWK Herwig (`EWK`, 2Mu2J) and Pythia (`EWK_pythia`, 2Mu2J_pythia) samples together, for more MC statistics. Both are normalised to the full cross section, so they are mixed per era with weights f and 1-f (f = N_eff,H7 / (N_eff,H7 + N_eff,P8)). After `hadd_tuples.sh`, run from the repo root (inside `cmsenv`)
+```
+python3 scripts/merge_ewk.py Combined
+```
+This writes `root_io/tuples/EWK_merged_Combined_tuples.root`, which goes into the training background skims (`hadd_skim.sh`). BDT scores are appended to the Herwig `EWK` tuple only, which stays the nominal EWK for the categories, plots and fits.
+
 ## Skim tuples 
 
 BDT does not like big files, so we need to generate a tuples that contain just the events from that production mode and the training variables.
