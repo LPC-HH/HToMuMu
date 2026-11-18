@@ -234,9 +234,6 @@ class CreateTuple {
     // DY stitching
     bool dy_stitch = false; /**< true if the weight file has the stitch_* values of this dataset */
     std::vector<double> dy_stitch_frac; /**< fraction of this dataset per stitching cell (0: event dropped) */
-    /** Mass of the two LHE muons, from the analyzer (MC with LHE info; the analyzer's null value if the event has no
-     * LHE mumu pair, e.g. ee/tautau events of the 2L samples; -999 for inputs without the branch). Written out as
-     * LHE_mll for every sample, e.g. to select the LHE mumu 105-160 overlap of EWK_2L2J with EWK_2Mu2J. */
     float lhe_mll = -999.f;
     Int_t lhe_n_partons;
     Bool_t pass_VBF_filter;
@@ -374,8 +371,7 @@ CreateTuple::CreateTuple(TString input, TString weightFile, TString output, TStr
     std::cout << "Luminosity: " << luminosity
               << ", cross section: " << cross_section << std::endl;
     if (!is_data) {
-        // Sum over the dataset and all its extensions (hadded together, like the DY stitch_sumw), written by
-        // scripts/ComputeWeights.py; equal to h_sumOfgenWeight for a dataset without extensions
+        // Sum over the dataset and all its extensions (hadded together, like the DY stitch_sumw)
         GetGenWeightSum(weight_name);  // prints this dataset's own sum
         gen_weight_sum = GetSingleBinValue(weight_name, "h_sumOfgenWeight_sample");
         std::cout << "Sum of gen weights over the dataset and its extensions (used): " << gen_weight_sum << std::endl;
