@@ -4,12 +4,15 @@
 # nohup bash archive_condor_logs.sh > archive.log 2>&1 &   # archive everything not in KEEP
 #
 # Restore a folder:
-#   xrdcp root://cmseos.fnal.gov//store/user/esledge/condor_logs/<dir>.tar.gz - | tar -xzf -
+#   xrdcp root://cmseos.fnal.gov//store/user/$USER/condor_logs/<dir>.tar.gz - | tar -xzf -
+#
+# Destination: /store/user/<your username>/condor_logs (set EOS_USER or EOS_DEST to change it).
 
 set -uo pipefail
 
 EOS_HOST="root://cmseos.fnal.gov"
-EOS_DEST="${EOS_DEST:-/store/user/esledge/condor_logs}"
+EOS_USER="${EOS_USER:-${USER:-$(id -un)}}"
+EOS_DEST="${EOS_DEST:-/store/user/${EOS_USER}/condor_logs}"
 # Folders that stay local (current campaigns; job checkers read them).
 KEEP=(ctuples_v2.6.0 ctuples_v2.7.0 ctuples_v2.8.0 analyzer_HiggsMuMu_v2.8)
 
@@ -22,7 +25,7 @@ for arg in "$@"; do
         --dry-run)    DRY_RUN=1 ;;
         --sizes)      SIZES=1 ;;   # with --dry-run: also du/find each folder (slow on NFS)
         --keep-local) KEEP_LOCAL=1 ;;
-        -h|--help)    sed -n '2,17p' "$0"; exit 0 ;;
+        -h|--help)    sed -n '2,9p' "$0"; exit 0 ;;
         -*)           echo "Unknown option $arg" >&2; exit 1 ;;
         *)            DIRS+=("${arg%/}") ;;
     esac
