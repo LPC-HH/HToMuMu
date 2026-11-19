@@ -207,6 +207,15 @@ class CreateTuple {
 
     /** Read LHE variables */
     std::vector<float> *lhe_pdf_weight, *lhe_scale_weight;
+    bool write_lhe_weights = false;
+
+    // Nine scale weights: indices 0–8
+    float lhe_scale_weight_out[9];
+    // 103 PDF weights: indices 0–102
+    float lhe_pdf_weight_out[103];
+    // LHE normalization factors
+    double lhe_scale_norm[9];
+    double lhe_pdf_norm[103];
 
     /** Read Jet variables */
     int n_jet, n_bjet, n_bjet_Loose;
@@ -391,6 +400,76 @@ CreateTuple::CreateTuple(TString input, TString weightFile, TString output, TStr
     // else {
     // is_data_int = 1;
     //}
+
+    // LHE SCALE AND PDF NORMALIZATION
+    if (!is_data && is_signal && jet_syst_name.empty()) {
+
+        // Open the same SumGenWeight.root file
+        std::unique_ptr<TFile> f_weights(TFile::Open(weight_name, "READ"));
+
+        if (!f_weights || f_weights->IsZombie()) {
+            throw std::runtime_error("Cannot open LHE normalization file: " +
+                                     std::string(weight_name.Data()));
+        }
+        // Only nominal signal weight files contain the sample-wide LHE sums.
+        TH1 *h_scale = nullptr;
+        TH1 *h_pdf = nullptr;
+
+        f_weights->GetObject("h_sumOfLHEScaleWeight_sample", h_scale);
+        f_weights->GetObject("h_sumOfLHEPdfWeight_sample", h_pdf);
+
+        if (h_scale || h_pdf) {
+            if (!h_scale || !h_pdf) {
+                throw std::runtime_error("Missing LHE normalization histograms");
+            }
+
+            // Verify histogram dimensions
+            if (h_scale->GetNbinsX() != 9) {
+                throw std::runtime_error(
+                    "Expected 9 bins in h_sumOfLHEScaleWeight_sample");
+            }
+
+            if (h_pdf->GetNbinsX() != 103) {
+                throw std::runtime_error(
+                    "Expected 103 bins in h_sumOfLHEPdfWeight_sample");
+            }
+
+            // ------------------------------------------------------
+            // Scale normalization factors
+            // ------------------------------------------------------
+
+            for (int i = 0; i < 9; ++i) {
+
+                double sum_scale = h_scale->GetBinContent(i + 1);
+
+                if (!std::isfinite(sum_scale) || sum_scale == 0.0) {
+                    throw std::runtime_error(
+                        "Invalid LHE scale normalization at index " +
+                        std::to_string(i));
+                }
+
+                lhe_scale_norm[i] = static_cast<double>(gen_weight_sum) / sum_scale;
+            }
+
+            // PDF normalization factors
+            for (int i = 0; i < 103; ++i) {
+
+                double sum_pdf = h_pdf->GetBinContent(i + 1);
+
+                if (!std::isfinite(sum_pdf) || sum_pdf == 0.0) {
+                    throw std::runtime_error(
+                        "Invalid LHE PDF normalization at index " +
+                        std::to_string(i));
+                }
+
+                lhe_pdf_norm[i] = static_cast<double>(gen_weight_sum) / sum_pdf;
+            }
+
+            std::cout << "LHE normalization factors loaded successfully"
+                      << std::endl;
+            write_lhe_weights = true;
+        }
+    }
 
     mc_campaign = MC_CAMPAIGN_MAP.at(era);
 
@@ -831,9 +910,31 @@ void CreateTuple::setBranchesAddressesOutput() {
         tree_output->Branch("pass_jet_veto", &pass_jet_veto, "pass_jet_veto/O");
     }
 
-    // LHE variables
-    //tree_output->Branch("LHEPdfWeight", &lhe_pdf_weight);
-    //tree_output->Branch("LHEScaleWeight", &lhe_scale_weight);
+    // LHE scale and pdf weights
+    if (write_lhe_weights) {
+
+        // LHE scale weights
+        for (int i = 0; i < 9; ++i) {
+
+            std::string branch_name = "weight_LHEScal_" + std::to_string(i);
+
+            std::string leaf_name = branch_name + "/F";
+
+            tree_output->Branch(branch_name.c_str(), &lhe_scale_weight_out[i],
+                                leaf_name.c_str());
+        }
+
+        // LHE PDF weights
+        for (int i = 0; i < 103; ++i) {
+
+            std::string branch_name = "weight_LHEPd_" + std::to_string(i);
+
+            std::string leaf_name = branch_name + "/F";
+
+            tree_output->Branch(branch_name.c_str(), &lhe_pdf_weight_out[i],
+                                leaf_name.c_str());
+        }
+    }
 
     std::cout << "Output Branches addressed setted" << std::endl;
 }
@@ -892,11 +993,20 @@ void CreateTuple::setBranchesAddressesInput() {
     tree_input->SetBranchStatus("t_SoftActivityJetNjets10", 1);
     tree_input->SetBranchAddress("t_SoftActivityJetNjets10", &n_SoftJet_pt10);
  
-    tree_input->SetBranchStatus("t_LHEPdfWeight", 1);
-    tree_input->SetBranchAddress("t_LHEPdfWeight", &lhe_pdf_weight);
-    tree_input->SetBranchStatus("t_LHEScaleWeight", 1);
-    tree_input->SetBranchAddress("t_LHEScaleWeight", &lhe_scale_weight);
-    
+    if (write_lhe_weights) {
+
+        if (!tree_input->GetBranch("t_LHEPdfWeight") ||
+            !tree_input->GetBranch("t_LHEScaleWeight")) {
+            throw std::runtime_error(
+                "Missing LHE weight branches in signal MC");
+        }
+
+        tree_input->SetBranchStatus("t_LHEPdfWeight", 1);
+        tree_input->SetBranchAddress("t_LHEPdfWeight", &lhe_pdf_weight);
+        tree_input->SetBranchStatus("t_LHEScaleWeight", 1);
+        tree_input->SetBranchAddress("t_LHEScaleWeight", &lhe_scale_weight);
+    }
+
     tree_input->SetBranchStatus("t_SoftActivityJetHT", 1);
     tree_input->SetBranchAddress("t_SoftActivityJetHT", &HT);
     tree_input->SetBranchStatus("t_SoftActivityJetHT2", 1);
@@ -1478,15 +1588,17 @@ void CreateTuple::fillOutputTree() {
 
 
 
-            const float btag_score =
-                jet_btag_for_selection->at(jet_index);
+            if (std::abs(jet_eta->at(jet_index)) < 2.5) {
+                const float btag_score =
+                    jet_btag_for_selection->at(jet_index);
 
-            if (btag_score > btag_loose_cut) {
-                ++n_bjet_Loose;
-            }
+                if (btag_score > btag_loose_cut) {
+                    ++n_bjet_Loose;
+                }
 
-            if (btag_score > btag_medium_cut) {
-                ++n_bjet;
+                if (btag_score > btag_medium_cut) {
+                    ++n_bjet;
+                }
             }
 
             if (leading_jet_index < 0 ||
@@ -1691,6 +1803,39 @@ void CreateTuple::fillOutputTree() {
         isggHCategory();
         isVBFCategory();
 
+        if (write_lhe_weights) {
+
+            if (!lhe_scale_weight || lhe_scale_weight->size() != 9) {
+
+                throw std::runtime_error(
+                    "Expected 9 LHEScaleWeight entries, got " +
+                    std::to_string(lhe_scale_weight ? lhe_scale_weight->size()
+                                                    : 0));
+            }
+
+            if (lhe_scale_weight->at(4) == 0.0f) {
+                throw std::runtime_error("LHEScaleWeight[4] is zero");
+            }
+
+            for (int i = 0; i < 9; ++i) {
+                lhe_scale_weight_out[i] = lhe_scale_weight->at(i) * lhe_scale_norm[i];
+            }
+
+            if (!lhe_pdf_weight || lhe_pdf_weight->size() != 103) {
+
+                throw std::runtime_error(
+                    "Expected 103 LHEPdfWeight entries, got " +
+                    std::to_string(lhe_pdf_weight ? lhe_pdf_weight->size()
+                                                  : 0));
+            }
+
+            for (int i = 0; i < 103; ++i) {
+                lhe_pdf_weight_out[i] = lhe_pdf_weight->at(i) * lhe_pdf_norm[i];
+            }
+        }
+
+
+        // Fill output tree
         tree_output->Fill();
     }
 

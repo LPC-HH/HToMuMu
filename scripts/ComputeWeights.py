@@ -283,6 +283,48 @@ def write_sample_sums(dataset_names, dir_suffix=""):
             print("  [WARNING] no SumGenWeight.root for " + ", ".join(missing) + ": not included")
 
 
+def write_signal_lhe_sample_sums(dataset_names):
+    """Write shared PDF and scale sums for nominal signal samples and their extensions."""
+    samples = {}
+    for name in dataset_names:
+        if datasets_info[name][3] == "MC_signal":
+            path = f"{EOS_PATH}/MC_signal/{name}/SumGenWeight.root"
+            if exists_eos(path):
+                sample = re.sub(r"_ext\d+$", "", name)
+                samples.setdefault(sample, []).append(path)
+
+    lhe_names = ("h_sumOfLHEPdfWeight", "h_sumOfLHEScaleWeight")
+    for paths in samples.values():
+        totals = {}
+        for path in paths:
+            with open_eos(path) as f:
+                for name in lhe_names:
+                    hist = f[name]
+                    values = hist.values().astype(np.float64)
+                    edges = hist.axis().edges()
+                    key = f"{name}_sample"
+                    if key in totals:
+                        total_values, total_edges = totals[key]
+                        if not np.array_equal(edges, total_edges):
+                            raise ValueError(f"Inconsistent binning for {name} in {path}")
+                        total_values += values
+                    else:
+                        totals[key] = (values, edges)
+
+        for path in paths:
+            with open_eos(path) as f:
+                if all(key in f and np.array_equal(f[key].values(), values)
+                       and np.array_equal(f[key].axis().edges(), edges)
+                       for key, (values, edges) in totals.items()):
+                    continue
+                existing = {key: f[key] for key in f.keys(cycle=False) if key not in totals}
+            with recreate_on_eos(path) as f:
+                for key, hist in existing.items():
+                    f[key] = hist
+                for key, hist in totals.items():
+                    f[key] = hist
+
+
 def main():
     # Arguments
     if (len(sys.argv) == 1):
@@ -327,7 +369,9 @@ def main():
             raise
 
     # 4) Normalisation shared by a dataset and its extensions, also when nothing was recreated above
-    write_sample_sums([name for name, *_ in datasets])
+    dataset_names = [name for name, *_ in datasets]
+    write_sample_sums(dataset_names)
+    write_signal_lhe_sample_sums(dataset_names)
 
 
 if __name__ == "__main__":

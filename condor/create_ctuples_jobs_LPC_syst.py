@@ -60,6 +60,7 @@ list_datasets = [
 
 include_Z = "F"
 include_H = "T"
+ifSync = "F"
 
 
 valid_muon_pt_systs = [
@@ -349,7 +350,7 @@ for dataset_name in list_datasets:
                     comm += "/eos/uscms/" + OUTPUT_DIR + " " + era + " " + channel
                     comm += " T" if "Data" in type_info else " F"
                     comm += " T" if "signal" in type_info.lower() else " F"
-                    comm += " " + include_Z + " " + include_H + " " + jet_syst
+                    comm += " " + include_Z + " " + include_H + " " + jet_syst + " " + ifSync
 
                     print(" > cd " + JOB_DIR + "; " + comm)
 
@@ -425,6 +426,8 @@ for dataset_name in list_datasets:
             + include_H
             + " "
             + jet_syst
+            + " "
+            + ifSync
             + " "
             + cmsswReleaseVersion
             + " "
