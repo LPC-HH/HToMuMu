@@ -1,6 +1,7 @@
-"""Helpers for plot_fsr_validation.py: loading, blinding, invariants, metrics, dressed-lepton matching, plotting.
+"""Helpers for plot_fsr_validation.py: loading, blinding, invariants, metrics, plotting.
 
-Inputs are final CreateTuple outputs (tree ``tree_output``) with the FSR branches of the ``FSR-recovery`` branch.
+Inputs are final CreateTuple outputs (tree ``tree_output``) produced since FSR recovery became the baseline
+(un-suffixed kinematics FSR-dressed, bare values in ``*_noFSR``).
 Run from ``plot_macros/`` (same convention as the other macros).
 """
 
@@ -27,50 +28,33 @@ MUON_MASS = 0.1056583755
 # validation only uses the Z control region, so data is cut hard to both masses below this value on load.
 DATA_MAX_MASS = 110.0
 
-# NanoAOD GenDressedLepton: ParticleLevelProducer, lepConeSize = 0.1 (photon dressing cone), lepMaxEta = 2.5
-# (PhysicsTools/NanoAOD/python/particlelevel_cff.py). Reco FSR recovery accepts photons up to DeltaR < 0.5.
+# Reference DeltaR(mu, gamma) split for the FSR diagnostics: the NanoAOD GenDressedLepton dressing cone
+# (lepConeSize = 0.1). Reco FSR recovery accepts photons up to DeltaR < 0.5.
 DRESSING_CONE = 0.1
 
+# FSR recovery is the baseline: un-suffixed muon/dimuon kinematics are FSR-dressed, bare ones are *_noFSR
+MASS_BRANCHES = ["diMuon_bsConstrainedMass", "diMuon_bsConstrainedMass_noFSR"]
 SCALAR_BRANCHES = [
     WEIGHT_BRANCH,
     "PV",
     "is_ggH_category",
     "is_VBF_category",
-    "diMuon_bsConstrainedMass",
-    "diMuon_bsConstrainedMass_FSR",
-    "diMuon_bsConstrainedMass_FSR_delta",
+    *MASS_BRANCHES,
     "diMuon_bsConstrainedPt",
-    "diMuon_bsConstrainedPt_FSR",
+    "diMuon_bsConstrainedPt_noFSR",
     "diMuon_nFSR",
-    "nFsrPhoton",
 ]
 for _mu in ("mu1", "mu2"):
     SCALAR_BRANCHES += [
         f"{_mu}_bsConstrainedPt",
+        f"{_mu}_bsConstrainedPt_noFSR",
         f"{_mu}_eta",
         f"{_mu}_phi",
         f"{_mu}_hasFSR",
-        f"{_mu}_bsConstrainedPt_FSR",
-        f"{_mu}_eta_FSR",
-        f"{_mu}_phi_FSR",
-        f"{_mu}_mass_FSR",
-        f"{_mu}_fsrPhotonIdx_sel",
         f"{_mu}_fsrPhoton_pt",
-        f"{_mu}_fsrPhoton_eta",
-        f"{_mu}_fsrPhoton_relIso03",
-        f"{_mu}_fsrPhoton_dROverEt2",
         f"{_mu}_fsrPhoton_dR",
     ]
-PHOTON_BRANCHES = ["FsrPhoton_passSel", "FsrPhoton_isChosen", "FsrPhoton_electronIdx"]
-MC_BRANCHES = [
-    "gen_mll",
-    "GenDressedLepton_pt",
-    "GenDressedLepton_eta",
-    "GenDressedLepton_phi",
-    "GenDressedLepton_mass",
-    "GenDressedLepton_pdgId",
-    "GenDressedLepton_hasTauAnc",
-]
+MC_BRANCHES = ["gen_mll"]
 
 
 # --------------------------------------------------------------------------------------------------------- #
@@ -96,7 +80,7 @@ def load(files: list[str], is_data: bool, max_events: int | None = None) -> ak.A
     if not files:
         return None
     is_data = is_data or any(looks_like_data(f) for f in files)
-    branches = SCALAR_BRANCHES + PHOTON_BRANCHES + ([] if is_data else MC_BRANCHES)
+    branches = SCALAR_BRANCHES + ([] if is_data else MC_BRANCHES)
     arrays = []
     n_read = 0
     for path in files:
@@ -113,15 +97,15 @@ def load(files: list[str], is_data: bool, max_events: int | None = None) -> ak.A
             if is_data:
                 # Hard blinding mask. Applied before anything else is computed; there is no option to disable it.
                 keep = (arr["diMuon_bsConstrainedMass"] < DATA_MAX_MASS) & (
-                    arr["diMuon_bsConstrainedMass_FSR"] < DATA_MAX_MASS
+                    arr["diMuon_bsConstrainedMass_noFSR"] < DATA_MAX_MASS
                 )
                 arr = arr[keep]
             arrays.append(arr)
             n_read += len(arr)
     events = ak.concatenate(arrays) if len(arrays) > 1 else arrays[0]
     if is_data:
-        assert ak.all(events["diMuon_bsConstrainedMass"] < DATA_MAX_MASS)
-        assert ak.all(events["diMuon_bsConstrainedMass_FSR"] < DATA_MAX_MASS)
+        for mass in MASS_BRANCHES:
+            assert ak.all(events[mass] < DATA_MAX_MASS)
     return events
 
 
@@ -139,51 +123,26 @@ def weights(events) -> np.ndarray:
 def invariants(events, tol=1e-3) -> dict[str, int]:
     """Count violations of properties the FSR implementation must satisfy (0 everywhere is expected)."""
     out = {"n_events": len(events)}
-    n_photon = ak.to_numpy(ak.num(events["FsrPhoton_passSel"]))
     nfsr = np.zeros(len(events), dtype=int)
     for mu in ("mu1", "mu2"):
         has = ak.to_numpy(events[f"{mu}_hasFSR"]).astype(bool)
-        idx = ak.to_numpy(events[f"{mu}_fsrPhotonIdx_sel"]).astype(int)
         nfsr += has
-        same = (
-            np.isclose(np_(events, f"{mu}_bsConstrainedPt_FSR"), np_(events, f"{mu}_bsConstrainedPt"), atol=tol, rtol=1e-5)
-            & np.isclose(np_(events, f"{mu}_eta_FSR"), np_(events, f"{mu}_eta"), atol=tol)
-            & np.isclose(np_(events, f"{mu}_phi_FSR"), np_(events, f"{mu}_phi"), atol=tol)
+        pt, pt_bare = np_(events, f"{mu}_bsConstrainedPt"), np_(events, f"{mu}_bsConstrainedPt_noFSR")
+        photon_pt, photon_dr = np_(events, f"{mu}_fsrPhoton_pt"), np_(events, f"{mu}_fsrPhoton_dR")
+        out[f"{mu}: no FSR but dressed pT != bare pT"] = int(
+            np.sum(~has & ~np.isclose(pt, pt_bare, atol=tol, rtol=1e-5))
         )
-        out[f"{mu}: no FSR but FSR kinematics != nominal"] = int(np.sum(~has & ~same))
-        out[f"{mu}: hasFSR != (photon index >= 0)"] = int(np.sum(has != (idx >= 0)))
-        out[f"{mu}: photon index out of range"] = int(np.sum(has & (idx >= n_photon)))
-        safe = np.where(has & (idx < n_photon), idx, 0)
-        rows = ak.local_index(events["FsrPhoton_passSel"]) == safe
-        chosen_pass = ak.to_numpy(ak.any(events["FsrPhoton_passSel"] & rows, axis=1))
-        chosen_flag = ak.to_numpy(ak.any(events["FsrPhoton_isChosen"] & rows, axis=1))
-        chosen_noele = ak.to_numpy(ak.any((events["FsrPhoton_electronIdx"] < 0) & rows, axis=1))
-        out[f"{mu}: chosen photon fails passSel"] = int(np.sum(has & ~chosen_pass))
-        out[f"{mu}: chosen photon not flagged isChosen"] = int(np.sum(has & ~chosen_flag))
-        out[f"{mu}: chosen photon has an electron"] = int(np.sum(has & ~chosen_noele))
-        out[f"{mu}: photon/muon pT ratio >= 0.4"] = int(
-            np.sum(has & (np_(events, f"{mu}_fsrPhoton_pt") >= 0.4 * np_(events, f"{mu}_bsConstrainedPt")))
-        )
-        out[f"{mu}: FSR pT < nominal pT - photon pT"] = int(
-            np.sum(
-                has
-                & (
-                    np_(events, f"{mu}_bsConstrainedPt_FSR")
-                    < np_(events, f"{mu}_bsConstrainedPt") - np_(events, f"{mu}_fsrPhoton_pt") - tol
-                )
-            )
-        )
-    i1 = ak.to_numpy(events["mu1_fsrPhotonIdx_sel"])
-    i2 = ak.to_numpy(events["mu2_fsrPhotonIdx_sel"])
-    out["mu1 and mu2 share a photon"] = int(np.sum((i1 >= 0) & (i1 == i2)))
+        out[f"{mu}: hasFSR != (photon pT stored)"] = int(np.sum(has != (photon_pt > 0)))
+        out[f"{mu}: chosen photon dR >= 0.5"] = int(np.sum(has & (photon_dr >= 0.5)))
+        out[f"{mu}: photon/muon pT ratio >= 0.4"] = int(np.sum(has & (photon_pt >= 0.4 * pt_bare)))
+        out[f"{mu}: dressed pT < bare pT - photon pT"] = int(np.sum(has & (pt < pt_bare - photon_pt - tol)))
+    out["mu1 dressed pT < mu2 dressed pT"] = int(
+        np.sum(np_(events, "mu1_bsConstrainedPt") < np_(events, "mu2_bsConstrainedPt") - tol)
+    )
     out["nFSR != mu1_hasFSR + mu2_hasFSR"] = int(np.sum(ak.to_numpy(events["diMuon_nFSR"]) != nfsr))
-    n_chosen = ak.to_numpy(ak.sum(events["FsrPhoton_isChosen"], axis=1))
-    out["number of isChosen photons != nFSR"] = int(np.sum(n_chosen != nfsr))
-    m, m_fsr = np_(events, "diMuon_bsConstrainedMass"), np_(events, "diMuon_bsConstrainedMass_FSR")
-    delta = np_(events, "diMuon_bsConstrainedMass_FSR_delta")
-    out["mass_FSR < mass (photon cannot lower m)"] = int(np.sum(m_fsr < m - tol))
-    out["mass_FSR_delta != mass_FSR - mass"] = int(np.sum(~np.isclose(delta, m_fsr - m, atol=tol)))
-    out["nFSR == 0 but mass_FSR != mass"] = int(np.sum((nfsr == 0) & ~np.isclose(m_fsr, m, atol=tol)))
+    m_fsr, m = np_(events, "diMuon_bsConstrainedMass"), np_(events, "diMuon_bsConstrainedMass_noFSR")
+    out["mass < mass_noFSR (photon cannot lower m)"] = int(np.sum(m_fsr < m - tol))
+    out["nFSR == 0 but mass != mass_noFSR"] = int(np.sum((nfsr == 0) & ~np.isclose(m_fsr, m, atol=tol)))
     return out
 
 
@@ -300,64 +259,6 @@ def fit_dscb(h, err, edges, fit_range):
     chi2 = float(np.sum(((y - dscb(x, *popt)) / e) ** 2))
     return dict(mu=float(popt[1]), mu_err=float(perr[1]), sigma=float(popt[2]), sigma_err=float(perr[2]),
                 chi2ndf=chi2 / max(len(x) - len(popt), 1), params=popt)
-
-
-# --------------------------------------------------------------------------------------------------------- #
-# GenDressedLepton matching
-# --------------------------------------------------------------------------------------------------------- #
-def _delta_phi(a, b):
-    return (a - b + np.pi) % (2 * np.pi) - np.pi
-
-
-def match_dressed(events, max_dr=0.1, k_max=8):
-    """Greedy one-to-one matching of mu1/mu2 to GenDressedLepton muons (|pdgId| = 13, not from tau decays).
-
-    The pair with the smallest DeltaR is assigned first; the other muon takes its best remaining candidate.
-    The final tuples do not store the reco muon charge, so the match is in DeltaR only (opposite-sign dimuons
-    make wrong-charge matches within DeltaR < 0.1 negligible). Returns {mu: dict(pt, eta, phi, mass, dr)} with NaN
-    for unmatched muons."""
-    good = (abs(events["GenDressedLepton_pdgId"]) == 13) & ~events["GenDressedLepton_hasTauAnc"]
-    gen = {
-        v: ak.to_numpy(
-            ak.fill_none(ak.pad_none(events[f"GenDressedLepton_{v}"][good], k_max, clip=True), np.nan)
-        ).astype(float)
-        for v in ("pt", "eta", "phi", "mass")
-    }
-    dr = {}
-    for mu in ("mu1", "mu2"):
-        eta = np_(events, f"{mu}_eta")[:, None]
-        phi = np_(events, f"{mu}_phi")[:, None]
-        d = np.hypot(gen["eta"] - eta, _delta_phi(gen["phi"], phi))
-        dr[mu] = np.where(np.isfinite(d), d, np.inf)
-    rows = np.arange(len(events))
-    i1, i2 = np.argmin(dr["mu1"], axis=1), np.argmin(dr["mu2"], axis=1)
-    conflict = i1 == i2
-    mu1_first = dr["mu1"][rows, i1] <= dr["mu2"][rows, i2]
-    # resolve conflicts: the worse-matched muon takes its second-best candidate
-    d2 = dr["mu2"].copy()
-    d2[rows, i1] = np.inf
-    d1 = dr["mu1"].copy()
-    d1[rows, i2] = np.inf
-    i2 = np.where(conflict & mu1_first, np.argmin(d2, axis=1), i2)
-    i1 = np.where(conflict & ~mu1_first, np.argmin(d1, axis=1), i1)
-    out = {}
-    for mu, idx in (("mu1", i1), ("mu2", i2)):
-        dmin = dr[mu][rows, idx]
-        ok = dmin < max_dr
-        out[mu] = {v: np.where(ok, gen[v][rows, idx], np.nan) for v in gen}
-        out[mu]["dr"] = np.where(ok, dmin, np.nan)
-    return out
-
-
-def dressed_dimuon_mass(match):
-    p = {}
-    for mu in ("mu1", "mu2"):
-        pt, eta, phi, m = (match[mu][v] for v in ("pt", "eta", "phi", "mass"))
-        px, py, pz = pt * np.cos(phi), pt * np.sin(phi), pt * np.sinh(eta)
-        e = np.sqrt(px**2 + py**2 + pz**2 + m**2)
-        p[mu] = (e, px, py, pz)
-    e, px, py, pz = (p["mu1"][i] + p["mu2"][i] for i in range(4))
-    return np.sqrt(np.maximum(e**2 - px**2 - py**2 - pz**2, 0.0))
 
 
 # --------------------------------------------------------------------------------------------------------- #

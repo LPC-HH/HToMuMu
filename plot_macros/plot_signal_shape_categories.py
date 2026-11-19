@@ -24,9 +24,11 @@ from bdt_categories_io import get_bdt_cuts, load_bdt_categories, variant_dir_suf
 
 TREE_NAME = "tree_output"
 WEIGHT_BRANCH = "weight"
-MASS_BSC = "diMuon_bsConstrainedMass"
-MASS_FSR = "diMuon_bsConstrainedMass_FSR"
-# Category boundaries were optimised on the BSC mass (the only key plot_BDT_Categories.py writes for these variants).
+# FSR recovery is the baseline: the un-suffixed mass is BSC + FSR, the bare BSC mass is the _noFSR branch.
+MASS_BSC = "diMuon_bsConstrainedMass_noFSR"
+MASS_FSR = "diMuon_bsConstrainedMass"
+# Category boundaries are keyed on diMuon_bsConstrainedMass (the only key plot_BDT_Categories.py writes for these
+# variants); for tuples produced since FSR became the baseline that is the BSC + FSR mass.
 CUTS_MASS_KEY = "diMuon_bsConstrainedMass"
 BASE_DIR = Path("../root_io/tuples/BDT_score")
 OUTPUT_BASE = Path("../plots/signal_shape_categories")

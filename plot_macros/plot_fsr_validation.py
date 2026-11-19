@@ -3,8 +3,7 @@
   2. signal      : ggH/VBF dimuon mass resolution, nominal vs FSR, on identical events (truth: gen_mll, the
                    hard-process pre-FSR dimuon mass, ~ m_H)
   3. dy          : Z radiative tail and overcorrection on DY MC (truth: gen_mll, removes the Z lineshape)
-  4. dressed     : reco muons vs matched GenDressedLepton (dressing cone 0.1 vs reco FSR cone 0.5!)
-  5. photons     : chosen-photon properties; DY MC vs data in the Z control region (data blinded to m < 110 GeV
+  4. photons     : chosen-photon properties; DY MC vs data in the Z control region (data blinded to m < 110 GeV
                    for both the nominal and FSR mass, enforced in utils.fsr_validation.load)
 
 Usage (from any directory):
@@ -42,8 +41,9 @@ DY_TAIL = (60.0, 80.0)
 DY_PEAK = (86.0, 96.0)
 DATA_MC_RANGE = (60.0, fv.DATA_MAX_MASS)
 
-M_NOM = "diMuon_bsConstrainedMass"
-M_FSR = "diMuon_bsConstrainedMass_FSR"
+# FSR recovery is the baseline: the un-suffixed mass is FSR-recovered, the bare one is the _noFSR branch
+M_NOM = "diMuon_bsConstrainedMass_noFSR"
+M_FSR = "diMuon_bsConstrainedMass"
 
 
 def parse_args():
@@ -58,7 +58,6 @@ def parse_args():
     p.add_argument("--outdir", default=None, help="default: PLOT_DIR/<era>/ (plots/fsr_validation/<era>/)")
     p.add_argument("--max-events", type=int, default=None, help="per sample")
     p.add_argument("--n-bootstrap", type=int, default=100)
-    p.add_argument("--match-dr", type=float, default=0.1, help="reco-GenDressedLepton DeltaR")
     return p.parse_args()
 
 
@@ -183,7 +182,7 @@ def signal_study(name, ev, era, outdir, n_boot):
         pool = {k: [] for k in ("resp", "ratio", "gpt", "mupt", "w")}
         for mu in ("mu1", "mu2"):
             sel = (fv.np_(ev, f"{mu}_hasFSR") > 0) & np.isfinite(gen)
-            gpt, mupt = fv.np_(ev, f"{mu}_fsrPhoton_pt")[sel], fv.np_(ev, f"{mu}_bsConstrainedPt")[sel]
+            gpt, mupt = fv.np_(ev, f"{mu}_fsrPhoton_pt")[sel], fv.np_(ev, f"{mu}_bsConstrainedPt_noFSR")[sel]
             pool["resp"].append(m_fsr[sel] / gen[sel])
             pool["ratio"].append(gpt / mupt)
             pool["gpt"].append(gpt)
@@ -199,7 +198,7 @@ def signal_study(name, ev, era, outdir, n_boot):
             fv.hist2d(pool[key], pool["resp"], pool["w"], xbins, resp_bins, xlabel, resp_label, out,
                       f"fsr_mass_response_vs_{tag}", era, lines=[("y", 1.0)])
     # percentage of muons with an FSR photon, vs muon pT and eta (all muons, mu1 and mu2 pooled; nominal pT)
-    mu_pt = np.concatenate([fv.np_(ev, f"{mu}_bsConstrainedPt") for mu in ("mu1", "mu2")])
+    mu_pt = np.concatenate([fv.np_(ev, f"{mu}_bsConstrainedPt_noFSR") for mu in ("mu1", "mu2")])
     mu_eta = np.concatenate([fv.np_(ev, f"{mu}_eta") for mu in ("mu1", "mu2")])
     mu_has = np.concatenate([fv.np_(ev, f"{mu}_hasFSR") > 0 for mu in ("mu1", "mu2")])
     fv.fraction2d(
@@ -266,86 +265,11 @@ def dy_study(ev, era, outdir, n_boot):
 
 
 # --------------------------------------------------------------------------------------------------------- #
-# 4. GenDressedLepton comparison
-# --------------------------------------------------------------------------------------------------------- #
-def dressed_study(name, ev, era, outdir, match_dr):
-    out = os.path.join(outdir, "gen_dressed_comparison", name) + "/"
-    match = fv.match_dressed(ev, max_dr=match_dr)
-    w = fv.weights(ev)
-    both = np.isfinite(match["mu1"]["pt"]) & np.isfinite(match["mu2"]["pt"])
-    rows = [{"sample": name, "quantity": "matching efficiency (both muons)", "value": fv.wfraction(both, w)}]
-    # per-muon response, pooled over mu1 and mu2
-    pooled = {k: [] for k in ("nom", "fsr", "deta_nom", "deta_fsr", "dphi_nom", "dphi_fsr", "w", "dr", "has")}
-    for mu in ("mu1", "mu2"):
-        ok = np.isfinite(match[mu]["pt"])
-        g = {v: match[mu][v][ok] for v in ("pt", "eta", "phi")}
-        pooled["nom"].append(fv.np_(ev, f"{mu}_bsConstrainedPt")[ok] / g["pt"])
-        pooled["fsr"].append(fv.np_(ev, f"{mu}_bsConstrainedPt_FSR")[ok] / g["pt"])
-        pooled["deta_nom"].append(fv.np_(ev, f"{mu}_eta")[ok] - g["eta"])
-        pooled["deta_fsr"].append(fv.np_(ev, f"{mu}_eta_FSR")[ok] - g["eta"])
-        pooled["dphi_nom"].append(fv._delta_phi(fv.np_(ev, f"{mu}_phi")[ok], g["phi"]))
-        pooled["dphi_fsr"].append(fv._delta_phi(fv.np_(ev, f"{mu}_phi_FSR")[ok], g["phi"]))
-        pooled["w"].append(w[ok])
-        pooled["dr"].append(fv.np_(ev, f"{mu}_fsrPhoton_dR")[ok])
-        pooled["has"].append(fv.np_(ev, f"{mu}_hasFSR")[ok] > 0)
-    p = {k: np.concatenate(v) for k, v in pooled.items()}
-    subsets = {
-        "all": np.ones(len(p["w"]), bool),
-        "withFSR": p["has"],
-        f"withFSR_dR<{fv.DRESSING_CONE}": p["has"] & (p["dr"] < fv.DRESSING_CONE),
-        f"withFSR_dR>={fv.DRESSING_CONE}": p["has"] & (p["dr"] >= fv.DRESSING_CONE),
-    }
-    for split, s in subsets.items():
-        if not np.any(s):
-            continue
-        tag = split.replace("<", "lt").replace(">=", "ge")
-        fv.overlay(
-            [(p["nom"][s], p["w"][s], fv.NOMINAL_STYLE, False), (p["fsr"][s], p["w"][s], fv.FSR_STYLE, False)],
-            np.linspace(0.85, 1.15, 61), r"$p_T^{reco} / p_T^{gen\ dressed}$", out, f"pt_response_{tag}", era,
-            title=f"{name}, matched muons, {split}", ratio_label="FSR / nom.", logy=True, vlines=(1.0,),
-        )
-        for var, lab, rng in (("deta", r"$\eta^{reco}-\eta^{gen\ dressed}$", 0.004),
-                              ("dphi", r"$\phi^{reco}-\phi^{gen\ dressed}$", 0.004)):
-            fv.overlay(
-                [(p[f"{var}_nom"][s], p["w"][s], fv.NOMINAL_STYLE, False),
-                 (p[f"{var}_fsr"][s], p["w"][s], fv.FSR_STYLE, False)],
-                np.linspace(-rng, rng, 41), lab, out, f"{var}_{tag}", era, title=f"{name}, {split}",
-                ratio_label="FSR / nom.",
-            )
-        for tagv, key in (("nominal", "nom"), ("fsr", "fsr")):
-            rows.append({"sample": name, "quantity": f"pT response median [{split}] {tagv}",
-                         "value": fv.wmedian(p[key][s], p["w"][s])})
-            rows.append({"sample": name, "quantity": f"pT response sigma_eff [{split}] {tagv}",
-                         "value": fv.sigma_eff(p[key][s], p["w"][s])})
-    # dimuon mass vs the dressed dimuon mass
-    m_dressed = fv.dressed_dimuon_mass(match)
-    for split, mask in splits(ev).items():
-        s = mask & both & (m_dressed > 0)
-        if not np.any(s):
-            continue
-        r_nom, r_fsr = fv.np_(ev, M_NOM)[s] / m_dressed[s], fv.np_(ev, M_FSR)[s] / m_dressed[s]
-        fv.overlay(
-            [(r_nom, w[s], fv.NOMINAL_STYLE, False), (r_fsr, w[s], fv.FSR_STYLE, False)],
-            np.linspace(0.92, 1.08, 65), r"$m_{\mu\mu}^{reco} / m_{\mu\mu}^{gen\ dressed}$", out,
-            f"mass_over_dressed_{split}", era, title=f"{name}, {split}", ratio_label="FSR / nom.", logy=True,
-        )
-        for tagv, r in (("nominal", r_nom), ("fsr", r_fsr)):
-            rows.append({"sample": name, "quantity": f"m/m_dressed median [{split}] {tagv}",
-                         "value": fv.wmedian(r, w[s])})
-            rows.append({"sample": name, "quantity": f"m/m_dressed sigma_eff [{split}] {tagv}",
-                         "value": fv.sigma_eff(r, w[s])})
-    return rows
-
-
-# --------------------------------------------------------------------------------------------------------- #
-# 5. Chosen-photon diagnostics, and DY MC vs data in the Z control region
+# 4. Chosen-photon diagnostics, and DY MC vs data in the Z control region
 # --------------------------------------------------------------------------------------------------------- #
 PHOTON_VARS = [
     ("fsrPhoton_pt", r"$p_T^\gamma$ [GeV]", np.linspace(0, 40, 41), True),
-    ("fsrPhoton_eta", r"$\eta^\gamma$", np.linspace(-2.5, 2.5, 26), False),
     ("fsrPhoton_dR", r"$\Delta R(\mu,\gamma)$", np.linspace(0, 0.5, 26), False),
-    ("fsrPhoton_relIso03", r"photon relIso03", np.linspace(0, 1.8, 37), False),
-    ("fsrPhoton_dROverEt2", r"$\Delta R / p_{T,\gamma}^2$ [GeV$^{-2}$]", np.linspace(0, 0.012, 25), False),
     ("pt_ratio", r"$p_T^\gamma / p_T^\mu$", np.linspace(0, 0.4, 41), False),
 ]
 
@@ -357,7 +281,7 @@ def photon_values(ev, var):
     for mu in ("mu1", "mu2"):
         has = fv.np_(ev, f"{mu}_hasFSR") > 0
         if var == "pt_ratio":
-            v = fv.np_(ev, f"{mu}_fsrPhoton_pt") / fv.np_(ev, f"{mu}_bsConstrainedPt")
+            v = fv.np_(ev, f"{mu}_fsrPhoton_pt") / fv.np_(ev, f"{mu}_bsConstrainedPt_noFSR")
         else:
             v = fv.np_(ev, f"{mu}_{var}")
         vals.append(v[has])
@@ -393,15 +317,8 @@ def photon_study(samples, era, outdir):
     for n, ev in mc:  # 2D with the analysis cut boundaries
         v_pt, w = photon_values(ev, "fsrPhoton_pt")
         v_dr, _ = photon_values(ev, "fsrPhoton_dR")
-        v_iso, _ = photon_values(ev, "fsrPhoton_relIso03")
-        v_det, _ = photon_values(ev, "fsrPhoton_dROverEt2")
         fv.hist2d(v_dr, v_pt, w, np.linspace(0, 0.5, 26), np.linspace(2, 30, 29), r"$\Delta R(\mu,\gamma)$",
                   r"$p_T^\gamma$ [GeV]", out, f"photon_pt_vs_dR_{n}", era)
-        fv.hist2d(v_dr, v_iso, w, np.linspace(0, 0.5, 26), np.linspace(0, 2.0, 41), r"$\Delta R(\mu,\gamma)$",
-                  "photon relIso03", out, f"photon_iso_vs_dR_{n}", era, lines=[("y", 1.8)])
-        fv.hist2d(v_pt, v_det, w, np.linspace(2, 30, 29), np.linspace(0, 0.05, 51), r"$p_T^\gamma$ [GeV]",
-                  r"$\Delta R / p_{T,\gamma}^2$ [GeV$^{-2}$]", out, f"photon_dROverEt2_vs_pt_{n}", era,
-                  lines=[("y", 0.012)])
 
 
 def data_mc_study(dy, data, era, outdir):
@@ -419,10 +336,6 @@ def data_mc_study(dy, data, era, outdir):
         fv.overlay([(vm, wm, mc_style, False), (vd, np.ones(len(vd)), data_style, True)], edges, label, out,
                    f"photon_{var}", era, title="Z CR, chosen photons", is_data=True, ratio_label="Data / MC",
                    logy=logy)
-    fv.overlay([(fv.np_(dy, "nFsrPhoton"), fv.weights(dy), mc_style, False),
-                (fv.np_(data, "nFsrPhoton"), wd, data_style, True)], np.arange(-0.5, 6.5, 1),
-               "NanoAOD FsrPhoton candidates / event", out, "nFsrPhoton", era, title="Z CR", is_data=True,
-               ratio_label="Data / MC", logy=True)
     fv.overlay([(fv.np_(dy, "diMuon_nFSR"), fv.weights(dy), mc_style, False),
                 (fv.np_(data, "diMuon_nFSR"), wd, data_style, True)], np.arange(-0.5, 3.5, 1),
                "accepted FSR photons / event", out, "nFSR", era, title="Z CR", is_data=True,
@@ -497,15 +410,13 @@ def main():
         bad = {k: v for k, v in counts.items() if k != "n_events" and v}
         print(f"{name:5s} n={counts['n_events']}: " + ("OK" if not bad else json.dumps(bad)))
 
-    resolution, dy_rows, dressed, fractions = [], [], [], []
+    resolution, dy_rows, fractions = [], [], []
     for name in ("ggH", "VBF"):
         if name in samples:
             resolution += signal_study(name, samples[name], args.era, outdir, args.n_bootstrap)
-            dressed += dressed_study(name, samples[name], args.era, outdir, args.match_dr)
             fractions += fsr_fractions(name, samples[name])
     if "DY" in samples:
         dy_rows = dy_study(samples["DY"], args.era, outdir, args.n_bootstrap)
-        dressed += dressed_study("DY", samples["DY"], args.era, outdir, args.match_dr)
         fractions += fsr_fractions("DY", samples["DY"])
     photon_study(samples, args.era, outdir)
     data_mc = []
@@ -516,7 +427,6 @@ def main():
     os.makedirs(summary_dir, exist_ok=True)
     write_table(resolution, os.path.join(summary_dir, "signal_resolution"))
     write_table(dy_rows, os.path.join(summary_dir, "dy_z_tail"))
-    write_table(dressed, os.path.join(summary_dir, "gen_dressed"))
     write_table(fractions + data_mc, os.path.join(summary_dir, "fsr_fractions_and_data_mc"))
 
     print("\n=== Signal resolution (sigma_eff, GeV) ===")
