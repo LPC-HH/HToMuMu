@@ -339,7 +339,6 @@ public :
    // UChar_t         LHE_Nglu;
    UChar_t         LHE_NpNLO;
    bool            has_LHE_info = false; /**< set in InitSimulationVariables */
-   bool            has_GenDressedLepton = false; /**< set in InitSimulationVariables */
    // UChar_t         LHE_NpLO;
    // Float_t         LHE_HT;
    // Float_t         LHE_HTIncoming;
@@ -533,13 +532,6 @@ public :
    // Float_t         Rho_fixedGridRhoFastjetCentralCalo;
    // Float_t         Rho_fixedGridRhoFastjetCentralChargedPileUp;
    // Float_t         Rho_fixedGridRhoFastjetCentralNeutral;
-   Int_t           nGenDressedLepton = 0;
-   Bool_t          GenDressedLepton_hasTauAnc[16];   //[nGenDressedLepton]
-   Int_t           GenDressedLepton_pdgId[16];   //[nGenDressedLepton]
-   Float_t         GenDressedLepton_eta[16];   //[nGenDressedLepton]
-   Float_t         GenDressedLepton_mass[16];   //[nGenDressedLepton]
-   Float_t         GenDressedLepton_phi[16];   //[nGenDressedLepton]
-   Float_t         GenDressedLepton_pt[16];   //[nGenDressedLepton]
    // Int_t           nGenIsolatedPhoton;
    // Float_t         GenIsolatedPhoton_eta[2];   //[nGenIsolatedPhoton]
    // Float_t         GenIsolatedPhoton_mass[2];   //[nGenIsolatedPhoton]
@@ -2381,13 +2373,6 @@ public :
    // TBranch        *b_Rho_fixedGridRhoFastjetCentralCalo;   //!
    // TBranch        *b_Rho_fixedGridRhoFastjetCentralChargedPileUp;   //!
    // TBranch        *b_Rho_fixedGridRhoFastjetCentralNeutral;   //!
-   TBranch        *b_nGenDressedLepton;   //!
-   TBranch        *b_GenDressedLepton_hasTauAnc;   //!
-   TBranch        *b_GenDressedLepton_pdgId;   //!
-   TBranch        *b_GenDressedLepton_eta;   //!
-   TBranch        *b_GenDressedLepton_mass;   //!
-   TBranch        *b_GenDressedLepton_phi;   //!
-   TBranch        *b_GenDressedLepton_pt;   //!
    // TBranch        *b_nGenIsolatedPhoton;   //!
    // TBranch        *b_GenIsolatedPhoton_eta;   //!
    // TBranch        *b_GenIsolatedPhoton_mass;   //!
@@ -7199,24 +7184,6 @@ void MainEvent::InitSimulationVariables(TTree *tree){
    // fChain->SetBranchAddress("Pileup_pudensity", &Pileup_pudensity, &b_Pileup_pudensity);
    // fChain->SetBranchStatus("Pileup_gpudensity", 1);
    // fChain->SetBranchAddress("Pileup_gpudensity", &Pileup_gpudensity, &b_Pileup_gpudensity);
-   // GenDressedLepton (gen leptons dressed with FSR photons), for FSR recovery studies. Guarded in case a sample lacks it
-   has_GenDressedLepton = fChain->GetBranch("nGenDressedLepton") != nullptr;
-   if (has_GenDressedLepton) {
-      fChain->SetBranchStatus("nGenDressedLepton", 1);
-      fChain->SetBranchAddress("nGenDressedLepton", &nGenDressedLepton, &b_nGenDressedLepton);
-      fChain->SetBranchStatus("GenDressedLepton_hasTauAnc", 1);
-      fChain->SetBranchAddress("GenDressedLepton_hasTauAnc", GenDressedLepton_hasTauAnc, &b_GenDressedLepton_hasTauAnc);
-      fChain->SetBranchStatus("GenDressedLepton_pdgId", 1);
-      fChain->SetBranchAddress("GenDressedLepton_pdgId", GenDressedLepton_pdgId, &b_GenDressedLepton_pdgId);
-      fChain->SetBranchStatus("GenDressedLepton_eta", 1);
-      fChain->SetBranchAddress("GenDressedLepton_eta", GenDressedLepton_eta, &b_GenDressedLepton_eta);
-      fChain->SetBranchStatus("GenDressedLepton_mass", 1);
-      fChain->SetBranchAddress("GenDressedLepton_mass", GenDressedLepton_mass, &b_GenDressedLepton_mass);
-      fChain->SetBranchStatus("GenDressedLepton_phi", 1);
-      fChain->SetBranchAddress("GenDressedLepton_phi", GenDressedLepton_phi, &b_GenDressedLepton_phi);
-      fChain->SetBranchStatus("GenDressedLepton_pt", 1);
-      fChain->SetBranchAddress("GenDressedLepton_pt", GenDressedLepton_pt, &b_GenDressedLepton_pt);
-   }
    // fChain->SetBranchStatus("nGenIsolatedPhoton", 1);
    // fChain->SetBranchAddress("nGenIsolatedPhoton", &nGenIsolatedPhoton, &b_nGenIsolatedPhoton);
    // fChain->SetBranchStatus("GenIsolatedPhoton_eta", 1);

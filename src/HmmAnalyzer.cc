@@ -401,6 +401,32 @@ void HmmAnalyzer::EventLoop() {
         bool two_valid_muons = false;
         bool trig_match = false;
 
+        // FSR RECO
+        const int n_fsr = std::max(0, std::min<int>(nFsrPhoton, sizeof(FsrPhoton_pt) / sizeof(FsrPhoton_pt[0])));
+        std::vector<float> fsr_dR(n_fsr, FLOAT_NULL_VALUE);  // DeltaR(photon, its NanoAOD muon)
+        auto pickFsr = [&](int nano_mu_idx, float mu_pt) {
+            int best = -1;
+            for (int j = 0; j < n_fsr; j++) {
+                if (FsrPhoton_muonIdx[j] != nano_mu_idx || FsrPhoton_electronIdx[j] >= 0)
+                    continue;
+                const float dR = DeltaR(Muon_eta[nano_mu_idx], Muon_phi[nano_mu_idx],
+                                        FsrPhoton_eta[j], FsrPhoton_phi[j]);
+                fsr_dR[j] = dR;
+                const bool pass = FsrPhoton_pt[j] > FSR_PHOTON_PT_MIN &&
+                                  fabs(FsrPhoton_eta[j]) < FSR_PHOTON_ABSETA_MAX &&
+                                  dR < FSR_DR_MAX &&
+                                  FsrPhoton_relIso03[j] < FSR_RELISO03_MAX &&
+                                  FsrPhoton_dROverEt2[j] < FSR_DROVERET2_MAX &&
+                                  mu_pt > 0 && FsrPhoton_pt[j] / mu_pt < FSR_PT_RATIO_MAX;
+                if (pass && (best < 0 || FsrPhoton_dROverEt2[j] < FsrPhoton_dROverEt2[best]))
+                    best = j;
+            }
+            return best;
+        };
+        std::vector<int> mu_fsr_idx(nMuon, -1);
+        std::vector<ROOT::Math::PtEtaPhiMVector> mu_p4_fsr(nMuon);  // dressed (muon + photon) four-vector
+        std::vector<float> mu_pt_fsr(nMuon, FLOAT_NULL_VALUE);
+
         for (int i = 0; i < nMuon; i++) {
             const float pt_raw = Muon_bsConstrainedPt[i];
 
@@ -441,8 +467,18 @@ void HmmAnalyzer::EventLoop() {
             mu_pt_corr[i] = pt_corr;
             mu_ptErr_corr[i] = ptErr_corr;
 
+            // FSR dressing
+            mu_fsr_idx[i] = pickFsr(i, pt_corr);
+            mu_p4_fsr[i] = ROOT::Math::PtEtaPhiMVector(pt_corr, Muon_eta[i], Muon_phi[i], MUON_MASS);
+            if (mu_fsr_idx[i] >= 0) {
+                const int j = mu_fsr_idx[i];
+                const ROOT::Math::PtEtaPhiMVector photon(FsrPhoton_pt[j], FsrPhoton_eta[j], FsrPhoton_phi[j], 0.0);
+                mu_p4_fsr[i] = ROOT::Math::PtEtaPhiMVector(mu_p4_fsr[i] + photon);
+            }
+            mu_pt_fsr[i] = mu_p4_fsr[i].Pt();
+
             if (!ifSync){
-                if(pt_corr > 10 &&
+                if(mu_pt_fsr[i] > 10 &&
                 fabs(Muon_eta[i]) < 2.4 &&
                 Muon_isGlobal[i] &&
                 Muon_pfRelIso04_all[i] < 0.25 &&
@@ -461,12 +497,13 @@ void HmmAnalyzer::EventLoop() {
             continue;
         }
 
+        // Pair selection, ranking and mu1/mu2 ordering use the FSR-dressed pT
         float best_pair_pt_sum = -1.0;
-
+        // TODO par and iso calculation with/without FSR
         for (int muon_index_1 = 0; muon_index_1 < nMuon; muon_index_1++) {
 
             if (!(Muon_isGlobal[muon_index_1] &&
-                  mu_pt_corr[muon_index_1] > muon_pt_cut.at(yearst) &&
+                  mu_pt_fsr[muon_index_1] > muon_pt_cut.at(yearst) &&
                   Muon_mediumId[muon_index_1] &&
                   fabs(Muon_eta[muon_index_1]) < 2.4 &&
                   Muon_pfRelIso04_all[muon_index_1] < 0.25))
@@ -478,20 +515,20 @@ void HmmAnalyzer::EventLoop() {
 
                 if (!(Muon_isGlobal[muon_index_2] &&
                       Muon_charge[muon_index_1] * Muon_charge[muon_index_2] == -1 &&
-                      mu_pt_corr[muon_index_2] > 20. &&
+                      mu_pt_fsr[muon_index_2] > 20. &&
                       Muon_mediumId[muon_index_2] &&
                       fabs(Muon_eta[muon_index_2]) < 2.4 &&
                       Muon_pfRelIso04_all[muon_index_2] < 0.25))
                     continue;
 
                 float pair_pt_sum =
-                    mu_pt_corr[muon_index_1] + mu_pt_corr[muon_index_2];
+                    mu_pt_fsr[muon_index_1] + mu_pt_fsr[muon_index_2];
 
                 if (pair_pt_sum > best_pair_pt_sum) { //is this how we want to sort muons?
                     best_pair_pt_sum = pair_pt_sum;
 
                     // Store the higher-pT muon as mu1
-                    if (mu_pt_corr[muon_index_1] >= mu_pt_corr[muon_index_2]) {
+                    if (mu_pt_fsr[muon_index_1] >= mu_pt_fsr[muon_index_2]) {
                         index_mu1 = muon_index_1;
                         index_mu2 = muon_index_2;
                     } else {
@@ -565,6 +602,7 @@ void HmmAnalyzer::EventLoop() {
 
         h_nNoExtraElectron->Fill(0.5);
     
+        // Trigger matching uses the bare corrected muon pT (the trigger fires on the muon track)
         bool trig_match_mu1 = false;
         bool trig_match_mu2 = false;
         for (int trigger_index = 0; trigger_index < nTrigObj; trigger_index++) {
@@ -646,7 +684,8 @@ void HmmAnalyzer::EventLoop() {
             t_Mu_charge->push_back(Muon_charge[i]);
             t_Mu_pt->push_back(Muon_pt[i]);
             t_Mu_ptErr->push_back(Muon_ptErr[i]);
-            t_Mu_bsConstrainedPt->push_back(mu_pt_corr[i]);
+            t_Mu_bsConstrainedPt->push_back(mu_pt_fsr[i]);
+            t_Mu_bsConstrainedPt_noFSR->push_back(mu_pt_corr[i]);
             t_Mu_bsConstrainedPtErr->push_back(mu_ptErr_corr[i]);
             t_Mu_bsConstrainedPt_nanoAOD->push_back(Muon_bsConstrainedPt[i]);
             t_Mu_bsConstrainedPtErr_nanoAOD->push_back(Muon_bsConstrainedPtErr[i]);
@@ -658,7 +697,6 @@ void HmmAnalyzer::EventLoop() {
             t_Mu_dz->push_back(Muon_dz[i]);
             t_Mu_dzErr->push_back(Muon_dzErr[i]);
             t_Mu_sip3d->push_back(Muon_sip3d[i]);
-            t_Mu_fsrPhotonIdx->push_back(Muon_fsrPhotonIdx[i]);
             t_Mu_pfRelIso03_all->push_back(Muon_pfRelIso03_all[i]);
             t_Mu_pfRelIso03_chg->push_back(Muon_pfRelIso03_chg[i]);
             t_Mu_pfRelIso04_all->push_back(Muon_pfRelIso04_all[i]);
@@ -680,7 +718,7 @@ void HmmAnalyzer::EventLoop() {
                 continue;
             }
 
-            
+            // Muon POG efficiencies/SFs are measured vs the bare muon pT
             t_Mu_EffTRIG_DATA->push_back(corrector.give_eff(
                 "Muon_eff_DATAeff_TRIG",
                 mu_pt_corr[i], Muon_eta[i]));
@@ -755,78 +793,51 @@ void HmmAnalyzer::EventLoop() {
         // mu2.SetPtEtaPhiM((mu_pt_corr)[index_mu2], (Muon_eta)[index_mu2],
         //(Muon_phi)[index_mu2], MUON_MASS);
         dimu = mu1 + mu2;
-        dimuBSC = mu1BSC + mu2BSC;
+        dimuBSC = mu1BSC + mu2BSC;  // bare (no FSR recovery)
         dimuBSC_nanoAOD = mu1BSC_nanoAOD + mu2BSC_nanoAOD;
         t_diMuon_pt = dimu.Pt();
-        t_diMuon_eta = dimuBSC.Eta();
-        t_diMuon_phi = dimuBSC.Phi();
         t_diMuon_mass = dimu.M();
 
-        t_diMuon_bsConstrainedPt = dimuBSC.Pt();
-        t_diMuon_bsConstrainedMass = dimuBSC.M();
+        t_diMuon_bsConstrainedPt_noFSR = dimuBSC.Pt();
+        t_diMuon_bsConstrainedMass_noFSR = dimuBSC.M();
 
         t_diMuon_bsConstrainedPt_nanoAOD = dimuBSC_nanoAOD.Pt();
         t_diMuon_bsConstrainedMass_nanoAOD = dimuBSC_nanoAOD.M();
 
-        // ---------------- FSR recovery for mu1 and mu2 (stored only, nominal selection unchanged) ----------------
-        const int n_fsr = std::max(0, std::min<int>(nFsrPhoton, sizeof(FsrPhoton_pt) / sizeof(FsrPhoton_pt[0])));
-        t_nFsrPhoton = n_fsr;
-        std::vector<float> fsr_dR(n_fsr, FLOAT_NULL_VALUE);
-        std::vector<bool> fsr_pass(n_fsr, false);
-        auto pickFsr = [&](int nano_mu_idx, float mu_pt, int veto_photon_idx) {
-            int best = -1;
-            for (int j = 0; j < n_fsr; j++) {
-                if (FsrPhoton_muonIdx[j] != nano_mu_idx || FsrPhoton_electronIdx[j] >= 0 || j == veto_photon_idx)
-                    continue;
-                const float dR = DeltaR(Muon_eta[nano_mu_idx], Muon_phi[nano_mu_idx],
-                                        FsrPhoton_eta[j], FsrPhoton_phi[j]);
-                fsr_dR[j] = dR;
-                const bool pass = FsrPhoton_pt[j] > FSR_PHOTON_PT_MIN &&
-                                  fabs(FsrPhoton_eta[j]) < FSR_PHOTON_ABSETA_MAX &&
-                                  dR < FSR_DR_MAX &&
-                                  FsrPhoton_relIso03[j] < FSR_RELISO03_MAX &&
-                                  FsrPhoton_dROverEt2[j] < FSR_DROVERET2_MAX &&
-                                  mu_pt > 0 && FsrPhoton_pt[j] / mu_pt < FSR_PT_RATIO_MAX;
-                fsr_pass[j] = pass;
-                if (pass && (best < 0 || FsrPhoton_dROverEt2[j] < FsrPhoton_dROverEt2[best]))
-                    best = j;
-            }
-            return best;
-        };
-        t_mu1_fsrPhotonIdx_sel = pickFsr(index_mu1, mu_pt_corr[index_mu1], -1);
-        t_mu2_fsrPhotonIdx_sel = pickFsr(index_mu2, mu_pt_corr[index_mu2], t_mu1_fsrPhotonIdx_sel);
-        t_mu1_fsrPhotonIdx_nanoAOD = Muon_fsrPhotonIdx[index_mu1];
-        t_mu2_fsrPhotonIdx_nanoAOD = Muon_fsrPhotonIdx[index_mu2];
-        t_mu1_hasFSR = t_mu1_fsrPhotonIdx_sel >= 0;
-        t_mu2_hasFSR = t_mu2_fsrPhotonIdx_sel >= 0;
-        t_diMuon_nFSR = int(t_mu1_hasFSR) + int(t_mu2_hasFSR);
-
-        // Massless photon added as a full four-vector to the nominal (beamspot-constrained, corrected) muon
-        auto addFsr = [&](const ROOT::Math::PtEtaPhiMVector &mu, int photon_idx) {
-            if (photon_idx < 0)
-                return mu;
-            ROOT::Math::PtEtaPhiMVector photon(FsrPhoton_pt[photon_idx], FsrPhoton_eta[photon_idx],
-                                               FsrPhoton_phi[photon_idx], 0.0);
-            return ROOT::Math::PtEtaPhiMVector(mu + photon);
-        };
-        const ROOT::Math::PtEtaPhiMVector mu1BSC_FSR = addFsr(mu1BSC, t_mu1_fsrPhotonIdx_sel);
-        const ROOT::Math::PtEtaPhiMVector mu2BSC_FSR = addFsr(mu2BSC, t_mu2_fsrPhotonIdx_sel);
+        // Baseline dimuon: FSR-dressed (beamspot-constrained, corrected) muons
+        const ROOT::Math::PtEtaPhiMVector &mu1BSC_FSR = mu_p4_fsr[index_mu1];
+        const ROOT::Math::PtEtaPhiMVector &mu2BSC_FSR = mu_p4_fsr[index_mu2];
         const ROOT::Math::PtEtaPhiMVector dimuBSC_FSR = mu1BSC_FSR + mu2BSC_FSR;
-        t_mu1_bsConstrainedPt_FSR = mu1BSC_FSR.Pt();
-        t_mu1_bsConstrainedEta_FSR = mu1BSC_FSR.Eta();
-        t_mu1_bsConstrainedPhi_FSR = mu1BSC_FSR.Phi();
-        t_mu2_bsConstrainedPt_FSR = mu2BSC_FSR.Pt();
-        t_mu2_bsConstrainedEta_FSR = mu2BSC_FSR.Eta();
-        t_mu2_bsConstrainedPhi_FSR = mu2BSC_FSR.Phi();
-        t_mu1_bsConstrainedMass_FSR = mu1BSC_FSR.M();
-        t_mu2_bsConstrainedMass_FSR = mu2BSC_FSR.M();
-        t_diMuon_bsConstrainedPt_FSR = dimuBSC_FSR.Pt();
-        t_diMuon_bsConstrainedMass_FSR = dimuBSC_FSR.M();
-        t_diMuon_eta_FSR = dimuBSC_FSR.Eta();
-        t_diMuon_phi_FSR = dimuBSC_FSR.Phi();
+        t_diMuon_bsConstrainedPt = dimuBSC_FSR.Pt();
+        t_diMuon_bsConstrainedMass = dimuBSC_FSR.M();
+        t_diMuon_eta = dimuBSC_FSR.Eta();
+        t_diMuon_phi = dimuBSC_FSR.Phi();
+
+        t_mu1_bsConstrainedPt = mu1BSC_FSR.Pt();
+        t_mu1_bsConstrainedEta = mu1BSC_FSR.Eta();
+        t_mu1_bsConstrainedPhi = mu1BSC_FSR.Phi();
+        t_mu1_bsConstrainedMass = mu1BSC_FSR.M();
+        t_mu2_bsConstrainedPt = mu2BSC_FSR.Pt();
+        t_mu2_bsConstrainedEta = mu2BSC_FSR.Eta();
+        t_mu2_bsConstrainedPhi = mu2BSC_FSR.Phi();
+        t_mu2_bsConstrainedMass = mu2BSC_FSR.M();
+
+        const int mu1_fsr_idx = mu_fsr_idx[index_mu1];
+        const int mu2_fsr_idx = mu_fsr_idx[index_mu2];
+        t_mu1_hasFSR = mu1_fsr_idx >= 0;
+        t_mu2_hasFSR = mu2_fsr_idx >= 0;
+        t_diMuon_nFSR = int(t_mu1_hasFSR) + int(t_mu2_hasFSR);
+        if (t_mu1_hasFSR) {
+            t_mu1_fsrPhoton_pt = FsrPhoton_pt[mu1_fsr_idx];
+            t_mu1_fsrPhoton_dR = fsr_dR[mu1_fsr_idx];
+        }
+        if (t_mu2_hasFSR) {
+            t_mu2_fsrPhoton_pt = FsrPhoton_pt[mu2_fsr_idx];
+            t_mu2_fsrPhoton_dR = fsr_dR[mu2_fsr_idx];
+        }
 
         // pfRelIso04_all with the chosen FSR photon removed if it is inside the isolation cone. Approximate:
-        // [TODO] Stored only not used yet
+        // [TODO] Stored only, not used in the selection yet (isolation is still on the bare pfRelIso04_all)
         auto isoFsr = [&](int nano_mu_idx, int photon_idx) {
             const float iso = Muon_pfRelIso04_all[nano_mu_idx];
             if (photon_idx < 0 || Muon_pt[nano_mu_idx] <= 0)
@@ -836,25 +847,11 @@ void HmmAnalyzer::EventLoop() {
                 return iso;
             return std::max(0.f, iso - FsrPhoton_pt[photon_idx] / Muon_pt[nano_mu_idx]);
         };
-        t_mu1_pfRelIso04_all_FSR = isoFsr(index_mu1, t_mu1_fsrPhotonIdx_sel);
-        t_mu2_pfRelIso04_all_FSR = isoFsr(index_mu2, t_mu2_fsrPhotonIdx_sel);
-
-        // Full NanoAOD FsrPhoton collection, with the analysis-level flags
-        for (int j = 0; j < n_fsr; j++) {
-            t_FsrPhoton_pt->push_back(FsrPhoton_pt[j]);
-            t_FsrPhoton_eta->push_back(FsrPhoton_eta[j]);
-            t_FsrPhoton_phi->push_back(FsrPhoton_phi[j]);
-            t_FsrPhoton_relIso03->push_back(FsrPhoton_relIso03[j]);
-            t_FsrPhoton_dROverEt2->push_back(FsrPhoton_dROverEt2[j]);
-            t_FsrPhoton_muonIdx->push_back(FsrPhoton_muonIdx[j]);
-            t_FsrPhoton_electronIdx->push_back(FsrPhoton_electronIdx[j]);
-            t_FsrPhoton_dR->push_back(fsr_dR[j]);
-            t_FsrPhoton_passSel->push_back(fsr_pass[j]);
-            t_FsrPhoton_isChosen->push_back(j == t_mu1_fsrPhotonIdx_sel || j == t_mu2_fsrPhotonIdx_sel);
-        }
-        // ---------------------------------------------------------------------------------------------------------
+        t_mu1_pfRelIso04_all_FSR = isoFsr(index_mu1, mu1_fsr_idx);
+        t_mu2_pfRelIso04_all_FSR = isoFsr(index_mu2, mu2_fsr_idx);
 
         //std::cout << "looking at diMuon mass" << std::endl;
+        // Mass window on the FSR-dressed dimuon mass (sync mode keeps the NanoAOD mass)
         if(!ifSync){
             if ((include_Z && include_H) || (!include_Z && !include_H)){
                 if (t_diMuon_bsConstrainedMass < 50 || t_diMuon_bsConstrainedMass > 180){
@@ -1151,12 +1148,17 @@ void HmmAnalyzer::EventLoop() {
             //
             
             
-            //[TODO] do jet cleaning with FSR kinematics instead
+            // Jet cleaning (Run 2 strategy): remove jets within dR < 0.4 of either selected muon
+            // or of either muon's chosen FSR photon
             double dR1 = DeltaR(Muon_eta[index_mu1], Muon_phi[index_mu1],
                                 Jet_eta[j], Jet_phi[j]);
             double dR2 = DeltaR(Muon_eta[index_mu2], Muon_phi[index_mu2],
                                 Jet_eta[j], Jet_phi[j]);
-            if (dR1 < 0.4 || dR2 < 0.4) {
+            const double dR_fsr1 = mu1_fsr_idx >= 0 ? DeltaR(FsrPhoton_eta[mu1_fsr_idx], FsrPhoton_phi[mu1_fsr_idx],
+                                                             Jet_eta[j], Jet_phi[j]) : 999.;
+            const double dR_fsr2 = mu2_fsr_idx >= 0 ? DeltaR(FsrPhoton_eta[mu2_fsr_idx], FsrPhoton_phi[mu2_fsr_idx],
+                                                             Jet_eta[j], Jet_phi[j]) : 999.;
+            if (dR1 < 0.4 || dR2 < 0.4 || dR_fsr1 < 0.4 || dR_fsr2 < 0.4) {
                 //std::cout << "Jet " << j << " not well seperated" << std::endl;
                 continue;
             }
@@ -1484,17 +1486,6 @@ void HmmAnalyzer::EventLoop() {
                     t_GenPart_pdgId->push_back(GenPart_pdgId[i]);
                     t_GenPart_status->push_back(GenPart_status[i]);
                     t_GenPart_statusFlags->push_back(GenPart_statusFlags[i]);
-                }
-            }
-            if (has_GenDressedLepton) {
-                t_nGenDressedLepton = nGenDressedLepton;
-                for (int i = 0; i < nGenDressedLepton; i++) {
-                    t_GenDressedLepton_pt->push_back(GenDressedLepton_pt[i]);
-                    t_GenDressedLepton_eta->push_back(GenDressedLepton_eta[i]);
-                    t_GenDressedLepton_phi->push_back(GenDressedLepton_phi[i]);
-                    t_GenDressedLepton_mass->push_back(GenDressedLepton_mass[i]);
-                    t_GenDressedLepton_pdgId->push_back(GenDressedLepton_pdgId[i]);
-                    t_GenDressedLepton_hasTauAnc->push_back(GenDressedLepton_hasTauAnc[i]);
                 }
             }
             for (int i = 0; i < nGenJet; i++) {

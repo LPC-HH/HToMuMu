@@ -164,6 +164,8 @@ class CreateTuple {
         diMuon_bsConstrainedPt, diMuon_phi, diMuon_eta;
     //diMuon sync variables
     float diMuon_bsConstrainedPt_nanoAOD;
+    /** Bare (no FSR recovery) dimuon; the un-suffixed bsConstrained dimuon variables are FSR-dressed */
+    float diMuon_bsConstrainedPt_noFSR, diMuon_bsConstrainedMass_noFSR;
     /** Read MET variables **/
     float PuppiMET_phi, PuppiMET_pt, PuppiMET_sumEt;
 
@@ -173,34 +175,19 @@ class CreateTuple {
     std::vector<float> *mu_pt, *mu_bsConstrainedPt, *mu_bsConstrainedPt_nanoAOD,
         *mu_phi, *mu_eta, *mu_dz, *mu_dzErr;
     std::vector<float> *mu_ptErr, *mu_bsConstrainedPtErr;
+    std::vector<float> *mu_bsConstrainedPt_noFSR; // bare corrected pT (mu_bsConstrainedPt is FSR-dressed)
     //muon sync variables
     std::vector<float> *mu_RelIso04; 
     std::vector<bool> *mu_looseID, *mu_mediumID, *mu_tightID;
 
-    /** FSR recovery (input from the analyzer; mu1/mu2 scalars and full FsrPhoton collection) */
+    /** FSR recovery (baseline, from the analyzer): dressed (muon + chosen photon) mu1/mu2 direction and mass.
+     *  The dressed pT is mu_bsConstrainedPt; eta/phi/mass are only stored for the selected pair. */
+    float mu1_dressed_eta, mu1_dressed_phi, mu1_dressed_mass;
+    float mu2_dressed_eta, mu2_dressed_phi, mu2_dressed_mass;
     bool mu1_hasFSR, mu2_hasFSR;
-    int mu1_fsrPhotonIdx_sel, mu2_fsrPhotonIdx_sel, mu1_fsrPhotonIdx_nanoAOD, mu2_fsrPhotonIdx_nanoAOD;
-    float mu1_bsConstrainedPt_FSR, mu1_eta_FSR, mu1_phi_FSR;
-    float mu2_bsConstrainedPt_FSR, mu2_eta_FSR, mu2_phi_FSR;
-    float mu1_mass_FSR, mu2_mass_FSR;
-    float mu1_RelIso04_FSR, mu2_RelIso04_FSR;
-    float diMuon_bsConstrainedPt_FSR, diMuon_bsConstrainedMass_FSR, diMuon_eta_FSR, diMuon_phi_FSR;
     int diMuon_nFSR;
-    int n_fsr_photon;
-    std::vector<float> *fsr_pt, *fsr_eta, *fsr_phi, *fsr_relIso03, *fsr_dROverEt2, *fsr_dR;
-    std::vector<int> *fsr_muonIdx, *fsr_electronIdx;
-    std::vector<bool> *fsr_passSel, *fsr_isChosen;
-    /** FSR recovery (computed here) */
-    float diMuon_rapidity_FSR, diMuon_bsConstrainedMass_FSR_delta;
-    float mu1_fsrPhoton_pt, mu1_fsrPhoton_eta, mu1_fsrPhoton_phi, mu1_fsrPhoton_relIso03,
-        mu1_fsrPhoton_dROverEt2, mu1_fsrPhoton_dR;
-    float mu2_fsrPhoton_pt, mu2_fsrPhoton_eta, mu2_fsrPhoton_phi, mu2_fsrPhoton_relIso03,
-        mu2_fsrPhoton_dROverEt2, mu2_fsrPhoton_dR;
-    /** Generator-level dressed leptons (MC only, full collection) */
-    int n_gen_dressed_lepton;
-    std::vector<float> *gdl_pt, *gdl_eta, *gdl_phi, *gdl_mass;
-    std::vector<int> *gdl_pdgId;
-    std::vector<bool> *gdl_hasTauAnc;
+    float mu1_fsrPhoton_pt, mu1_fsrPhoton_dR, mu2_fsrPhoton_pt, mu2_fsrPhoton_dR;
+    float mu1_RelIso04_FSR, mu2_RelIso04_FSR;
 
     /** Read electron variables */
     std::vector<float> *elec_pt;
@@ -265,7 +252,7 @@ class CreateTuple {
         mu2_bsConstrainedPt_mass_ratio, mu1_eta, mu2_eta, phi_CS, cos_theta_CS;
     float mu1_pt, mu2_pt, mu1_bsConstrainedPt_nanoAOD,
         mu2_bsConstrainedPt_nanoAOD, mu1_bsConstrainedPt,
-        mu2_bsConstrainedPt, mu1_ptErr, mu2_ptErr, mu1_bsConstrainedPtErr,
+        mu2_bsConstrainedPt, mu1_bsConstrainedPt_noFSR, mu2_bsConstrainedPt_noFSR, mu1_ptErr, mu2_ptErr, mu1_bsConstrainedPtErr,
         mu2_bsConstrainedPtErr, mu1_dz, mu2_dz, mu1_dzErr, mu2_dzErr;
 
     //sync muon variables
@@ -408,26 +395,7 @@ CreateTuple::CreateTuple(TString input, TString weightFile, TString output, TStr
     mu_looseID = nullptr;
     mu_mediumID = nullptr;
     mu_tightID = nullptr;
-    // FSR / dressed-lepton collections: allocated here so the input SetBranchAddress and the output Branch
-    // share the same objects (passed straight through to the output tuple)
-    fsr_pt = new std::vector<float>();
-    fsr_eta = new std::vector<float>();
-    fsr_phi = new std::vector<float>();
-    fsr_relIso03 = new std::vector<float>();
-    fsr_dROverEt2 = new std::vector<float>();
-    fsr_dR = new std::vector<float>();
-    fsr_muonIdx = new std::vector<int>();
-    fsr_electronIdx = new std::vector<int>();
-    fsr_passSel = new std::vector<bool>();
-    fsr_isChosen = new std::vector<bool>();
-    gdl_pt = new std::vector<float>();
-    gdl_eta = new std::vector<float>();
-    gdl_phi = new std::vector<float>();
-    gdl_mass = new std::vector<float>();
-    gdl_pdgId = new std::vector<int>();
-    gdl_hasTauAnc = new std::vector<bool>();
-    n_fsr_photon = 0;
-    n_gen_dressed_lepton = 0;
+    mu_bsConstrainedPt_noFSR = nullptr;
     elec_pt = nullptr;
     lhe_pdf_weight = nullptr;
     lhe_scale_weight = nullptr;
@@ -588,6 +556,10 @@ void CreateTuple::setBranchesAddressesOutput() {
                         "diMuon_bsConstrainedPt/F");
     tree_output->Branch("diMuon_bsConstrainedPt_nanoAOD", &diMuon_bsConstrainedPt_nanoAOD,
                         "diMuon_bsConstrainedPt_nanoAOD/F");
+    tree_output->Branch("diMuon_bsConstrainedPt_noFSR", &diMuon_bsConstrainedPt_noFSR,
+                        "diMuon_bsConstrainedPt_noFSR/F");
+    tree_output->Branch("diMuon_bsConstrainedMass_noFSR", &diMuon_bsConstrainedMass_noFSR,
+                        "diMuon_bsConstrainedMass_noFSR/F");
     tree_output->Branch("diMuon_phi", &diMuon_phi, "diMuon_phi/F");
     tree_output->Branch("diMuon_eta", &diMuon_eta, "diMuon_eta/F");
     tree_output->Branch("diMuon_rapidity", &diMuon_rapidity,
@@ -635,6 +607,10 @@ void CreateTuple::setBranchesAddressesOutput() {
                         "mu1_bsConstrainedPt/F");
     tree_output->Branch("mu2_bsConstrainedPt", &mu2_bsConstrainedPt,
                         "mu2_bsConstrainedPt/F");
+    tree_output->Branch("mu1_bsConstrainedPt_noFSR", &mu1_bsConstrainedPt_noFSR,
+                        "mu1_bsConstrainedPt_noFSR/F");
+    tree_output->Branch("mu2_bsConstrainedPt_noFSR", &mu2_bsConstrainedPt_noFSR,
+                        "mu2_bsConstrainedPt_noFSR/F");
     tree_output->Branch("mu1_ptErr", &mu1_ptErr, "mu1_ptErr/F");
     tree_output->Branch("mu2_ptErr", &mu2_ptErr, "mu2_ptErr/F");
     tree_output->Branch("mu1_bsConstrainedPtErr", &mu1_bsConstrainedPtErr,
@@ -646,62 +622,19 @@ void CreateTuple::setBranchesAddressesOutput() {
     tree_output->Branch("mu1_dzErr", &mu1_dzErr, "mu1_dzErr/F");
     tree_output->Branch("mu2_dzErr", &mu2_dzErr, "mu2_dzErr/F");
 
-    // FSR recovery (Run 2 prescription, see HmmAnalyzer.cc). Nominal variables are unchanged.
+    // FSR recovery (Run 2 prescription, see HmmAnalyzer.cc) is the baseline: the un-suffixed muon/dimuon
+    // bsConstrained kinematics are FSR-dressed, the bare values are in the *_noFSR branches.
     tree_output->Branch("mu1_hasFSR", &mu1_hasFSR, "mu1_hasFSR/O");
-    tree_output->Branch("mu1_bsConstrainedPt_FSR", &mu1_bsConstrainedPt_FSR, "mu1_bsConstrainedPt_FSR/F");
-    tree_output->Branch("mu1_eta_FSR", &mu1_eta_FSR, "mu1_eta_FSR/F");
-    tree_output->Branch("mu1_phi_FSR", &mu1_phi_FSR, "mu1_phi_FSR/F");
-    tree_output->Branch("mu1_mass_FSR", &mu1_mass_FSR, "mu1_mass_FSR/F");
-    tree_output->Branch("mu1_RelIso04_FSR", &mu1_RelIso04_FSR, "mu1_RelIso04_FSR/F");
-    tree_output->Branch("mu1_fsrPhoton_pt", &mu1_fsrPhoton_pt, "mu1_fsrPhoton_pt/F");
-    tree_output->Branch("mu1_fsrPhoton_eta", &mu1_fsrPhoton_eta, "mu1_fsrPhoton_eta/F");
-    tree_output->Branch("mu1_fsrPhoton_phi", &mu1_fsrPhoton_phi, "mu1_fsrPhoton_phi/F");
-    tree_output->Branch("mu1_fsrPhoton_relIso03", &mu1_fsrPhoton_relIso03, "mu1_fsrPhoton_relIso03/F");
-    tree_output->Branch("mu1_fsrPhoton_dROverEt2", &mu1_fsrPhoton_dROverEt2, "mu1_fsrPhoton_dROverEt2/F");
-    tree_output->Branch("mu1_fsrPhoton_dR", &mu1_fsrPhoton_dR, "mu1_fsrPhoton_dR/F");
-    tree_output->Branch("mu1_fsrPhotonIdx_sel", &mu1_fsrPhotonIdx_sel, "mu1_fsrPhotonIdx_sel/I");
-    tree_output->Branch("mu1_fsrPhotonIdx_nanoAOD", &mu1_fsrPhotonIdx_nanoAOD, "mu1_fsrPhotonIdx_nanoAOD/I");
     tree_output->Branch("mu2_hasFSR", &mu2_hasFSR, "mu2_hasFSR/O");
-    tree_output->Branch("mu2_bsConstrainedPt_FSR", &mu2_bsConstrainedPt_FSR, "mu2_bsConstrainedPt_FSR/F");
-    tree_output->Branch("mu2_eta_FSR", &mu2_eta_FSR, "mu2_eta_FSR/F");
-    tree_output->Branch("mu2_phi_FSR", &mu2_phi_FSR, "mu2_phi_FSR/F");
-    tree_output->Branch("mu2_mass_FSR", &mu2_mass_FSR, "mu2_mass_FSR/F");
-    tree_output->Branch("mu2_RelIso04_FSR", &mu2_RelIso04_FSR, "mu2_RelIso04_FSR/F");
-    tree_output->Branch("mu2_fsrPhoton_pt", &mu2_fsrPhoton_pt, "mu2_fsrPhoton_pt/F");
-    tree_output->Branch("mu2_fsrPhoton_eta", &mu2_fsrPhoton_eta, "mu2_fsrPhoton_eta/F");
-    tree_output->Branch("mu2_fsrPhoton_phi", &mu2_fsrPhoton_phi, "mu2_fsrPhoton_phi/F");
-    tree_output->Branch("mu2_fsrPhoton_relIso03", &mu2_fsrPhoton_relIso03, "mu2_fsrPhoton_relIso03/F");
-    tree_output->Branch("mu2_fsrPhoton_dROverEt2", &mu2_fsrPhoton_dROverEt2, "mu2_fsrPhoton_dROverEt2/F");
-    tree_output->Branch("mu2_fsrPhoton_dR", &mu2_fsrPhoton_dR, "mu2_fsrPhoton_dR/F");
-    tree_output->Branch("mu2_fsrPhotonIdx_sel", &mu2_fsrPhotonIdx_sel, "mu2_fsrPhotonIdx_sel/I");
-    tree_output->Branch("mu2_fsrPhotonIdx_nanoAOD", &mu2_fsrPhotonIdx_nanoAOD, "mu2_fsrPhotonIdx_nanoAOD/I");
-    tree_output->Branch("diMuon_bsConstrainedPt_FSR", &diMuon_bsConstrainedPt_FSR, "diMuon_bsConstrainedPt_FSR/F");
-    tree_output->Branch("diMuon_bsConstrainedMass_FSR", &diMuon_bsConstrainedMass_FSR, "diMuon_bsConstrainedMass_FSR/F");
-    tree_output->Branch("diMuon_eta_FSR", &diMuon_eta_FSR, "diMuon_eta_FSR/F");
-    tree_output->Branch("diMuon_phi_FSR", &diMuon_phi_FSR, "diMuon_phi_FSR/F");
-    tree_output->Branch("diMuon_rapidity_FSR", &diMuon_rapidity_FSR, "diMuon_rapidity_FSR/F");
-    tree_output->Branch("diMuon_bsConstrainedMass_FSR_delta", &diMuon_bsConstrainedMass_FSR_delta, "diMuon_bsConstrainedMass_FSR_delta/F");
     tree_output->Branch("diMuon_nFSR", &diMuon_nFSR, "diMuon_nFSR/I");
-    tree_output->Branch("nFsrPhoton", &n_fsr_photon, "nFsrPhoton/I");
-    tree_output->Branch("FsrPhoton_pt", "vector<float>", &fsr_pt);
-    tree_output->Branch("FsrPhoton_eta", "vector<float>", &fsr_eta);
-    tree_output->Branch("FsrPhoton_phi", "vector<float>", &fsr_phi);
-    tree_output->Branch("FsrPhoton_relIso03", "vector<float>", &fsr_relIso03);
-    tree_output->Branch("FsrPhoton_dROverEt2", "vector<float>", &fsr_dROverEt2);
-    tree_output->Branch("FsrPhoton_dR", "vector<float>", &fsr_dR);
-    tree_output->Branch("FsrPhoton_muonIdx", "vector<int>", &fsr_muonIdx);
-    tree_output->Branch("FsrPhoton_electronIdx", "vector<int>", &fsr_electronIdx);
-    tree_output->Branch("FsrPhoton_passSel", "vector<bool>", &fsr_passSel);
-    tree_output->Branch("FsrPhoton_isChosen", "vector<bool>", &fsr_isChosen);
+    tree_output->Branch("mu1_fsrPhoton_pt", &mu1_fsrPhoton_pt, "mu1_fsrPhoton_pt/F");
+    tree_output->Branch("mu1_fsrPhoton_dR", &mu1_fsrPhoton_dR, "mu1_fsrPhoton_dR/F");
+    tree_output->Branch("mu2_fsrPhoton_pt", &mu2_fsrPhoton_pt, "mu2_fsrPhoton_pt/F");
+    tree_output->Branch("mu2_fsrPhoton_dR", &mu2_fsrPhoton_dR, "mu2_fsrPhoton_dR/F");
+    tree_output->Branch("mu1_RelIso04_FSR", &mu1_RelIso04_FSR, "mu1_RelIso04_FSR/F");
+    tree_output->Branch("mu2_RelIso04_FSR", &mu2_RelIso04_FSR, "mu2_RelIso04_FSR/F");
     tree_output->Branch("gen_mll", &gen_mll, "gen_mll/F");
     tree_output->Branch("LHE_mll", &lhe_mll, "LHE_mll/F");
-    tree_output->Branch("nGenDressedLepton", &n_gen_dressed_lepton, "nGenDressedLepton/I");
-    tree_output->Branch("GenDressedLepton_pt", "vector<float>", &gdl_pt);
-    tree_output->Branch("GenDressedLepton_eta", "vector<float>", &gdl_eta);
-    tree_output->Branch("GenDressedLepton_phi", "vector<float>", &gdl_phi);
-    tree_output->Branch("GenDressedLepton_mass", "vector<float>", &gdl_mass);
-    tree_output->Branch("GenDressedLepton_pdgId", "vector<int>", &gdl_pdgId);
-    tree_output->Branch("GenDressedLepton_hasTauAnc", "vector<bool>", &gdl_hasTauAnc);
     tree_output->Branch("phi_CS", &phi_CS, "phi_CS/F");
     tree_output->Branch("cos_theta_CS", &cos_theta_CS, "cos_theta_CS/F");
 
@@ -929,6 +862,10 @@ void CreateTuple::setBranchesAddressesInput() {
     tree_input->SetBranchStatus("t_diMuon_bsConstrainedPt_nanoAOD", 1);
     tree_input->SetBranchAddress("t_diMuon_bsConstrainedPt_nanoAOD",
                                  &diMuon_bsConstrainedPt_nanoAOD);
+    tree_input->SetBranchStatus("t_diMuon_bsConstrainedPt_noFSR", 1);
+    tree_input->SetBranchAddress("t_diMuon_bsConstrainedPt_noFSR", &diMuon_bsConstrainedPt_noFSR);
+    tree_input->SetBranchStatus("t_diMuon_bsConstrainedMass_noFSR", 1);
+    tree_input->SetBranchAddress("t_diMuon_bsConstrainedMass_noFSR", &diMuon_bsConstrainedMass_noFSR);
     tree_input->SetBranchStatus("t_diMuon_mass", 1);
     tree_input->SetBranchAddress("t_diMuon_mass", &diMuon_mass);
     tree_input->SetBranchStatus("t_diMuon_pt", 1);
@@ -957,6 +894,8 @@ void CreateTuple::setBranchesAddressesInput() {
     tree_input->SetBranchAddress("t_Mu_pt", &mu_pt);
     tree_input->SetBranchStatus("t_Mu_bsConstrainedPt", 1);
     tree_input->SetBranchAddress("t_Mu_bsConstrainedPt", &mu_bsConstrainedPt);
+    tree_input->SetBranchStatus("t_Mu_bsConstrainedPt_noFSR", 1);
+    tree_input->SetBranchAddress("t_Mu_bsConstrainedPt_noFSR", &mu_bsConstrainedPt_noFSR);
     tree_input->SetBranchStatus("t_Mu_bsConstrainedPt_nanoAOD", 1);
     tree_input->SetBranchAddress("t_Mu_bsConstrainedPt_nanoAOD",
                                  &mu_bsConstrainedPt_nanoAOD);
@@ -974,72 +913,37 @@ void CreateTuple::setBranchesAddressesInput() {
     tree_input->SetBranchStatus("t_Mu_dzErr", 1);
     tree_input->SetBranchAddress("t_Mu_dzErr", &mu_dzErr);
 
-    // FSR recovery
+    // FSR recovery (baseline): dressed mu1/mu2 direction and mass, photon flags
+    tree_input->SetBranchStatus("t_mu1_bsConstrainedEta", 1);
+    tree_input->SetBranchAddress("t_mu1_bsConstrainedEta", &mu1_dressed_eta);
+    tree_input->SetBranchStatus("t_mu1_bsConstrainedPhi", 1);
+    tree_input->SetBranchAddress("t_mu1_bsConstrainedPhi", &mu1_dressed_phi);
+    tree_input->SetBranchStatus("t_mu1_bsConstrainedMass", 1);
+    tree_input->SetBranchAddress("t_mu1_bsConstrainedMass", &mu1_dressed_mass);
     tree_input->SetBranchStatus("t_mu1_hasFSR", 1);
     tree_input->SetBranchAddress("t_mu1_hasFSR", &mu1_hasFSR);
-    tree_input->SetBranchStatus("t_mu2_hasFSR", 1);
-    tree_input->SetBranchAddress("t_mu2_hasFSR", &mu2_hasFSR);
-    tree_input->SetBranchStatus("t_mu1_fsrPhotonIdx_sel", 1);
-    tree_input->SetBranchAddress("t_mu1_fsrPhotonIdx_sel", &mu1_fsrPhotonIdx_sel);
-    tree_input->SetBranchStatus("t_mu2_fsrPhotonIdx_sel", 1);
-    tree_input->SetBranchAddress("t_mu2_fsrPhotonIdx_sel", &mu2_fsrPhotonIdx_sel);
-    tree_input->SetBranchStatus("t_mu1_fsrPhotonIdx_nanoAOD", 1);
-    tree_input->SetBranchAddress("t_mu1_fsrPhotonIdx_nanoAOD", &mu1_fsrPhotonIdx_nanoAOD);
-    tree_input->SetBranchStatus("t_mu2_fsrPhotonIdx_nanoAOD", 1);
-    tree_input->SetBranchAddress("t_mu2_fsrPhotonIdx_nanoAOD", &mu2_fsrPhotonIdx_nanoAOD);
-    tree_input->SetBranchStatus("t_mu1_bsConstrainedPt_FSR", 1);
-    tree_input->SetBranchAddress("t_mu1_bsConstrainedPt_FSR", &mu1_bsConstrainedPt_FSR);
-    tree_input->SetBranchStatus("t_mu1_bsConstrainedEta_FSR", 1);
-    tree_input->SetBranchAddress("t_mu1_bsConstrainedEta_FSR", &mu1_eta_FSR);
-    tree_input->SetBranchStatus("t_mu1_bsConstrainedPhi_FSR", 1);
-    tree_input->SetBranchAddress("t_mu1_bsConstrainedPhi_FSR", &mu1_phi_FSR);
-    tree_input->SetBranchStatus("t_mu2_bsConstrainedPt_FSR", 1);
-    tree_input->SetBranchAddress("t_mu2_bsConstrainedPt_FSR", &mu2_bsConstrainedPt_FSR);
-    tree_input->SetBranchStatus("t_mu2_bsConstrainedEta_FSR", 1);
-    tree_input->SetBranchAddress("t_mu2_bsConstrainedEta_FSR", &mu2_eta_FSR);
-    tree_input->SetBranchStatus("t_mu2_bsConstrainedPhi_FSR", 1);
-    tree_input->SetBranchAddress("t_mu2_bsConstrainedPhi_FSR", &mu2_phi_FSR);
-    tree_input->SetBranchStatus("t_mu1_bsConstrainedMass_FSR", 1);
-    tree_input->SetBranchAddress("t_mu1_bsConstrainedMass_FSR", &mu1_mass_FSR);
-    tree_input->SetBranchStatus("t_mu2_bsConstrainedMass_FSR", 1);
-    tree_input->SetBranchAddress("t_mu2_bsConstrainedMass_FSR", &mu2_mass_FSR);
+    tree_input->SetBranchStatus("t_mu1_fsrPhoton_pt", 1);
+    tree_input->SetBranchAddress("t_mu1_fsrPhoton_pt", &mu1_fsrPhoton_pt);
+    tree_input->SetBranchStatus("t_mu1_fsrPhoton_dR", 1);
+    tree_input->SetBranchAddress("t_mu1_fsrPhoton_dR", &mu1_fsrPhoton_dR);
     tree_input->SetBranchStatus("t_mu1_pfRelIso04_all_FSR", 1);
     tree_input->SetBranchAddress("t_mu1_pfRelIso04_all_FSR", &mu1_RelIso04_FSR);
+    tree_input->SetBranchStatus("t_mu2_bsConstrainedEta", 1);
+    tree_input->SetBranchAddress("t_mu2_bsConstrainedEta", &mu2_dressed_eta);
+    tree_input->SetBranchStatus("t_mu2_bsConstrainedPhi", 1);
+    tree_input->SetBranchAddress("t_mu2_bsConstrainedPhi", &mu2_dressed_phi);
+    tree_input->SetBranchStatus("t_mu2_bsConstrainedMass", 1);
+    tree_input->SetBranchAddress("t_mu2_bsConstrainedMass", &mu2_dressed_mass);
+    tree_input->SetBranchStatus("t_mu2_hasFSR", 1);
+    tree_input->SetBranchAddress("t_mu2_hasFSR", &mu2_hasFSR);
+    tree_input->SetBranchStatus("t_mu2_fsrPhoton_pt", 1);
+    tree_input->SetBranchAddress("t_mu2_fsrPhoton_pt", &mu2_fsrPhoton_pt);
+    tree_input->SetBranchStatus("t_mu2_fsrPhoton_dR", 1);
+    tree_input->SetBranchAddress("t_mu2_fsrPhoton_dR", &mu2_fsrPhoton_dR);
     tree_input->SetBranchStatus("t_mu2_pfRelIso04_all_FSR", 1);
     tree_input->SetBranchAddress("t_mu2_pfRelIso04_all_FSR", &mu2_RelIso04_FSR);
-    tree_input->SetBranchStatus("t_diMuon_bsConstrainedPt_FSR", 1);
-    tree_input->SetBranchAddress("t_diMuon_bsConstrainedPt_FSR", &diMuon_bsConstrainedPt_FSR);
-    tree_input->SetBranchStatus("t_diMuon_bsConstrainedMass_FSR", 1);
-    tree_input->SetBranchAddress("t_diMuon_bsConstrainedMass_FSR", &diMuon_bsConstrainedMass_FSR);
-    tree_input->SetBranchStatus("t_diMuon_eta_FSR", 1);
-    tree_input->SetBranchAddress("t_diMuon_eta_FSR", &diMuon_eta_FSR);
-    tree_input->SetBranchStatus("t_diMuon_phi_FSR", 1);
-    tree_input->SetBranchAddress("t_diMuon_phi_FSR", &diMuon_phi_FSR);
     tree_input->SetBranchStatus("t_diMuon_nFSR", 1);
     tree_input->SetBranchAddress("t_diMuon_nFSR", &diMuon_nFSR);
-    tree_input->SetBranchStatus("t_nFsrPhoton", 1);
-    tree_input->SetBranchAddress("t_nFsrPhoton", &n_fsr_photon);
-    tree_input->SetBranchStatus("t_FsrPhoton_pt", 1);
-    tree_input->SetBranchAddress("t_FsrPhoton_pt", &fsr_pt);
-    tree_input->SetBranchStatus("t_FsrPhoton_eta", 1);
-    tree_input->SetBranchAddress("t_FsrPhoton_eta", &fsr_eta);
-    tree_input->SetBranchStatus("t_FsrPhoton_phi", 1);
-    tree_input->SetBranchAddress("t_FsrPhoton_phi", &fsr_phi);
-    tree_input->SetBranchStatus("t_FsrPhoton_relIso03", 1);
-    tree_input->SetBranchAddress("t_FsrPhoton_relIso03", &fsr_relIso03);
-    tree_input->SetBranchStatus("t_FsrPhoton_dROverEt2", 1);
-    tree_input->SetBranchAddress("t_FsrPhoton_dROverEt2", &fsr_dROverEt2);
-    tree_input->SetBranchStatus("t_FsrPhoton_dR", 1);
-    tree_input->SetBranchAddress("t_FsrPhoton_dR", &fsr_dR);
-    tree_input->SetBranchStatus("t_FsrPhoton_muonIdx", 1);
-    tree_input->SetBranchAddress("t_FsrPhoton_muonIdx", &fsr_muonIdx);
-    tree_input->SetBranchStatus("t_FsrPhoton_electronIdx", 1);
-    tree_input->SetBranchAddress("t_FsrPhoton_electronIdx", &fsr_electronIdx);
-    tree_input->SetBranchStatus("t_FsrPhoton_passSel", 1);
-    tree_input->SetBranchAddress("t_FsrPhoton_passSel", &fsr_passSel);
-    tree_input->SetBranchStatus("t_FsrPhoton_isChosen", 1);
-    tree_input->SetBranchAddress("t_FsrPhoton_isChosen", &fsr_isChosen);
-    // Generator-level dressed leptons: only bound if present (filled for MC only; empty for data)
     // Hard-process (pre-FSR) gen dimuon mass: truth reference for the FSR recovery validation
     if (tree_input->GetBranch("t_gen_mll")) {
         tree_input->SetBranchStatus("t_gen_mll", 1);
@@ -1049,22 +953,6 @@ void CreateTuple::setBranchesAddressesInput() {
     if (tree_input->GetBranch("t_LHE_mll")) {
         tree_input->SetBranchStatus("t_LHE_mll", 1);
         tree_input->SetBranchAddress("t_LHE_mll", &lhe_mll);
-    }
-    if (tree_input->GetBranch("t_nGenDressedLepton")) {
-        tree_input->SetBranchStatus("t_nGenDressedLepton", 1);
-        tree_input->SetBranchAddress("t_nGenDressedLepton", &n_gen_dressed_lepton);
-        tree_input->SetBranchStatus("t_GenDressedLepton_pt", 1);
-        tree_input->SetBranchAddress("t_GenDressedLepton_pt", &gdl_pt);
-        tree_input->SetBranchStatus("t_GenDressedLepton_eta", 1);
-        tree_input->SetBranchAddress("t_GenDressedLepton_eta", &gdl_eta);
-        tree_input->SetBranchStatus("t_GenDressedLepton_phi", 1);
-        tree_input->SetBranchAddress("t_GenDressedLepton_phi", &gdl_phi);
-        tree_input->SetBranchStatus("t_GenDressedLepton_mass", 1);
-        tree_input->SetBranchAddress("t_GenDressedLepton_mass", &gdl_mass);
-        tree_input->SetBranchStatus("t_GenDressedLepton_pdgId", 1);
-        tree_input->SetBranchAddress("t_GenDressedLepton_pdgId", &gdl_pdgId);
-        tree_input->SetBranchStatus("t_GenDressedLepton_hasTauAnc", 1);
-        tree_input->SetBranchAddress("t_GenDressedLepton_hasTauAnc", &gdl_hasTauAnc);
     }
 
     // Electron variables
@@ -1202,8 +1090,16 @@ void CreateTuple::fillOutputTree() {
 
             h_nInFinalMassRange->Fill(0.5);
         }
+        // mu1 = higher FSR-dressed pT (the analyzer already orders this way; the pair scalars follow the swap)
         if ((*mu_bsConstrainedPt)[mu1_index] < (*mu_bsConstrainedPt)[mu2_index]) {
             std::swap(mu1_index, mu2_index);
+            std::swap(mu1_dressed_eta, mu2_dressed_eta);
+            std::swap(mu1_dressed_phi, mu2_dressed_phi);
+            std::swap(mu1_dressed_mass, mu2_dressed_mass);
+            std::swap(mu1_hasFSR, mu2_hasFSR);
+            std::swap(mu1_fsrPhoton_pt, mu2_fsrPhoton_pt);
+            std::swap(mu1_fsrPhoton_dR, mu2_fsrPhoton_dR);
+            std::swap(mu1_RelIso04_FSR, mu2_RelIso04_FSR);
         }
 
 
@@ -1318,19 +1214,18 @@ void CreateTuple::fillOutputTree() {
                                 (*mu_phi)[mu1_index], MUON_MASS);
         mu2_vector.SetPtEtaPhiM((*mu_pt)[mu2_index], (*mu_eta)[mu2_index],
                                 (*mu_phi)[mu2_index], MUON_MASS);
+        // Baseline (FSR-dressed) muon four-vectors: drive rapidity, CS angles, pt_balance, pt_centrality
         mu1BSC_vector.SetPtEtaPhiM((*mu_bsConstrainedPt)[mu1_index],
-                                   (*mu_eta)[mu1_index], (*mu_phi)[mu1_index],
-                                   MUON_MASS);
+                                   mu1_dressed_eta, mu1_dressed_phi, mu1_dressed_mass);
         mu2BSC_vector.SetPtEtaPhiM((*mu_bsConstrainedPt)[mu2_index],
-                                   (*mu_eta)[mu2_index], (*mu_phi)[mu2_index],
-                                   MUON_MASS);
+                                   mu2_dressed_eta, mu2_dressed_phi, mu2_dressed_mass);
 
         diMuon_rapidity = (mu1BSC_vector + mu2BSC_vector).Rapidity();
 
         mu1_pt = (*mu_pt)[mu1_index];
         mu2_pt = (*mu_pt)[mu2_index];
-        mu1_phi = (*mu_phi)[mu1_index];
-        mu2_phi = (*mu_phi)[mu2_index];
+        mu1_phi = mu1_dressed_phi;
+        mu2_phi = mu2_dressed_phi;
 
         mu1_RelIso04 = (*mu_RelIso04)[mu1_index];
         mu1_looseID = (*mu_looseID)[mu1_index];
@@ -1353,6 +1248,8 @@ void CreateTuple::fillOutputTree() {
         //diMuon_bsConstrainedMass_nanoAOD = (mu1BSC_nanoAOD_vector + mu2BSC_nanoAOD_vector).M();
         mu1_bsConstrainedPt = (*mu_bsConstrainedPt)[mu1_index];
         mu2_bsConstrainedPt = (*mu_bsConstrainedPt)[mu2_index];
+        mu1_bsConstrainedPt_noFSR = (*mu_bsConstrainedPt_noFSR)[mu1_index];
+        mu2_bsConstrainedPt_noFSR = (*mu_bsConstrainedPt_noFSR)[mu2_index];
         mu1_ptErr = (*mu_ptErr)[mu1_index];
         mu2_ptErr = (*mu_ptErr)[mu2_index];
         mu1_bsConstrainedPtErr = (*mu_bsConstrainedPtErr)[mu1_index];
@@ -1363,9 +1260,11 @@ void CreateTuple::fillOutputTree() {
         mu2_dzErr = (*mu_dzErr)[mu2_index];
         relative_diMuon_mass_error = std::sqrt(std::pow(mu1_ptErr / mu1_pt, 2) +
                                                std::pow(mu2_ptErr / mu2_pt, 2));
+        // Bare-muon relative pT resolution (the photon resolution is not propagated).
+        // TODO(FSR): investigate using sigma_pT(bare) / pT(dressed) to match the FSR-dressed mass.
         relative_diMuon_bsConstrainedMass_error = std::sqrt(
-            std::pow(mu1_bsConstrainedPtErr / mu1_bsConstrainedPt, 2) +
-            std::pow(mu2_bsConstrainedPtErr / mu2_bsConstrainedPt, 2));
+            std::pow(mu1_bsConstrainedPtErr / mu1_bsConstrainedPt_noFSR, 2) +
+            std::pow(mu2_bsConstrainedPtErr / mu2_bsConstrainedPt_noFSR, 2));
 
         angles_CS = CSAngles(mu1BSC_vector, mu2BSC_vector, (*mu_charge)[mu1_index]);
 
@@ -1375,31 +1274,9 @@ void CreateTuple::fillOutputTree() {
             (*mu_bsConstrainedPt)[mu1_index] / diMuon_bsConstrainedMass;
         mu2_bsConstrainedPt_mass_ratio =
             (*mu_bsConstrainedPt)[mu2_index] / diMuon_bsConstrainedMass;
-        mu1_eta = (*mu_eta)[mu1_index];
-        mu2_eta = (*mu_eta)[mu2_index];
+        mu1_eta = mu1_dressed_eta;
+        mu2_eta = mu2_dressed_eta;
 
-        // FSR recovery: dimuon rapidity, mass shift and chosen-photon properties (NULL if no photon)
-        {
-            TLorentzVector mu1BSC_FSR_vector, mu2BSC_FSR_vector;
-            mu1BSC_FSR_vector.SetPtEtaPhiM(mu1_bsConstrainedPt_FSR, mu1_eta_FSR, mu1_phi_FSR, mu1_mass_FSR);
-            mu2BSC_FSR_vector.SetPtEtaPhiM(mu2_bsConstrainedPt_FSR, mu2_eta_FSR, mu2_phi_FSR, mu2_mass_FSR);
-            diMuon_rapidity_FSR = (mu1BSC_FSR_vector + mu2BSC_FSR_vector).Rapidity();
-        }
-        diMuon_bsConstrainedMass_FSR_delta = diMuon_bsConstrainedMass_FSR - diMuon_bsConstrainedMass;
-        auto fillFsrPhoton = [&](int idx, float &pt, float &eta, float &phi, float &relIso03,
-                                 float &dROverEt2, float &dR) {
-            const bool valid = idx >= 0 && idx < static_cast<int>(fsr_pt->size());
-            pt = valid ? (*fsr_pt)[idx] : -999.f;  // same NULL value as the analyzer
-            eta = valid ? (*fsr_eta)[idx] : -999.f;  // same NULL value as the analyzer
-            phi = valid ? (*fsr_phi)[idx] : -999.f;  // same NULL value as the analyzer
-            relIso03 = valid ? (*fsr_relIso03)[idx] : -999.f;  // same NULL value as the analyzer
-            dROverEt2 = valid ? (*fsr_dROverEt2)[idx] : -999.f;  // same NULL value as the analyzer
-            dR = valid ? (*fsr_dR)[idx] : -999.f;  // same NULL value as the analyzer
-        };
-        fillFsrPhoton(mu1_fsrPhotonIdx_sel, mu1_fsrPhoton_pt, mu1_fsrPhoton_eta, mu1_fsrPhoton_phi,
-                      mu1_fsrPhoton_relIso03, mu1_fsrPhoton_dROverEt2, mu1_fsrPhoton_dR);
-        fillFsrPhoton(mu2_fsrPhotonIdx_sel, mu2_fsrPhoton_pt, mu2_fsrPhoton_eta, mu2_fsrPhoton_phi,
-                      mu2_fsrPhoton_relIso03, mu2_fsrPhoton_dROverEt2, mu2_fsrPhoton_dR);
         phi_CS = angles_CS.second;
         cos_theta_CS = angles_CS.first;
 
@@ -1670,7 +1547,7 @@ void CreateTuple::fillOutputTree() {
                                               &ordered_jet_phi,
                                               &ordered_jet_eta,
                                               &ordered_jet_mass);
-            pt_centrality = GetPtCentralityVariable(diMuon_pt,
+            pt_centrality = GetPtCentralityVariable(diMuon_bsConstrainedPt,
                                                     &ordered_jet_pt,
                                                     &ordered_jet_phi,
                                                     &ordered_jet_eta,
