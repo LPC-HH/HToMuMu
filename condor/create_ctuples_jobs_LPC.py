@@ -294,7 +294,8 @@ for dataset_name in list_datasets:
 
     if muon_pt_syst != "nominal":
         OUTPUT_DIR = EOS_BASE_DIR + "tuples_" + v.TUPLES_VERSION_NUMBER  + "/%s"%(dataset_name) + "_%s/"%(muon_pt_syst)
-    if jet_syst == "nominal":
+    # elif: a muon pT systematic must not fall through to the nominal directory
+    elif jet_syst == "nominal":
         OUTPUT_DIR = EOS_BASE_DIR + "tuples_" + v.TUPLES_VERSION_NUMBER  + "/%s/"%(dataset_name)
     else:
         OUTPUT_DIR = EOS_BASE_DIR + "tuples_" + v.TUPLES_VERSION_NUMBER  + "/%s_"%(dataset_name)+ "%s/"%(jet_syst)
@@ -327,7 +328,8 @@ for dataset_name in list_datasets:
 
     if muon_pt_syst != "nominal":
         JOB_DIR = CONDOR_BASE_DIR + "ctuples_" + v.TUPLES_VERSION_NUMBER + "/%s"%(dataset_name) + "_%s/"%(muon_pt_syst)# + "%s/"%(dataset_name) + blockString
-    if jet_syst == "nominal":
+    # elif: a muon pT systematic must not fall through to the nominal directory
+    elif jet_syst == "nominal":
         JOB_DIR = CONDOR_BASE_DIR + "ctuples_" + v.TUPLES_VERSION_NUMBER + "/" + f"{dataset_name}/"# + "%s/"%(dataset_name) + blockString
     else:
         JOB_DIR = CONDOR_BASE_DIR + "ctuples_" + v.TUPLES_VERSION_NUMBER + "/%s_"%(dataset_name)+ "%s/"%(jet_syst)# + "%s/"%(dataset_name) + blockString
