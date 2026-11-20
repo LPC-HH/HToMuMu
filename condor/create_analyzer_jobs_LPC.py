@@ -304,6 +304,9 @@ for dataset_name in list_datasets:
     os.system("mkdir -p " + Job_Data_DIR + "leptonSF/%s/"%(year))
     os.system("cp " + "%s/leptonSF/%s/muon_scalesmearing.json.gz"%(Analyzer_Data_DIR, year) + " " + "%s/leptonSF/%s/"%(Job_Data_DIR, year))
     os.system("cp " + "%s/leptonSF/%s/muon_Z.json.gz"%(Analyzer_Data_DIR, year) + " " + "%s/leptonSF/%s/"%(Job_Data_DIR, year))
+    # DY Z pT reweighting inputs (lib/ZptReweight.h, data/theory/README.md)
+    os.system("mkdir -p " + Job_Data_DIR + "theory")
+    os.system("cp " + "%s/theory/qt_norm_reweight_ZR.json %s/theory/qt_norm_reweight_SB.json"%(Analyzer_Data_DIR, Analyzer_Data_DIR) + " " + "%s/theory/"%(Job_Data_DIR))
     os.system("mkdir -p " + Job_Data_DIR + "pileup")
     pileup_file = "PileupReweight_Summer%s"%(year[2:])
     if not os.path.exists(Analyzer_Data_DIR + "/pileup/%s.root"%(pileup_file)):

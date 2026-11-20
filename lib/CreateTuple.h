@@ -6,6 +6,7 @@
 #include "TF1.h"
 #include "Utils.h"
 #include "DYStitching.h"
+#include "ZptReweight.h"
 #include <TChain.h>
 #include <TFile.h>
 #include <TH1F.h>
@@ -28,6 +29,12 @@
 // cross sections and per-cell fractions are written into the SumGenWeight.root files by
 // scripts/compute_DY_stitching.py; any dataset that has them gets stitch_weight = fraction of its cell.
 constexpr bool DO_DY_STITCHING = true;
+
+// DY Z pT (qT) reweighting (lib/ZptReweight.h, data/theory/README.md): the stitched DY datasets get
+// zpt_weight = t_zpt_weight (analyzer, DYTurbo/MC ratio) x stitch_zpt_norm[region] (scripts/compute_DY_stitching.py,
+// keeps the inclusive DY cross section of each mass region) folded into weight; weight_no_zpt keeps the unreweighted
+// weight.
+constexpr bool DO_ZPT_REWEIGHTING = true;
 
 std::map<TString, int> MC_CAMPAIGN_MAP = {{"2022", 1}, {"2022EE", 2},
                                           {"2023", 3}, {"2023BPix", 4},
@@ -238,11 +245,19 @@ class CreateTuple {
     double stitch_weight;
     Int_t stitch_cell;
 
+    // DY Z pT reweighting
+    bool apply_zpt = false; /**< true for the stitched DY when the weight file has stitch_zpt_norm (DO_ZPT_REWEIGHTING) */
+    std::vector<double> zpt_norm; /**< renormalization per zpt_rw region (zpt_rw::N_REGIONS) */
+    float gen_Vpt = -999.f;   /**< pT of the hard-process lepton pair (-999 for data / older analyzer outputs) */
+    float gen_Vmass = -999.f; /**< mass of the hard-process lepton pair */
+    float zpt_weight_raw = 1.f; /**< t_zpt_weight: DYTurbo/MC ratio before renormalization */
+    double zpt_weight = 1.;   /**< applied Z pT weight (1 unless apply_zpt) */
+
     //std::vector<Bool_t> *pass_valid_jet, *pass_jet_seperation;
 
     /** New Event variables */
     double scale_factor; // luminosity * cross_section / gen_weight_sum
-    Double_t weight, weight_no_eff_sf;
+    Double_t weight, weight_no_eff_sf, weight_no_zpt;
     double weight_no_lumi;
     float mu_trig_eff_SF, mu_trig_eff_SF_down, mu_trig_eff_SF_up;
     float mu_ID_eff_SF, mu_ID_eff_SF_down, mu_ID_eff_SF_up;
@@ -587,6 +602,8 @@ void CreateTuple::setBranchesAddressesOutput() {
     tree_output->Branch("weight_no_lumi", &weight_no_lumi, "weight_no_lumi/D");
     tree_output->Branch("stitch_weight", &stitch_weight, "stitch_weight/D");
     tree_output->Branch("stitch_cell", &stitch_cell, "stitch_cell/I");
+    tree_output->Branch("zpt_weight", &zpt_weight, "zpt_weight/D");
+    tree_output->Branch("weight_no_zpt", &weight_no_zpt, "weight_no_zpt/D");
     // tree_output->Branch("is_data", &is_data_int, "is_data/i");
     // tree_output->Branch("is_signal", &is_signal_int, "signal/i");
     tree_output->Branch("rho", &rho, "rho/F");
@@ -713,6 +730,8 @@ void CreateTuple::setBranchesAddressesOutput() {
     tree_output->Branch("mu1_RelIso04_FSR", &mu1_RelIso04_FSR, "mu1_RelIso04_FSR/F");
     tree_output->Branch("mu2_RelIso04_FSR", &mu2_RelIso04_FSR, "mu2_RelIso04_FSR/F");
     tree_output->Branch("gen_mll", &gen_mll, "gen_mll/F");
+    tree_output->Branch("gen_Vpt", &gen_Vpt, "gen_Vpt/F");
+    tree_output->Branch("gen_Vmass", &gen_Vmass, "gen_Vmass/F");
     tree_output->Branch("LHE_mll", &lhe_mll, "LHE_mll/F");
     tree_output->Branch("phi_CS", &phi_CS, "phi_CS/F");
     tree_output->Branch("cos_theta_CS", &cos_theta_CS, "cos_theta_CS/F");
@@ -1059,6 +1078,17 @@ void CreateTuple::setBranchesAddressesInput() {
         tree_input->SetBranchStatus("t_gen_mll", 1);
         tree_input->SetBranchAddress("t_gen_mll", &gen_mll);
     }
+    // Gen boson of the Z pT reweighting (analyzer outputs with lib/ZptReweight.h)
+    for (const auto &[name, address] : {std::pair<const char *, float *>{"t_gen_Vpt", &gen_Vpt},
+                                        {"t_gen_Vmass", &gen_Vmass},
+                                        {"t_zpt_weight", &zpt_weight_raw}}) {
+        if (tree_input->GetBranch(name)) {
+            tree_input->SetBranchStatus(name, 1);
+            tree_input->SetBranchAddress(name, address);
+        } else if (apply_zpt) {
+            throw std::runtime_error(std::string("stitch_zpt_norm found but the analyzer output has no ") + name);
+        }
+    }
     // LHE mumu mass for every sample that has it (the DY stitching above binds it unconditionally)
     if (tree_input->GetBranch("t_LHE_mll")) {
         tree_input->SetBranchStatus("t_LHE_mll", 1);
@@ -1293,12 +1323,14 @@ void CreateTuple::fillOutputTree() {
             mu_ID_eff_SF_up = (*mu_ID_eff_SF_up_vec)[mu1_index] *
                               (*mu_ID_eff_SF_up_vec)[mu2_index];
 
-            weight =
+            zpt_weight = apply_zpt ? zpt_weight_raw * zpt_norm[zpt_rw::Region(gen_Vmass)] : 1.;
+            weight_no_zpt =
                 GetEventWeight(gen_weight, pileup_weight, scale_factor,
                                mu_trig_eff_SF, mu_ID_eff_SF, mu_ISO_eff_SF) * stitch_weight;
+            weight = weight_no_zpt * zpt_weight;
             weight_no_eff_sf =
                 GetEventWeight(gen_weight, pileup_weight, scale_factor,
-                               1, 1, 1) * stitch_weight;
+                               1, 1, 1) * stitch_weight * zpt_weight;
             weight_no_lumi = weight / luminosity;
 
         } else {
@@ -1316,6 +1348,8 @@ void CreateTuple::fillOutputTree() {
             weight = 1;
             weight_no_lumi = 1;
             weight_no_eff_sf= 1;
+            weight_no_zpt = 1;
+            zpt_weight = 1;
         
         }
         
@@ -1773,6 +1807,24 @@ void CreateTuple::setupDYStitching(const TString &channel, float scale_luminosit
     dy_stitch_frac.clear();
     for (int c = 0; c < dy_stitch::N_CELLS; c++)
         dy_stitch_frac.push_back(frac_histogram->GetBinContent(c + 1));
+    if (DO_ZPT_REWEIGHTING) {
+        TH1 *zpt_norm_histogram = weight_file->Get<TH1>("stitch_zpt_norm");
+        if (!zpt_norm_histogram) {
+            std::cout << "[WARNING] no stitch_zpt_norm in " << weight_name << ": DY Z pT reweighting NOT applied "
+                      << "(analyzer without lib/ZptReweight.h, or rerun scripts/compute_DY_stitching.py)" << std::endl;
+        } else {
+            if (zpt_norm_histogram->GetNbinsX() != zpt_rw::N_REGIONS)
+                throw std::runtime_error("stitch_zpt_norm has a different number of regions than lib/ZptReweight.h");
+            zpt_norm.clear();
+            for (int r = 0; r < zpt_rw::N_REGIONS; r++)
+                zpt_norm.push_back(zpt_norm_histogram->GetBinContent(r + 1));
+            apply_zpt = true;
+            std::cout << "DY Z pT reweighting applied, stitch_zpt_norm (other / ZR / SB):";
+            for (double norm : zpt_norm)
+                std::cout << " " << norm;
+            std::cout << std::endl;
+        }
+    }
     weight_file->Close();
 
     cross_section = GetSingleBinValue(weight_name, "stitch_sigma");

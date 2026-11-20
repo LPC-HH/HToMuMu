@@ -16,6 +16,12 @@ so that both predict the same cross section in every cell and there is no step a
 sigma_F = sigma_U * eps_F, with eps_F the GenFilter efficiency (default) or the in-situ one (--insitu).
 F is normalised with sumw over ALL its events (those outside R are dropped by CreateTuple).
 
+Z pT reweighting (lib/ZptReweight.h): stitch_zpt_norm[region] = sigma / sigma_reweighted of the INCLUSIVE DY, i.e.
+    sum_p sigma_Jp * S_p[r] / sumw(J_p)  /  sum_p sigma_Jp * S_rw_p[r] / sumw(J_p)
+from the pre-selection sums per region (h_sumOfgenWeight_zptRegion[_rw]) of the J_p, which together cover all of DY.
+One factor per region, common to all DY samples of the era, so the reweighting keeps the cross section of each mass
+region but still moves events between the parton multiplicities (a per-sample renormalization would undo that).
+
 Usage: python3 compute_DY_stitching.py [era|all] [--insitu] [--coverage] [--dry-run]
 """
 import glob
@@ -94,6 +100,11 @@ def read_sums(dataset):
             "cells": f["h_sumOfgenWeight_stitchCells"].values().astype(np.float64),
             "cells_w2": f["h_sumOfgenWeight2_stitchCells"].values().astype(np.float64),
             "genFilter": f["h_genFilter_counts"].values() if "h_genFilter_counts" in f else None,
+            # Z pT reweighting sums per region (analyzer with lib/ZptReweight.h; None for older outputs)
+            "zpt": (f["h_sumOfgenWeight_zptRegion"].values().astype(np.float64)
+                    if "h_sumOfgenWeight_zptRegion" in f else None),
+            "zpt_rw": (f["h_sumOfgenWeight_zptRegion_rw"].values().astype(np.float64)
+                       if "h_sumOfgenWeight_zptRegion_rw" in f else None),
         }
 
 
@@ -110,6 +121,9 @@ def read_sample(base, campaign):
             combined["datasets"] += sums["datasets"]
             for key in ["total", "cells", "cells_w2"]:
                 combined[key] = combined[key] + sums[key]
+            for key in ["zpt", "zpt_rw"]:
+                combined[key] = (None if combined[key] is None or sums[key] is None
+                                 else combined[key] + sums[key])
     return combined
 
 
@@ -258,7 +272,29 @@ for era in eras:
             if per_cell is not None and per_cell.sum() != 0:
                 print(f"  {name:<3}" + "".join(f"{x:8.3f}" for x in per_cell / per_cell.sum()))
 
+    # ---- Z pT reweighting: one renormalization per region for the inclusive DY (the J_p) ----
+    J_names = [f"J{p}" for p in range(N_PARTON_BINS)]
+    zpt_norm = None
+    if all(samples[n]["zpt"] is not None and samples[n]["zpt_rw"] is not None for n in J_names):
+        sigma_r = sum(sigma[n] * samples[n]["zpt"] / samples[n]["total"] for n in J_names)
+        sigma_r_rw = sum(sigma[n] * samples[n]["zpt_rw"] / samples[n]["total"] for n in J_names)
+        zpt_norm = np.divide(sigma_r, sigma_r_rw, out=np.ones_like(sigma_r), where=sigma_r_rw > 0)
+        print("\nZ pT reweighting, inclusive DY per region (other / ZR / SB):")
+        print("  sigma [pb]:            " + " / ".join(f"{x:.4f}" for x in sigma_r))
+        print("  sigma reweighted [pb]: " + " / ".join(f"{x:.4f}" for x in sigma_r_rw))
+        print("  stitch_zpt_norm:       " + " / ".join(f"{x:.5f}" for x in zpt_norm))
+        for n in J_names:
+            raw = np.divide(samples[n]["zpt_rw"], samples[n]["zpt"], out=np.ones(len(sigma_r)),
+                            where=samples[n]["zpt"] > 0)
+            print(f"  {n}: sum(w x zpt) / sum(w) per region (before the norm): "
+                  + " / ".join(f"{x:.4f}" for x in raw))
+    else:
+        print("\n[WARNING] no Z pT reweighting sums for the J samples (analyzer without lib/ZptReweight.h): "
+              "stitch_zpt_norm not written, CreateTuple leaves the DY unreweighted")
+
     for name, sums in samples.items():
         values = {"sigma": sigma[name], "sumw": sums["total"], "frac": frac[name], "eps_F": eps_F}
+        if zpt_norm is not None:
+            values["zpt_norm"] = zpt_norm
         for dataset in sums["datasets"]:
             add_stitch_values(dataset, values)

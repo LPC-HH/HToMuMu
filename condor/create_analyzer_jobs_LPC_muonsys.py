@@ -305,6 +305,9 @@ for systematic in run_muon_sys:
             + " "
             + "%s/leptonSF/%s/" % (Job_Data_DIR, year)
         )
+        # DY Z pT reweighting inputs (lib/ZptReweight.h, data/theory/README.md)
+        os.system("mkdir -p " + Job_Data_DIR + "theory")
+        os.system("cp " + "%s/theory/qt_norm_reweight_ZR.json %s/theory/qt_norm_reweight_SB.json"%(Analyzer_Data_DIR, Analyzer_Data_DIR) + " " + "%s/theory/"%(Job_Data_DIR))
         os.system("mkdir -p " + Job_Data_DIR + "pileup")
         pileup_file = "PileupReweight_Summer%s" % (year[2:])
         if not os.path.exists(Analyzer_Data_DIR + "/pileup/%s.root" % (pileup_file)):

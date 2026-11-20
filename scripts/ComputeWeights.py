@@ -67,9 +67,12 @@ list_datasets = datasets_info.keys()
      #"WWtoLNu2Q_Summer23BPix",
 #]
 
-# Pre-selection gen-mll and stitching-cell sums and generator filter counts, for the DY stitching
+# Pre-selection gen-mll and stitching-cell sums and generator filter counts, for the DY stitching, and the
+# pre-selection sums per Z pT reweighting region (lib/ZptReweight.h), for its renormalization in
+# compute_DY_stitching.py (stitch_zpt_norm)
 stitch_hist_names = ["h_sumOfgenWeight_genMll", "h_sumOfgenWeight_genMll_VBFFilter",
-                     "h_sumOfgenWeight_stitchCells", "h_sumOfgenWeight2_stitchCells"]
+                     "h_sumOfgenWeight_stitchCells", "h_sumOfgenWeight2_stitchCells",
+                     "h_sumOfgenWeight_zptRegion", "h_sumOfgenWeight_zptRegion_rw"]
 
 
 def read_one(file_path):

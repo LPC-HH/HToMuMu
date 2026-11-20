@@ -10,6 +10,8 @@
     - You can also run `bash condor_job_sender.sh` to send the jobs for all of the new datasets!
     - After the jobs have run, run ` bash analyzer_job_checker.sh` in order to see if there were errors with any of the datasets. The problematic datasets are stored in an output text file.
 7. Once all jobs have finished, compute the total SumGenWeight by running `python3 ../scripts/ComputeWeights.py <T/F>`
+    - Then run `python3 ../scripts/compute_DY_stitching.py`. Besides the stitching, it writes `stitch_zpt_norm`, the per-mass-region renormalization of the DY Z pT reweighting (`lib/ZptReweight.h`, inputs in `data/theory/`). There is one factor per region for the inclusive DY of an era, and the script prints it.
+    - CreateTuple applies the Z pT weight to the stitched DY only, folds it into `weight`, and writes `zpt_weight` and `weight_no_zpt`. Without `stitch_zpt_norm`, as for analyzer outputs from before the reweighting, it prints a warning and leaves the DY unreweighted.
 8. Change tuples version number in utils/version.py
 9. Run the tuplizer with `python3 create_ctuples_jobs.py`
     - Similar to the analyzer job generator, this also creates a json file to store the expected number of jobs as a check for later.

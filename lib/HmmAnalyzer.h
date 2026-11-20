@@ -25,6 +25,7 @@
 #include "../src/BTagCalibrationStandalone.cpp"
 #include "BTagCalibrationStandalone.h"
 #include "DYStitching.h"
+#include "ZptReweight.h"
 #include "LeptonEfficiencyCorrector.h"
 #include "MainEvent.h"
 #include "TAxis.h"
@@ -311,7 +312,8 @@ class HmmAnalyzer : public MainEvent {
     Bool_t FillChain(TChain *chain, const TString &inputFileList);
     void ComputeGenFilterEfficiency();
     void WriteGenFilterInfo();
-    void ComputeGenStitchingInfo(float &gen_mll, bool &pass_VBF_filter, float &lhe_mll, int &lhe_n_partons);
+    void ComputeGenStitchingInfo(float &gen_mll, bool &pass_VBF_filter, float &lhe_mll, int &lhe_n_partons,
+                                 float &gen_Vpt, float &gen_Vmass);
     Long64_t LoadTree(Long64_t entry);
     void getPileupHistograms();
     float getPileupWeight(int);
@@ -356,6 +358,13 @@ class HmmAnalyzer : public MainEvent {
                                            dy_stitch::N_CELLS, 0, dy_stitch::N_CELLS);
     TH1D *h_sumOfgw2_stitchCells = new TH1D("h_sumOfgenWeight2_stitchCells", "h_sumOfgenWeight2_stitchCells",
                                             dy_stitch::N_CELLS, 0, dy_stitch::N_CELLS);
+    // Pre-selection sum of genWeight, and of genWeight x zpt_weight, per Z pT reweighting region (lib/ZptReweight.h):
+    // the shape-only renormalization of the Z pT weight (scripts/compute_DY_stitching.py -> stitch_zpt_norm)
+    TH1D *h_sumOfgw_zptRegion = new TH1D("h_sumOfgenWeight_zptRegion", "h_sumOfgenWeight_zptRegion",
+                                         zpt_rw::N_REGIONS, 0, zpt_rw::N_REGIONS);
+    TH1D *h_sumOfgw_zptRegion_rw = new TH1D("h_sumOfgenWeight_zptRegion_rw", "h_sumOfgenWeight_zptRegion_rw",
+                                            zpt_rw::N_REGIONS, 0, zpt_rw::N_REGIONS);
+    std::unique_ptr<zpt_rw::Reweighter> zpt_reweighter; /**< DYTurbo qT reweighting, MC only */
     TH1D *h_pileup_nTrue = new TH1D("h_pileup_nTrue", "h_pileup_nTrue", 99, 0, 99);
     TH1D *h_sumOfLHEPdfWeight =
         new TH1D(
@@ -673,6 +682,10 @@ class HmmAnalyzer : public MainEvent {
     float t_gen_mll; /**< mass of the two hard-process gen muons */
     float t_LHE_mll; /**< mass of the two LHE muons (FLOAT_NULL_VALUE if not a mumu event or no LHE info) */
     int t_LHE_NpNLO; /**< Born parton multiplicity of the FxFx samples (INT_NULL_VALUE if no LHE info) */
+    float t_gen_Vpt;    /**< pT of the hard-process opposite-sign same-flavour lepton pair (any flavour) */
+    float t_gen_Vmass;  /**< mass of the same pair */
+    float t_zpt_weight; /**< DY qT reweighting (lib/ZptReweight.h), not renormalized; 1 if no gen boson. CreateTuple
+                             applies it to the DY only */
 
 };
 
@@ -749,6 +762,7 @@ HmmAnalyzer::HmmAnalyzer(const TString &inputFileList, const char *outFileName,
 
     if (!is_data) {
         getPileupHistograms();
+        zpt_reweighter = std::make_unique<zpt_rw::Reweighter>();
     }
 
     TChain *tree = new TChain("Events");
@@ -1104,6 +1118,8 @@ HmmAnalyzer::~HmmAnalyzer() {
     h_sumOfgw_genMll_VBFFilter->Write();
     h_sumOfgw_stitchCells->Write();
     h_sumOfgw2_stitchCells->Write();
+    h_sumOfgw_zptRegion->Write();
+    h_sumOfgw_zptRegion_rw->Write();
     if (h_sumOfLHEPdfWeight != nullptr)
         h_sumOfLHEPdfWeight->Write();
     if (h_sumOfLHEScaleWeight != nullptr)
@@ -1435,6 +1451,9 @@ void HmmAnalyzer::clearTreeVectors() {
     t_gen_mll = FLOAT_NULL_VALUE;
     t_LHE_mll = FLOAT_NULL_VALUE;
     t_LHE_NpNLO = INT_NULL_VALUE;
+    t_gen_Vpt = FLOAT_NULL_VALUE;
+    t_gen_Vmass = FLOAT_NULL_VALUE;
+    t_zpt_weight = 1.;
 }
 
 void HmmAnalyzer::BookTreeBranches() {
@@ -1977,5 +1996,8 @@ void HmmAnalyzer::BookTreeBranches() {
     tree->Branch("t_gen_mll", &t_gen_mll, "t_gen_mll/F");
     tree->Branch("t_LHE_mll", &t_LHE_mll, "t_LHE_mll/F");
     tree->Branch("t_LHE_NpNLO", &t_LHE_NpNLO, "t_LHE_NpNLO/I");
+    tree->Branch("t_gen_Vpt", &t_gen_Vpt, "t_gen_Vpt/F");
+    tree->Branch("t_gen_Vmass", &t_gen_Vmass, "t_gen_Vmass/F");
+    tree->Branch("t_zpt_weight", &t_zpt_weight, "t_zpt_weight/F");
 }
 #endif // #ifdef HmmAnalyzer_cxx

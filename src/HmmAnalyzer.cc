@@ -90,9 +90,13 @@ int main(int argc, char *argv[]) {
 }
 
 void HmmAnalyzer::ComputeGenStitchingInfo(float &gen_mll, bool &pass_VBF_filter, float &lhe_mll,
-                                          int &lhe_n_partons) {
+                                          int &lhe_n_partons, float &gen_Vpt, float &gen_Vmass) {
     // pass_VBF_filter: emulation of VBFGenJetFilter with leadJetsNoLepMass
+    // gen_Vpt / gen_Vmass: the hard-process opposite-sign same-flavour lepton pair of any flavour (the Z/gamma* of
+    // DY, also for its ee and tautau events), for the Z pT reweighting (lib/ZptReweight.h)
     gen_mll = FLOAT_NULL_VALUE;
+    gen_Vpt = FLOAT_NULL_VALUE;
+    gen_Vmass = FLOAT_NULL_VALUE;
     pass_VBF_filter = false;
     lhe_mll = FLOAT_NULL_VALUE;
     lhe_n_partons = INT_NULL_VALUE;
@@ -121,6 +125,10 @@ void HmmAnalyzer::ComputeGenStitchingInfo(float &gen_mll, bool &pass_VBF_filter,
     TLorentzVector lepVec, muPlus, muMinus;
     bool foundMuPlus = false;
     bool foundMuMinus = false;
+    // first hard-process lepton / anti-lepton per flavour, index 0/1/2 = e/mu/tau
+    TLorentzVector lepMinus[3], lepPlus[3];
+    bool foundLepMinus[3] = {false, false, false};
+    bool foundLepPlus[3] = {false, false, false};
     for (int i = 0; i < nGenPart; i++) {
         int absPdgId = abs(GenPart_pdgId[i]);
         bool isHardProcess = GenPart_statusFlags[i] & (1 << 7);
@@ -135,9 +143,25 @@ void HmmAnalyzer::ComputeGenStitchingInfo(float &gen_mll, bool &pass_VBF_filter,
             muMinus = lepVec;
             foundMuMinus = true;
         }
+        const int flavour = (absPdgId - 11) / 2;
+        if (GenPart_pdgId[i] > 0 && !foundLepMinus[flavour]) {
+            lepMinus[flavour] = lepVec;
+            foundLepMinus[flavour] = true;
+        } else if (GenPart_pdgId[i] < 0 && !foundLepPlus[flavour]) {
+            lepPlus[flavour] = lepVec;
+            foundLepPlus[flavour] = true;
+        }
     }
     if (foundMuPlus && foundMuMinus)
         gen_mll = (muPlus + muMinus).M();
+    for (int flavour : {1, 0, 2}) {  // mu first, then e, then tau
+        if (foundLepMinus[flavour] && foundLepPlus[flavour]) {
+            const TLorentzVector boson = lepMinus[flavour] + lepPlus[flavour];
+            gen_Vpt = boson.Pt();
+            gen_Vmass = boson.M();
+            break;
+        }
+    }
 
     std::vector<TLorentzVector> filteredGenJets;
     TLorentzVector jetVec;
@@ -309,8 +333,15 @@ void HmmAnalyzer::EventLoop() {
 
             // Before any selection, so the stitching sums cover all generated events
             bool pass_VBF_filter;
-            ComputeGenStitchingInfo(t_gen_mll, pass_VBF_filter, t_LHE_mll, t_LHE_NpNLO);
+            ComputeGenStitchingInfo(t_gen_mll, pass_VBF_filter, t_LHE_mll, t_LHE_NpNLO, t_gen_Vpt, t_gen_Vmass);
             t_pass_VBF_filter = pass_VBF_filter;
+            // Z pT reweighting: evaluated for every MC event (CreateTuple applies it to the DY only); the sums per
+            // region over all generated events give its shape-only renormalization
+            const double zpt_weight = zpt_reweighter->Weight(t_gen_Vpt, t_gen_Vmass);
+            t_zpt_weight = zpt_weight;
+            const int zpt_region = zpt_rw::Region(t_gen_Vmass);
+            h_sumOfgw_zptRegion->Fill(zpt_region + 0.5, genWeight);
+            h_sumOfgw_zptRegion_rw->Fill(zpt_region + 0.5, genWeight * zpt_weight);
             float stitch_mll = has_LHE_info ? t_LHE_mll : t_gen_mll;
             h_sumOfgw_genMll->Fill(stitch_mll, genWeight);
             if (t_pass_VBF_filter)
