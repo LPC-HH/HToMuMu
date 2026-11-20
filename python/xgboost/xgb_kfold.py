@@ -230,6 +230,33 @@ def subsample(rows, max_rows=None, seed=0):
     return rows[np.sort(pick)]
 
 
+def stratified_subsample(strata, y, max_rows, seed=0):
+    """At most max_rows rows for the Optuna development sample, as (rows, factor, report).
+    Signal is kept whole when it fits in half the budget (else thinned to half), background
+    fills the rest"""
+    strata, y = np.asarray(strata), np.asarray(y)
+    if not max_rows or len(y) <= max_rows:
+        return np.arange(len(y)), np.ones(len(y)), {}
+    n_sig = int((y == 1).sum())
+    keep_sig = min(n_sig, max_rows // 2)
+    budget = {1: keep_sig, 0: int(max_rows) - keep_sig}
+    rng = np.random.default_rng(seed)
+    rows, factor, report = [], [], {}
+    for cls in (0, 1):
+        n_cls = int((y == cls).sum())
+        p = min(1.0, budget[cls] / n_cls) if n_cls else 1.0
+        for s in np.unique(strata[y == cls]):
+            members = np.flatnonzero((strata == s) & (y == cls))
+            n_keep = max(1, int(round(p * len(members))))
+            pick = members if n_keep >= len(members) else rng.choice(members, size=n_keep, replace=False)
+            rows.append(pick)
+            factor.append(np.full(len(pick), len(members) / len(pick)))
+            report[(cls, int(s))] = (len(members), len(pick))
+    rows, factor = np.concatenate(rows), np.concatenate(factor)
+    order = np.argsort(rows)
+    return rows[order], factor[order], report
+
+
 # ---------------------------------------------------------------------------
 # Training helpers
 # ---------------------------------------------------------------------------
@@ -295,6 +322,15 @@ ASIMOV_SIGNAL_FRACTIONS = [0.02, 0.05, 0.10, 0.20, 0.35, 0.50, 0.70, 1.00]
 ASIMOV_MASS_BIN = 2.0  # GeV, over TRAIN_REGION
 ASIMOV_CHECKPOINT_EVERY = 50  # boosting rounds between Asimov evaluations in the CV
 ASIMOV_EARLY_STOPPING_ROUNDS = 200  # logloss early stopping is only a safety cap with asimov
+# a CV fold stops when its Asimov Z has not improved for this many rounds (None: never)
+ASIMOV_PATIENCE_ROUNDS = 500
+# build the CV fold matrices once per Optuna study and reuse them in every trial
+CACHE_CV_MATRICES = True
+# Optuna pruning: after each CV fold, a trial whose running mean is below this percentile of the
+# earlier trials at the same fold stops (after PRUNER_STARTUP_TRIALS finished trials)
+PRUNER_PERCENTILE = 33.0
+PRUNER_STARTUP_TRIALS = 10
+PRUNER_WARMUP_FOLDS = 0
 
 
 def asimov_z(s, b, sigma_b):
@@ -873,10 +909,104 @@ def single_sample_info(p, y, mass, w, n_rounds, scale, objective):
 # ---------------------------------------------------------------------------
 # Cross-validation and Optuna (development stage)
 # ---------------------------------------------------------------------------
+def _native_params(params):
+    """XGBClassifier-style parameters -> xgb.train parameters (same model)."""
+    out = {k: v for k, v in params.items() if k not in ("missing", "n_estimators", "n_jobs")}
+    if "n_jobs" in params:
+        out["nthread"] = params["n_jobs"]
+    out.setdefault("tree_method", "hist")
+    return out
+
+
+def build_cv_fold_matrices(x, y, w, tr, va, names, do_standardization, standardizer):
+    """The XGBoost matrices of one CV fold: the training QuantileDMatrix (what XGBClassifier.fit
+    builds from numpy), the validation DMatrix and a 16-row slice
+    of it (to recover the base margin). Built once per study with CACHE_CV_MATRICES."""
+    import xgboost as xgb
+    t0 = time.time()
+    mean_map, std_map = standardizer
+    x_tr = preprocess_features(x[tr], names, do_standardization, mean_map, std_map)
+    dtrain = xgb.QuantileDMatrix(x_tr, label=y[tr], weight=w[tr], missing=np.nan, feature_names=list(names))
+    del x_tr
+    x_va = preprocess_features(x[va], names, do_standardization, mean_map, std_map)
+    dval = xgb.DMatrix(x_va, label=y[va], weight=w[va], missing=np.nan, feature_names=list(names))
+    del x_va
+    dhead = dval.slice(np.arange(min(16, len(va))))
+    gc.collect()
+    return dict(dtrain=dtrain, dval=dval, dhead=dhead, seconds=time.time() - t0)
+
+
+def build_cv_matrices(x, y, w, cv_folds, standardizers, names, do_standardization):
+    t0 = time.time()
+    matrices = [build_cv_fold_matrices(x, y, w, tr, va, names, do_standardization, std)
+                for (tr, va), std in zip(cv_folds, standardizers)]
+    print(f"[TIME ] built the {len(matrices)} CV fold matrices once for the whole study in "
+          f"{time.time() - t0:.1f} s" + (f" | {gpu_memory_note()}" if gpu_memory_note() else ""), flush=True)
+    return matrices
+
+
+def make_asimov_callback(dval, dhead, y_va, m_va, w_va, metric, scale, checkpoint_every, patience,
+                         tight_fit):
+    """XGBoost callback computing the held-out summaries (heldout_summary: Asimov Z, trial-plot
+    histograms, sculpting) every `checkpoint_every` rounds and at the last trained round, on a
+    running margin (each checkpoint only predicts the trees added since the previous one). It
+    stops the training when the Z has not improved for `patience` rounds (None: never)."""
+    import xgboost as xgb
+    sculpt_prep = sculpt_prepare(y_va, m_va, w_va)
+
+    class AsimovCheckpoints(xgb.callback.TrainingCallback):
+        def __init__(self):
+            super().__init__()
+            self.margin = np.zeros(dval.num_row())  # trees only, without the base margin
+            self.r_prev, self.base = 0, None
+            self.best_z, self.best_round, self.seconds, self.stopped = -np.inf, 0, 0.0, False
+            self.results = {key: {} for key in ("z_curve", "z_categories", "score_hists", "cat_edges_prob",
+                                                "tight_fit", "sculpt")}
+
+        def _base_margin(self, model):
+            # every prediction includes the base margin once: m(0,1) + m(1,2) - m(0,2) = base
+            if model.num_boosted_rounds() < 2:
+                return 0.0  # the Z only depends on the ranking; the base only shifts the plots' probability
+            m = [model.predict(dhead, output_margin=True, iteration_range=r) for r in ((0, 1), (1, 2), (0, 2))]
+            return float(np.mean(m[0].astype(np.float64) + m[1] - m[2]))
+
+        def checkpoint(self, model, r):
+            t0 = time.time()
+            if self.base is None:
+                self.base = self._base_margin(model)
+            self.margin += model.predict(dval, output_margin=True, iteration_range=(self.r_prev, r)) - self.base
+            self.r_prev = r
+            summary = heldout_summary(self.margin, self.base, y_va, m_va, w_va, sculpt_prep, scale, metric,
+                                      tight_fit=tight_fit)
+            for key, value in summary.items():
+                self.results[key][r] = value
+            if summary["z_curve"] > self.best_z:
+                self.best_z, self.best_round = summary["z_curve"], r
+            self.seconds += time.time() - t0
+
+        def after_iteration(self, model, epoch, evals_log):
+            n = epoch + 1
+            if n % checkpoint_every:
+                return False
+            self.checkpoint(model, n)
+            if patience and n - self.best_round >= patience:
+                self.stopped = True
+                return True
+            return False
+
+        def after_training(self, model):
+            trained = model.num_boosted_rounds()
+            if trained > self.r_prev:
+                self.checkpoint(model, trained)
+            return model
+
+    return AsimovCheckpoints()
+
+
 def cross_validate(x, y, w, cv_folds, standardizers, names, do_standardization, params,
                    n_estimators, early_stopping_rounds, trial=None, label="", progress_every=0,
                    objective="auc_w", asimov_inputs=None, checkpoint_every=ASIMOV_CHECKPOINT_EVERY,
-                   asimov_scale=1.0, trial_callback=None):
+                   asimov_scale=1.0, trial_callback=None, matrices=None, asimov_patience=ASIMOV_PATIENCE_ROUNDS):
     """Train on N_FOLDS-1 folds, early-stop on the remaining one, for every fold.
     Returns one dict per fold (validation metrics + best_iteration). With objective="asimov"
     (binned_asimov_z) or "asimov_fit" (binned_asimov_z_fit) each fold also gets `z_curve`: the
@@ -886,60 +1016,62 @@ def cross_validate(x, y, w, cv_folds, standardizers, names, do_standardization, 
     trial plots: `score_hists` ({0: bkg, 1: signal} physics-weighted histograms of the
     probability on SCORE_HIST_BINS bins), `cat_edges_prob` (inner category edges in probability)
     and, with asimov_fit, `tight_fit` (the tightest category's fit and background histogram).
+    With asimov, a fold also stops when its Z has not improved for `asimov_patience` rounds.
+    `matrices`: build_cv_matrices output, reused across trials (None: built per fold here).
     trial_callback(infos, pruned_after) runs with the folds done right before a trial is pruned."""
-    params = dict(params, eval_metric=["logloss"])  # only the early-stopping metric is needed
+    import xgboost as xgb
+    params = _native_params(dict(params, eval_metric=["logloss"]))  # only the early-stopping metric is needed
     infos = []
-    for k, ((tr, va), (mean_map, std_map)) in enumerate(zip(cv_folds, standardizers)):
-        x_tr = preprocess_features(x[tr], names, do_standardization, mean_map, std_map)
-        x_va = preprocess_features(x[va], names, do_standardization, mean_map, std_map)
-        model = _fit(params, n_estimators, x_tr, y[tr], w[tr], [(x_va, y[va], w[va])],
-                     f"CV fold {k}", progress_every, early_stopping_rounds=early_stopping_rounds)
-        n_trees = int(model.best_iteration) + 1
-        info = weighted_metrics(y[va], predict(model, x_va, n_trees), w[va])
-        info.update(fold=k, best_iteration=n_trees - 1)
+    for k, ((tr, va), standardizer) in enumerate(zip(cv_folds, standardizers)):
+        t_fold = time.time()
+        fm = matrices[k] if matrices is not None else build_cv_fold_matrices(
+            x, y, w, tr, va, names, do_standardization, standardizer)
+        build_seconds = 0.0 if matrices is not None else fm["seconds"]
+        y_va, w_va = y[va], w[va]
+        callbacks = [make_progress_callback(f"{label}CV fold {k}", n_estimators, progress_every)] if progress_every else []
+        asimov_cb = None
         if is_asimov(objective):
             mass, w_phys = asimov_inputs
             metric = binned_asimov_z_fit if objective == "asimov_fit" else binned_asimov_z
-            trained = int(model.get_booster().num_boosted_rounds())
-            rounds = list(range(checkpoint_every, trained + 1, checkpoint_every))
-            if not rounds or rounds[-1] != trained:
-                rounds.append(trained)
-            info["z_curve"], info["z_categories"] = {}, {}
-            info["score_hists"], info["cat_edges_prob"], info["tight_fit"], info["sculpt"] = {}, {}, {}, {}
-            t_asimov = time.time()
-            y_va, m_va, w_va = y[va], mass[va], w_phys[va]
-            sculpt_prep = sculpt_prepare(y_va, m_va, w_va)
-            # Running raw margin (trees only, base_margin = 0): each checkpoint only adds the trees
-            # since the previous one, so all checkpoints together cost one full prediction. Z only
-            # depends on the score ranking (categories are signal quantiles), which the margin
-            # shares with the probability.
-            margin, zero, r_prev = np.zeros(len(va)), np.zeros(len(va)), 0
-            base_logit = None
-            for r in rounds:
-                margin += model.predict(x_va, output_margin=True, base_margin=zero, iteration_range=(r_prev, r))
-                r_prev = r
-                if base_logit is None:  # the model's base margin, for the probability of the trial plots
-                    head = slice(0, min(16, len(va)))
-                    full = model.predict(x_va[head], output_margin=True, iteration_range=(0, r))
-                    base_logit = float(np.mean(full - margin[head]))
-                summary = heldout_summary(margin, base_logit, y_va, m_va, w_va, sculpt_prep, asimov_scale,
-                                          metric, tight_fit=objective == "asimov_fit")
-                for key, value in summary.items():
-                    info[key][r] = value
-            info["asimov_seconds"] = time.time() - t_asimov
-            best_round = max(info["z_curve"], key=info["z_curve"].get)
-            info.update(trained_rounds=trained, best_z=info["z_curve"][best_round], best_z_round=best_round)
+            asimov_cb = make_asimov_callback(fm["dval"], fm["dhead"], y_va, mass[va], w_phys[va], metric,
+                                             asimov_scale, checkpoint_every, asimov_patience,
+                                             tight_fit=objective == "asimov_fit")
+            callbacks.append(asimov_cb)
+        t_train = time.time()
+        booster = xgb.train(params, fm["dtrain"], num_boost_round=int(n_estimators),
+                            evals=[(fm["dval"], "validation")], early_stopping_rounds=early_stopping_rounds,
+                            callbacks=callbacks or None, verbose_eval=False)
+        trained = int(booster.num_boosted_rounds())
+        n_trees = int(getattr(booster, "best_iteration", trained - 1)) + 1
+        info = weighted_metrics(y_va, booster.predict(fm["dval"], iteration_range=(0, n_trees)), w_va)
+        boost_seconds = time.time() - t_train - (asimov_cb.seconds if asimov_cb else 0.0)
+        info.update(fold=k, best_iteration=n_trees - 1)
+        if asimov_cb is not None and asimov_cb.stopped:
+            stop = f"Asimov Z flat for {asimov_patience} rounds"
+        elif trained < int(n_estimators):
+            stop = f"logloss early stopping ({early_stopping_rounds})"
+        else:
+            stop = "max rounds"
+        if asimov_cb is not None:
+            info.update(asimov_cb.results)
+            info["asimov_seconds"] = asimov_cb.seconds
+            info.update(trained_rounds=trained, best_z=asimov_cb.best_z, best_z_round=asimov_cb.best_round)
+        info["stop_reason"] = stop
         infos.append(info)
-        # XGBoost's sklearn wrapper holds reference cycles: free the GPU memory before the next fit
-        del x_tr, x_va, model
+        del booster, callbacks, asimov_cb
+        if matrices is None:
+            del fm
         gc.collect()
         note = gpu_memory_note()
         asimov_note = (f", best Asimov Z {info['best_z']:.4f} at round {info['best_z_round']} of "
-                       f"{info['trained_rounds']} (Asimov evaluation {info['asimov_seconds']:.1f} s)"
-                       if is_asimov(objective) else "")
+                       f"{info['trained_rounds']}" if is_asimov(objective) else "")
         print(f"[CV   ] {label}fold {k}: {n_trees} trees, weighted validation AUC "
-              f"{info['auc_w']:.5f}, logloss {info['logloss_w']:.5f}{asimov_note}"
+              f"{info['auc_w']:.5f}, logloss {info['logloss_w']:.5f}{asimov_note}; stopped by {stop}"
               + (f" | {note}" if note else ""), flush=True)
+        print(f"[TIME ] {label}fold {k}: {time.time() - t_fold:.1f} s = matrices {build_seconds:.1f} s"
+              + (" (cached)" if matrices is not None else "") + f" + boosting {boost_seconds:.1f} s"
+              + (f" + Asimov evaluation {info['asimov_seconds']:.1f} s" if is_asimov(objective) else ""),
+              flush=True)
         if trial is not None:
             import optuna
             value = (mean_z_curve(infos)[1] if is_asimov(objective)
@@ -1009,6 +1141,18 @@ def best_feasible_trial(study):
     return max(pool, key=lambda t: t.value), bool(feasible)
 
 
+def make_pruner():
+    import optuna
+    return optuna.pruners.PercentilePruner(PRUNER_PERCENTILE, n_startup_trials=PRUNER_STARTUP_TRIALS,
+                                           n_warmup_steps=PRUNER_WARMUP_FOLDS)
+
+
+def pruner_json():
+    """The pruning setup, recorded in the study's `setup` (a resumed study must use the same)."""
+    return dict(kind="percentile", percentile=PRUNER_PERCENTILE, n_startup_trials=PRUNER_STARTUP_TRIALS,
+                n_warmup_folds=PRUNER_WARMUP_FOLDS)
+
+
 def _setup_differences(stored, current):
     """Keys whose (JSON-normalized) values differ between two setup dicts."""
     a, b = json.loads(json.dumps(stored or {}, default=float)), json.loads(json.dumps(current or {}, default=float))
@@ -1019,7 +1163,8 @@ def run_optuna_cv(x, y, w, cv_folds, names, do_standardization, n_trials, seed, 
                   n_estimators, early_stopping_rounds, progress_every=0, objective="auc_w",
                   asimov_inputs=None, asimov_scale=1.0, checkpoint_every=ASIMOV_CHECKPOINT_EVERY,
                   trial_callback=None, timeout=None, storage=None, study_name=None, resume=False,
-                  setup=None, on_trial_done=None):
+                  setup=None, on_trial_done=None, cache_matrices=CACHE_CV_MATRICES,
+                  asimov_patience=ASIMOV_PATIENCE_ROUNDS):
     """Optuna study maximizing the mean weighted validation AUC over the CV folds, or with
     objective="asimov"/"asimov_fit" the best fold-averaged binned Asimov Z over the boosting
     checkpoints, subject to the mass-sculpting constraint (combine_sculpt; infeasible trials are
@@ -1051,7 +1196,7 @@ def run_optuna_cv(x, y, w, cv_folds, names, do_standardization, n_trials, seed, 
             kwargs.pop("constraints_func")
             return optuna.samplers.TPESampler(**kwargs)
 
-    pruner = optuna.pruners.MedianPruner(n_startup_trials=10, n_warmup_steps=1)
+    pruner = make_pruner()
     n_remaining = n_trials
     if resume:
         probe = optuna.load_study(study_name=study_name, storage=storage)
@@ -1082,8 +1227,13 @@ def run_optuna_cv(x, y, w, cv_folds, names, do_standardization, n_trials, seed, 
     standardizers = [fit_standardizer(x[tr], names) if do_standardization else ({}, {})
                      for tr, _ in cv_folds]
     trial_progress = max(1, n_estimators // 10) if progress_every else 0
+    matrices = (build_cv_matrices(x, y, w, cv_folds, standardizers, names, do_standardization)
+                if cache_matrices and n_remaining > 0 else None)
     print(f"[OPTUNA] {n_remaining} trials x {N_FOLDS} folds, up to {n_estimators} rounds (early "
-          f"stopping {early_stopping_rounds}), objective {objective}, device={device}"
+          f"stopping {early_stopping_rounds}"
+          + (f", Asimov patience {asimov_patience}" if asimov and asimov_patience else "")
+          + f"), objective {objective}, device={device}, pruning below the {PRUNER_PERCENTILE:g}th percentile "
+          f"after {PRUNER_STARTUP_TRIALS} trials, CV matrices {'cached' if matrices is not None else 'rebuilt per fold'}"
           + (f", timeout {timeout / 3600:.2f} h" if timeout else "")
           + (f", storage {storage}" if storage else "")
           + f" | {gpu_memory_note() or 'no GPU readout'}", flush=True)
@@ -1110,7 +1260,8 @@ def run_optuna_cv(x, y, w, cv_folds, names, do_standardization, n_trials, seed, 
                                n_estimators, early_stopping_rounds, trial=trial, label=tag,
                                progress_every=trial_progress, objective=objective,
                                asimov_inputs=asimov_inputs, asimov_scale=asimov_scale,
-                               checkpoint_every=checkpoint_every, trial_callback=report)
+                               checkpoint_every=checkpoint_every, trial_callback=report,
+                               matrices=matrices, asimov_patience=asimov_patience)
         for key in ("auc_w", "logloss_w", "best_iteration"):
             trial.set_user_attr(f"fold_{key}", [i[key] for i in infos])
         if asimov:
