@@ -55,8 +55,19 @@ get_expected_jobs_from_jdl() {
     # Examples:
     # Queue
     # Queue 10
-    # Queue JOBID from something.txt
-    if [[ "$queue_line" =~ ^[Qq]ueue[[:space:]]+([0-9]+)$ ]]; then
+    # Queue I from (1 ... N)   <- create_analyzer_jobs_LPC.py; jobs may be removed from the list (e.g. lost inputs)
+    if [[ "$queue_line" =~ ^[[:space:]]*[Qq]ueue[[:space:]]+I[[:space:]]+from[[:space:]]*\( ]]; then
+        # Count the job numbers in the list (same parser as analyzer_job_checker_rerun.sh)
+        awk '
+            /^[[:space:]]*Queue[[:space:]]+I[[:space:]]+from[[:space:]]*\(/ {
+                in_queue = 1; sub(/^.*\(/, ""); sub(/\).*/, ""); if ($0 != "") print $0; next
+            }
+            in_queue == 1 {
+                if ($0 ~ /\)/) { sub(/\).*/, ""); if ($0 != "") print $0; in_queue = 0; next }
+                if ($0 != "") print $0
+            }
+        ' "$jdl_file" | awk '{print $1}' | grep -cE '^[0-9]+$'
+    elif [[ "$queue_line" =~ ^[Qq]ueue[[:space:]]+([0-9]+)$ ]]; then
         echo "${BASH_REMATCH[1]}"
     elif [[ "$queue_line" =~ ^[Qq]ueue$ ]]; then
         echo 1
@@ -111,6 +122,17 @@ for block in "$DIR"/*; do
     ###############################
     for file in "$block"/err/*.err; do
         [[ -e "$file" ]] || continue
+
+        # Corrupted input reads (e.g. R__unzipLZMA): ROOT fills the bad entries with garbage and the job still
+        # exits 0 with an output file, and the error lines are not necessarily the last line of the .err
+        n_corrupt=$(grep -cE 'R__unzip|ReadBasketBuffers|TBranch::GetBasket' "$file")
+        if (( n_corrupt > 0 )); then
+            bad_inputs=$(grep -oE 'File: [^ ,]+\.root' "$file" | sed 's#.*/##' | sort -u | tr '\n' ' ')
+            blockError=true
+            ((fail_count++))
+            echo "$file has $n_corrupt corrupted-read errors, bad input: ${bad_inputs:-unknown}" >> "$OUTFILE"
+            continue
+        fi
 
         last_line=$(tail -n 1 "$file")
 

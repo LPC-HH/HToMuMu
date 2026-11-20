@@ -5,6 +5,7 @@
 #include "Run3Constants.h"
 #include "TF1.h"
 #include "Utils.h"
+#include "DYStitching.h"
 #include <TChain.h>
 #include <TFile.h>
 #include <TH1F.h>
@@ -15,11 +16,18 @@
 #include <cmath>
 #include <algorithm>
 #include <iostream>
+#include <memory>
 #include <map>
 #include <math.h>
 #include <stdexcept>
 #include <string>
 #include <vector>
+
+// All-aMC@NLO DY stitching (lib/DYStitching.h): jet-binned 0J/1J/2J MLL-50 everywhere, combined with
+// DYto2Mu-2Jets_105to160 (+ VBFFilter where the emulated filter passes) inside LHE mll [105, 160). The
+// cross sections and per-cell fractions are written into the SumGenWeight.root files by
+// scripts/compute_DY_stitching.py; any dataset that has them gets stitch_weight = fraction of its cell.
+constexpr bool DO_DY_STITCHING = true;
 
 std::map<TString, int> MC_CAMPAIGN_MAP = {{"2022", 1}, {"2022EE", 2},
                                           {"2023", 3}, {"2023BPix", 4},
@@ -96,6 +104,8 @@ class CreateTuple {
     static std::string JetPtBranchName(const std::string &jet_syst);
     static std::string JetMassBranchName(const std::string &jet_pt_branch);
     bool passesJetPtSelection(size_t index) const;
+    void setupDYStitching(const TString &channel, float scale_luminosity);
+    bool passesDYStitching();
 
   private:
     TChain *tree_input; /**< Pointer to input TChain. */
@@ -108,7 +118,7 @@ class CreateTuple {
     long double
         gen_weight_sum;     /**< Sum of generator weights for normalization. */
     const float luminosity; /**< Luminosity of the era. */
-    const float cross_section; /**< Cross-section of the process. */
+    float cross_section; /**< Cross-section of the process (overridden by the DY stitching). */
     TString input_name;        /**< Path of the input file. */
     TString weight_name;        /**< Path of the weight file. */
     TString output_name;       /**< Name of the output file. */
@@ -154,6 +164,8 @@ class CreateTuple {
         diMuon_bsConstrainedPt, diMuon_phi, diMuon_eta;
     //diMuon sync variables
     float diMuon_bsConstrainedPt_nanoAOD;
+    /** Bare (no FSR recovery) dimuon; the un-suffixed bsConstrained dimuon variables are FSR-dressed */
+    float diMuon_bsConstrainedPt_noFSR, diMuon_bsConstrainedMass_noFSR;
     /** Read MET variables **/
     float PuppiMET_phi, PuppiMET_pt, PuppiMET_sumEt;
 
@@ -163,9 +175,19 @@ class CreateTuple {
     std::vector<float> *mu_pt, *mu_bsConstrainedPt, *mu_bsConstrainedPt_nanoAOD,
         *mu_phi, *mu_eta, *mu_dz, *mu_dzErr;
     std::vector<float> *mu_ptErr, *mu_bsConstrainedPtErr;
+    std::vector<float> *mu_bsConstrainedPt_noFSR; // bare corrected pT (mu_bsConstrainedPt is FSR-dressed)
     //muon sync variables
     std::vector<float> *mu_RelIso04; 
     std::vector<bool> *mu_looseID, *mu_mediumID, *mu_tightID;
+
+    /** FSR recovery (baseline, from the analyzer): dressed (muon + chosen photon) mu1/mu2 direction and mass.
+     *  The dressed pT is mu_bsConstrainedPt; eta/phi/mass are only stored for the selected pair. */
+    float mu1_dressed_eta, mu1_dressed_phi, mu1_dressed_mass;
+    float mu2_dressed_eta, mu2_dressed_phi, mu2_dressed_mass;
+    bool mu1_hasFSR, mu2_hasFSR;
+    int diMuon_nFSR;
+    float mu1_fsrPhoton_pt, mu1_fsrPhoton_dR, mu2_fsrPhoton_pt, mu2_fsrPhoton_dR;
+    float mu1_RelIso04_FSR, mu2_RelIso04_FSR;
 
     /** Read electron variables */
     std::vector<float> *elec_pt;
@@ -196,6 +218,17 @@ class CreateTuple {
     //selection variables
     Bool_t pass_muon_trigger_match, pass_jet_veto;
 
+    // DY stitching
+    bool dy_stitch = false; /**< true if the weight file has the stitch_* values of this dataset */
+    std::vector<double> dy_stitch_frac; /**< fraction of this dataset per stitching cell (0: event dropped) */
+    float lhe_mll = -999.f;
+    Int_t lhe_n_partons;
+    Bool_t pass_VBF_filter;
+    /** Mass of the two hard-process (pre-FSR) gen muons, from the analyzer (MC only; -999 for data / old tuples) */
+    float gen_mll = -999.f;
+    double stitch_weight;
+    Int_t stitch_cell;
+
     //std::vector<Bool_t> *pass_valid_jet, *pass_jet_seperation;
 
     /** New Event variables */
@@ -219,7 +252,7 @@ class CreateTuple {
         mu2_bsConstrainedPt_mass_ratio, mu1_eta, mu2_eta, phi_CS, cos_theta_CS;
     float mu1_pt, mu2_pt, mu1_bsConstrainedPt_nanoAOD,
         mu2_bsConstrainedPt_nanoAOD, mu1_bsConstrainedPt,
-        mu2_bsConstrainedPt, mu1_ptErr, mu2_ptErr, mu1_bsConstrainedPtErr,
+        mu2_bsConstrainedPt, mu1_bsConstrainedPt_noFSR, mu2_bsConstrainedPt_noFSR, mu1_ptErr, mu2_ptErr, mu1_bsConstrainedPtErr,
         mu2_bsConstrainedPtErr, mu1_dz, mu2_dz, mu1_dzErr, mu2_dzErr;
 
     //sync muon variables
@@ -325,12 +358,14 @@ CreateTuple::CreateTuple(TString input, TString weightFile, TString output, TStr
     std::cout << "Luminosity: " << luminosity
               << ", cross section: " << cross_section << std::endl;
     if (!is_data) {
-        gen_weight_sum = GetGenWeightSum(weight_name);
-        if(era == "2025"){
-            scale_factor = GetScaleFactor(luminosity + LUMINOSITY.at("2026"), cross_section, gen_weight_sum);
-        }
-        else{
-            scale_factor = GetScaleFactor(luminosity, cross_section, gen_weight_sum);
+        // Sum over the dataset and all its extensions (hadded together, like the DY stitch_sumw)
+        GetGenWeightSum(weight_name);  // prints this dataset's own sum
+        gen_weight_sum = GetSingleBinValue(weight_name, "h_sumOfgenWeight_sample");
+        std::cout << "Sum of gen weights over the dataset and its extensions (used): " << gen_weight_sum << std::endl;
+        float scale_luminosity = (era == "2025") ? luminosity + LUMINOSITY.at("2026") : luminosity;
+        scale_factor = GetScaleFactor(scale_luminosity, cross_section, gen_weight_sum);
+        if (DO_DY_STITCHING) {
+            setupDYStitching(channel, scale_luminosity);
         }
         // is_data_int = 0;
         //scale_factor = GetScaleFactor(luminosity, cross_section, gen_weight_sum);
@@ -360,6 +395,7 @@ CreateTuple::CreateTuple(TString input, TString weightFile, TString output, TStr
     mu_looseID = nullptr;
     mu_mediumID = nullptr;
     mu_tightID = nullptr;
+    mu_bsConstrainedPt_noFSR = nullptr;
     elec_pt = nullptr;
     lhe_pdf_weight = nullptr;
     lhe_scale_weight = nullptr;
@@ -470,6 +506,8 @@ void CreateTuple::setBranchesAddressesOutput() {
     tree_output->Branch("weight", &weight, "weight/D");
     tree_output->Branch("weight_no_eff_sf", &weight_no_eff_sf, "weight_no_eff_sf/D");
     tree_output->Branch("weight_no_lumi", &weight_no_lumi, "weight_no_lumi/D");
+    tree_output->Branch("stitch_weight", &stitch_weight, "stitch_weight/D");
+    tree_output->Branch("stitch_cell", &stitch_cell, "stitch_cell/I");
     // tree_output->Branch("is_data", &is_data_int, "is_data/i");
     // tree_output->Branch("is_signal", &is_signal_int, "signal/i");
     tree_output->Branch("rho", &rho, "rho/F");
@@ -518,6 +556,10 @@ void CreateTuple::setBranchesAddressesOutput() {
                         "diMuon_bsConstrainedPt/F");
     tree_output->Branch("diMuon_bsConstrainedPt_nanoAOD", &diMuon_bsConstrainedPt_nanoAOD,
                         "diMuon_bsConstrainedPt_nanoAOD/F");
+    tree_output->Branch("diMuon_bsConstrainedPt_noFSR", &diMuon_bsConstrainedPt_noFSR,
+                        "diMuon_bsConstrainedPt_noFSR/F");
+    tree_output->Branch("diMuon_bsConstrainedMass_noFSR", &diMuon_bsConstrainedMass_noFSR,
+                        "diMuon_bsConstrainedMass_noFSR/F");
     tree_output->Branch("diMuon_phi", &diMuon_phi, "diMuon_phi/F");
     tree_output->Branch("diMuon_eta", &diMuon_eta, "diMuon_eta/F");
     tree_output->Branch("diMuon_rapidity", &diMuon_rapidity,
@@ -565,6 +607,10 @@ void CreateTuple::setBranchesAddressesOutput() {
                         "mu1_bsConstrainedPt/F");
     tree_output->Branch("mu2_bsConstrainedPt", &mu2_bsConstrainedPt,
                         "mu2_bsConstrainedPt/F");
+    tree_output->Branch("mu1_bsConstrainedPt_noFSR", &mu1_bsConstrainedPt_noFSR,
+                        "mu1_bsConstrainedPt_noFSR/F");
+    tree_output->Branch("mu2_bsConstrainedPt_noFSR", &mu2_bsConstrainedPt_noFSR,
+                        "mu2_bsConstrainedPt_noFSR/F");
     tree_output->Branch("mu1_ptErr", &mu1_ptErr, "mu1_ptErr/F");
     tree_output->Branch("mu2_ptErr", &mu2_ptErr, "mu2_ptErr/F");
     tree_output->Branch("mu1_bsConstrainedPtErr", &mu1_bsConstrainedPtErr,
@@ -575,6 +621,20 @@ void CreateTuple::setBranchesAddressesOutput() {
     tree_output->Branch("mu2_dz", &mu2_dz, "mu2_dz/F");
     tree_output->Branch("mu1_dzErr", &mu1_dzErr, "mu1_dzErr/F");
     tree_output->Branch("mu2_dzErr", &mu2_dzErr, "mu2_dzErr/F");
+
+    // FSR recovery (Run 2 prescription, see HmmAnalyzer.cc) is the baseline: the un-suffixed muon/dimuon
+    // bsConstrained kinematics are FSR-dressed, the bare values are in the *_noFSR branches.
+    tree_output->Branch("mu1_hasFSR", &mu1_hasFSR, "mu1_hasFSR/O");
+    tree_output->Branch("mu2_hasFSR", &mu2_hasFSR, "mu2_hasFSR/O");
+    tree_output->Branch("diMuon_nFSR", &diMuon_nFSR, "diMuon_nFSR/I");
+    tree_output->Branch("mu1_fsrPhoton_pt", &mu1_fsrPhoton_pt, "mu1_fsrPhoton_pt/F");
+    tree_output->Branch("mu1_fsrPhoton_dR", &mu1_fsrPhoton_dR, "mu1_fsrPhoton_dR/F");
+    tree_output->Branch("mu2_fsrPhoton_pt", &mu2_fsrPhoton_pt, "mu2_fsrPhoton_pt/F");
+    tree_output->Branch("mu2_fsrPhoton_dR", &mu2_fsrPhoton_dR, "mu2_fsrPhoton_dR/F");
+    tree_output->Branch("mu1_RelIso04_FSR", &mu1_RelIso04_FSR, "mu1_RelIso04_FSR/F");
+    tree_output->Branch("mu2_RelIso04_FSR", &mu2_RelIso04_FSR, "mu2_RelIso04_FSR/F");
+    tree_output->Branch("gen_mll", &gen_mll, "gen_mll/F");
+    tree_output->Branch("LHE_mll", &lhe_mll, "LHE_mll/F");
     tree_output->Branch("phi_CS", &phi_CS, "phi_CS/F");
     tree_output->Branch("cos_theta_CS", &cos_theta_CS, "cos_theta_CS/F");
 
@@ -781,6 +841,14 @@ void CreateTuple::setBranchesAddressesInput() {
 
     tree_input->SetBranchStatus("t_genWeight", 1);
     tree_input->SetBranchAddress("t_genWeight", &gen_weight);
+    if (dy_stitch) {
+        tree_input->SetBranchStatus("t_LHE_mll", 1);
+        tree_input->SetBranchAddress("t_LHE_mll", &lhe_mll);
+        tree_input->SetBranchStatus("t_LHE_NpNLO", 1);
+        tree_input->SetBranchAddress("t_LHE_NpNLO", &lhe_n_partons);
+        tree_input->SetBranchStatus("t_pass_VBF_filter", 1);
+        tree_input->SetBranchAddress("t_pass_VBF_filter", &pass_VBF_filter);
+    }
     // DiMuon variables
     tree_input->SetBranchStatus("t_diMuon_bsConstrainedMass", 1);
     tree_input->SetBranchAddress("t_diMuon_bsConstrainedMass",
@@ -794,6 +862,10 @@ void CreateTuple::setBranchesAddressesInput() {
     tree_input->SetBranchStatus("t_diMuon_bsConstrainedPt_nanoAOD", 1);
     tree_input->SetBranchAddress("t_diMuon_bsConstrainedPt_nanoAOD",
                                  &diMuon_bsConstrainedPt_nanoAOD);
+    tree_input->SetBranchStatus("t_diMuon_bsConstrainedPt_noFSR", 1);
+    tree_input->SetBranchAddress("t_diMuon_bsConstrainedPt_noFSR", &diMuon_bsConstrainedPt_noFSR);
+    tree_input->SetBranchStatus("t_diMuon_bsConstrainedMass_noFSR", 1);
+    tree_input->SetBranchAddress("t_diMuon_bsConstrainedMass_noFSR", &diMuon_bsConstrainedMass_noFSR);
     tree_input->SetBranchStatus("t_diMuon_mass", 1);
     tree_input->SetBranchAddress("t_diMuon_mass", &diMuon_mass);
     tree_input->SetBranchStatus("t_diMuon_pt", 1);
@@ -822,6 +894,8 @@ void CreateTuple::setBranchesAddressesInput() {
     tree_input->SetBranchAddress("t_Mu_pt", &mu_pt);
     tree_input->SetBranchStatus("t_Mu_bsConstrainedPt", 1);
     tree_input->SetBranchAddress("t_Mu_bsConstrainedPt", &mu_bsConstrainedPt);
+    tree_input->SetBranchStatus("t_Mu_bsConstrainedPt_noFSR", 1);
+    tree_input->SetBranchAddress("t_Mu_bsConstrainedPt_noFSR", &mu_bsConstrainedPt_noFSR);
     tree_input->SetBranchStatus("t_Mu_bsConstrainedPt_nanoAOD", 1);
     tree_input->SetBranchAddress("t_Mu_bsConstrainedPt_nanoAOD",
                                  &mu_bsConstrainedPt_nanoAOD);
@@ -838,6 +912,48 @@ void CreateTuple::setBranchesAddressesInput() {
     tree_input->SetBranchAddress("t_Mu_dz", &mu_dz);
     tree_input->SetBranchStatus("t_Mu_dzErr", 1);
     tree_input->SetBranchAddress("t_Mu_dzErr", &mu_dzErr);
+
+    // FSR recovery (baseline): dressed mu1/mu2 direction and mass, photon flags
+    tree_input->SetBranchStatus("t_mu1_bsConstrainedEta", 1);
+    tree_input->SetBranchAddress("t_mu1_bsConstrainedEta", &mu1_dressed_eta);
+    tree_input->SetBranchStatus("t_mu1_bsConstrainedPhi", 1);
+    tree_input->SetBranchAddress("t_mu1_bsConstrainedPhi", &mu1_dressed_phi);
+    tree_input->SetBranchStatus("t_mu1_bsConstrainedMass", 1);
+    tree_input->SetBranchAddress("t_mu1_bsConstrainedMass", &mu1_dressed_mass);
+    tree_input->SetBranchStatus("t_mu1_hasFSR", 1);
+    tree_input->SetBranchAddress("t_mu1_hasFSR", &mu1_hasFSR);
+    tree_input->SetBranchStatus("t_mu1_fsrPhoton_pt", 1);
+    tree_input->SetBranchAddress("t_mu1_fsrPhoton_pt", &mu1_fsrPhoton_pt);
+    tree_input->SetBranchStatus("t_mu1_fsrPhoton_dR", 1);
+    tree_input->SetBranchAddress("t_mu1_fsrPhoton_dR", &mu1_fsrPhoton_dR);
+    tree_input->SetBranchStatus("t_mu1_pfRelIso04_all_FSR", 1);
+    tree_input->SetBranchAddress("t_mu1_pfRelIso04_all_FSR", &mu1_RelIso04_FSR);
+    tree_input->SetBranchStatus("t_mu2_bsConstrainedEta", 1);
+    tree_input->SetBranchAddress("t_mu2_bsConstrainedEta", &mu2_dressed_eta);
+    tree_input->SetBranchStatus("t_mu2_bsConstrainedPhi", 1);
+    tree_input->SetBranchAddress("t_mu2_bsConstrainedPhi", &mu2_dressed_phi);
+    tree_input->SetBranchStatus("t_mu2_bsConstrainedMass", 1);
+    tree_input->SetBranchAddress("t_mu2_bsConstrainedMass", &mu2_dressed_mass);
+    tree_input->SetBranchStatus("t_mu2_hasFSR", 1);
+    tree_input->SetBranchAddress("t_mu2_hasFSR", &mu2_hasFSR);
+    tree_input->SetBranchStatus("t_mu2_fsrPhoton_pt", 1);
+    tree_input->SetBranchAddress("t_mu2_fsrPhoton_pt", &mu2_fsrPhoton_pt);
+    tree_input->SetBranchStatus("t_mu2_fsrPhoton_dR", 1);
+    tree_input->SetBranchAddress("t_mu2_fsrPhoton_dR", &mu2_fsrPhoton_dR);
+    tree_input->SetBranchStatus("t_mu2_pfRelIso04_all_FSR", 1);
+    tree_input->SetBranchAddress("t_mu2_pfRelIso04_all_FSR", &mu2_RelIso04_FSR);
+    tree_input->SetBranchStatus("t_diMuon_nFSR", 1);
+    tree_input->SetBranchAddress("t_diMuon_nFSR", &diMuon_nFSR);
+    // Hard-process (pre-FSR) gen dimuon mass: truth reference for the FSR recovery validation
+    if (tree_input->GetBranch("t_gen_mll")) {
+        tree_input->SetBranchStatus("t_gen_mll", 1);
+        tree_input->SetBranchAddress("t_gen_mll", &gen_mll);
+    }
+    // LHE mumu mass for every sample that has it (the DY stitching above binds it unconditionally)
+    if (tree_input->GetBranch("t_LHE_mll")) {
+        tree_input->SetBranchStatus("t_LHE_mll", 1);
+        tree_input->SetBranchAddress("t_LHE_mll", &lhe_mll);
+    }
 
     // Electron variables
     tree_input->SetBranchStatus("t_El_pt", 1);
@@ -926,10 +1042,12 @@ void CreateTuple::setBranchesAddressesInput() {
     tree_input->SetBranchAddress("t_Mu_tightId", &mu_tightID);
     tree_input->SetBranchStatus("t_Jet_mass_nanoAOD", 1);
     tree_input->SetBranchAddress("t_Jet_mass_nanoAOD", &jet_mass_nanoAOD);
-    tree_input->SetBranchStatus("t_pass_muon_trigger_match", 1);
-    tree_input->SetBranchAddress("t_pass_muon_trigger_match", &pass_muon_trigger_match);
-    tree_input->SetBranchStatus("t_pass_jet_veto", 1);
-    tree_input->SetBranchAddress("t_pass_jet_veto", &pass_jet_veto);
+    if(ifSync){
+        tree_input->SetBranchStatus("t_pass_muon_trigger_match", 1);
+        tree_input->SetBranchAddress("t_pass_muon_trigger_match", &pass_muon_trigger_match);
+        tree_input->SetBranchStatus("t_pass_jet_veto", 1);
+        tree_input->SetBranchAddress("t_pass_jet_veto", &pass_jet_veto);
+    }
 
     std::cout << "Input Branches addressed setted" << std::endl;
 }
@@ -950,9 +1068,12 @@ void CreateTuple::fillOutputTree() {
     std::cout << include_H << std::endl;
     for (int event_index = 0; event_index < total_entries; event_index++) {
         tree_input->GetEntry(event_index);
+        if (!passesDYStitching())
+            continue;
         if(!ifSync){
             if ((include_Z && include_H) || (!include_Z && !include_H)){
-                if (diMuon_bsConstrainedMass < 70 || diMuon_bsConstrainedMass > 180)
+                // Z + Higgs regions: same 50-180 GeV window as the analyzer (src/HmmAnalyzer.cc)
+                if (diMuon_bsConstrainedMass < 50 || diMuon_bsConstrainedMass > 180)
                     continue;
             }
             else if (include_Z){
@@ -966,13 +1087,19 @@ void CreateTuple::fillOutputTree() {
             }
             // if (diMuon_mass < 110 || diMuon_mass > 150)
             // if (diMuon_mass < 100 || diMuon_mass > 180)
-            if (diMuon_bsConstrainedMass < 70 || diMuon_bsConstrainedMass > 180)
-                continue;
 
             h_nInFinalMassRange->Fill(0.5);
         }
+        // mu1 = higher FSR-dressed pT (the analyzer already orders this way; the pair scalars follow the swap)
         if ((*mu_bsConstrainedPt)[mu1_index] < (*mu_bsConstrainedPt)[mu2_index]) {
             std::swap(mu1_index, mu2_index);
+            std::swap(mu1_dressed_eta, mu2_dressed_eta);
+            std::swap(mu1_dressed_phi, mu2_dressed_phi);
+            std::swap(mu1_dressed_mass, mu2_dressed_mass);
+            std::swap(mu1_hasFSR, mu2_hasFSR);
+            std::swap(mu1_fsrPhoton_pt, mu2_fsrPhoton_pt);
+            std::swap(mu1_fsrPhoton_dR, mu2_fsrPhoton_dR);
+            std::swap(mu1_RelIso04_FSR, mu2_RelIso04_FSR);
         }
 
 
@@ -1058,10 +1185,10 @@ void CreateTuple::fillOutputTree() {
 
             weight =
                 GetEventWeight(gen_weight, pileup_weight, scale_factor,
-                               mu_trig_eff_SF, mu_ID_eff_SF, mu_ISO_eff_SF);
+                               mu_trig_eff_SF, mu_ID_eff_SF, mu_ISO_eff_SF) * stitch_weight;
             weight_no_eff_sf =
                 GetEventWeight(gen_weight, pileup_weight, scale_factor,
-                               1, 1, 1);
+                               1, 1, 1) * stitch_weight;
             weight_no_lumi = weight / luminosity;
 
         } else {
@@ -1087,19 +1214,18 @@ void CreateTuple::fillOutputTree() {
                                 (*mu_phi)[mu1_index], MUON_MASS);
         mu2_vector.SetPtEtaPhiM((*mu_pt)[mu2_index], (*mu_eta)[mu2_index],
                                 (*mu_phi)[mu2_index], MUON_MASS);
+        // Baseline (FSR-dressed) muon four-vectors: drive rapidity, CS angles, pt_balance, pt_centrality
         mu1BSC_vector.SetPtEtaPhiM((*mu_bsConstrainedPt)[mu1_index],
-                                   (*mu_eta)[mu1_index], (*mu_phi)[mu1_index],
-                                   MUON_MASS);
+                                   mu1_dressed_eta, mu1_dressed_phi, mu1_dressed_mass);
         mu2BSC_vector.SetPtEtaPhiM((*mu_bsConstrainedPt)[mu2_index],
-                                   (*mu_eta)[mu2_index], (*mu_phi)[mu2_index],
-                                   MUON_MASS);
+                                   mu2_dressed_eta, mu2_dressed_phi, mu2_dressed_mass);
 
         diMuon_rapidity = (mu1BSC_vector + mu2BSC_vector).Rapidity();
 
         mu1_pt = (*mu_pt)[mu1_index];
         mu2_pt = (*mu_pt)[mu2_index];
-        mu1_phi = (*mu_phi)[mu1_index];
-        mu2_phi = (*mu_phi)[mu2_index];
+        mu1_phi = mu1_dressed_phi;
+        mu2_phi = mu2_dressed_phi;
 
         mu1_RelIso04 = (*mu_RelIso04)[mu1_index];
         mu1_looseID = (*mu_looseID)[mu1_index];
@@ -1122,6 +1248,8 @@ void CreateTuple::fillOutputTree() {
         //diMuon_bsConstrainedMass_nanoAOD = (mu1BSC_nanoAOD_vector + mu2BSC_nanoAOD_vector).M();
         mu1_bsConstrainedPt = (*mu_bsConstrainedPt)[mu1_index];
         mu2_bsConstrainedPt = (*mu_bsConstrainedPt)[mu2_index];
+        mu1_bsConstrainedPt_noFSR = (*mu_bsConstrainedPt_noFSR)[mu1_index];
+        mu2_bsConstrainedPt_noFSR = (*mu_bsConstrainedPt_noFSR)[mu2_index];
         mu1_ptErr = (*mu_ptErr)[mu1_index];
         mu2_ptErr = (*mu_ptErr)[mu2_index];
         mu1_bsConstrainedPtErr = (*mu_bsConstrainedPtErr)[mu1_index];
@@ -1132,9 +1260,11 @@ void CreateTuple::fillOutputTree() {
         mu2_dzErr = (*mu_dzErr)[mu2_index];
         relative_diMuon_mass_error = std::sqrt(std::pow(mu1_ptErr / mu1_pt, 2) +
                                                std::pow(mu2_ptErr / mu2_pt, 2));
+        // Bare-muon relative pT resolution (the photon resolution is not propagated).
+        // TODO(FSR): investigate using sigma_pT(bare) / pT(dressed) to match the FSR-dressed mass.
         relative_diMuon_bsConstrainedMass_error = std::sqrt(
-            std::pow(mu1_bsConstrainedPtErr / mu1_bsConstrainedPt, 2) +
-            std::pow(mu2_bsConstrainedPtErr / mu2_bsConstrainedPt, 2));
+            std::pow(mu1_bsConstrainedPtErr / mu1_bsConstrainedPt_noFSR, 2) +
+            std::pow(mu2_bsConstrainedPtErr / mu2_bsConstrainedPt_noFSR, 2));
 
         angles_CS = CSAngles(mu1BSC_vector, mu2BSC_vector, (*mu_charge)[mu1_index]);
 
@@ -1144,8 +1274,9 @@ void CreateTuple::fillOutputTree() {
             (*mu_bsConstrainedPt)[mu1_index] / diMuon_bsConstrainedMass;
         mu2_bsConstrainedPt_mass_ratio =
             (*mu_bsConstrainedPt)[mu2_index] / diMuon_bsConstrainedMass;
-        mu1_eta = (*mu_eta)[mu1_index];
-        mu2_eta = (*mu_eta)[mu2_index];
+        mu1_eta = mu1_dressed_eta;
+        mu2_eta = mu2_dressed_eta;
+
         phi_CS = angles_CS.second;
         cos_theta_CS = angles_CS.first;
 
@@ -1416,7 +1547,7 @@ void CreateTuple::fillOutputTree() {
                                               &ordered_jet_phi,
                                               &ordered_jet_eta,
                                               &ordered_jet_mass);
-            pt_centrality = GetPtCentralityVariable(diMuon_pt,
+            pt_centrality = GetPtCentralityVariable(diMuon_bsConstrainedPt,
                                                     &ordered_jet_pt,
                                                     &ordered_jet_phi,
                                                     &ordered_jet_eta,
@@ -1477,6 +1608,49 @@ void CreateTuple::saveTree() {
     std::cout << "Tuple saved" << std::endl;
 }
 
+void CreateTuple::setupDYStitching(const TString &channel, float scale_luminosity) {
+    // Channel is the dataset name without the campaign, so the extensions of a sample map to the same channel
+    // and share its normalisation (cross section and sum of gen weights over all extensions)
+    bool is_FxFx_DY = channel.BeginsWith("DYto2Mu-2Jets") || channel.BeginsWith("DYto2L-2Jets");
+    std::unique_ptr<TFile> weight_file(TFile::Open(weight_name, "READ"));
+    TH1 *frac_histogram = weight_file ? weight_file->Get<TH1>("stitch_frac") : nullptr;
+    if (!frac_histogram) {
+        if (is_FxFx_DY)
+            throw std::runtime_error("No stitch_frac in " + std::string(weight_name) +
+                                     ": run scripts/compute_DY_stitching.py (the aMC@NLO DY samples overlap)");
+        if (channel.BeginsWith("DY"))
+            std::cout << "[WARNING] " << channel << " is not part of the DY stitching (comparison only)" << std::endl;
+        return;
+    }
+    if (frac_histogram->GetNbinsX() != dy_stitch::N_CELLS)
+        throw std::runtime_error("stitch_frac has a different number of cells than lib/DYStitching.h");
+    dy_stitch = true;
+    dy_stitch_frac.clear();
+    for (int c = 0; c < dy_stitch::N_CELLS; c++)
+        dy_stitch_frac.push_back(frac_histogram->GetBinContent(c + 1));
+    weight_file->Close();
+
+    cross_section = GetSingleBinValue(weight_name, "stitch_sigma");
+    gen_weight_sum = GetSingleBinValue(weight_name, "stitch_sumw");
+    scale_factor = GetScaleFactor(scale_luminosity, cross_section, gen_weight_sum);
+    std::cout << "DY stitching: cross section " << cross_section << " pb, sum of gen weights (all extensions) "
+              << gen_weight_sum << ", fraction per cell:";
+    for (double frac : dy_stitch_frac)
+        std::cout << " " << frac;
+    std::cout << std::endl;
+}
+
+bool CreateTuple::passesDYStitching() {
+    // Returns false if the event's cell is covered by other DY samples only, and sets stitch_weight
+    stitch_weight = 1.;
+    stitch_cell = -1;
+    if (!dy_stitch)
+        return true;
+    stitch_cell = dy_stitch::Cell(lhe_mll, lhe_n_partons, pass_VBF_filter);
+    stitch_weight = dy_stitch_frac[stitch_cell];
+    return stitch_weight > 0.;
+}
+
 int CreateTuple::isggHCategory() {
 
     if ((n_bjet == 0) && (elec_pt->size() == 0)) {
@@ -1518,7 +1692,7 @@ int CreateTuple::isVBFCategory() {
 
     if ((n_bjet == 0) && (n_bjet_Loose < 2) &&
         (elec_pt->size() == 0) && (n_jet >= 2) && leading_jet_pt > 35 &&
-        (diJet_mass >= 400) && (delta_eta_diJet > 2.5) && (ifSync && subleading_jet_pt > 30)) {
+        (diJet_mass >= 400) && (delta_eta_diJet > 2.5) && (!ifSync || subleading_jet_pt > 30.0)) {
         h_nVBFCat->Fill(0.5);
         is_VBF_category = 1;
         return 1;

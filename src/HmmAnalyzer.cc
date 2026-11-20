@@ -22,6 +22,19 @@
 #include "../lib/MuonScaRe.h"
 #include "correction.h"
 
+// ---------------------------------------------------------------------------------------------------------
+// FSR recovery selection (Run 2 H->mumu prescription,
+constexpr float FSR_PHOTON_PT_MIN = 2.0;      // producer-level (same value)
+constexpr float FSR_PHOTON_ABSETA_MAX = 2.4;  // producer-level (same value)
+constexpr float FSR_DR_MAX = 0.5;             // producer-level (same value)
+constexpr float FSR_RELISO03_MAX = 1.8;       // analysis-level (producer: 2.0)
+constexpr float FSR_DROVERET2_MAX = 0.012;    // analysis-level, GeV^-2 (producer: 0.05)
+constexpr float FSR_PT_RATIO_MAX = 0.4;       // analysis-level, pT(gamma)/pT(mu), suppresses H->Z(mumu)gamma
+// Muon isolation cone (pfRelIso04_all) and photon veto cone used to subtract the FSR photon from the isolation
+constexpr float FSR_MUON_ISO_CONE_DR = 0.4;
+constexpr float FSR_MUON_ISO_VETO_DR = 0.01;
+// ---------------------------------------------------------------------------------------------------------
+
 #ifdef MAKECINT
 #pragma link C++ class vector < float> + ;
 #endif
@@ -37,7 +50,7 @@ int main(int argc, char *argv[]) {
     if (argc != 10) {
         std::cerr << "Please give 9 arguments: runList outputFileName dataset "
           << "dataType(T/F) year include_Z(T/F) include_H(T/F) "
-          << "muon_pt_syst" << "ifSync(T/F)" << std::endl;
+          << "muon_pt_syst" << " ifSync(T/F)" << std::endl;
         return -1;
     }
     const char *inputFileList = argv[1];
@@ -74,6 +87,74 @@ int main(int argc, char *argv[]) {
     Hmm.EventLoop();
 
     return 0;
+}
+
+void HmmAnalyzer::ComputeGenStitchingInfo(float &gen_mll, bool &pass_VBF_filter, float &lhe_mll,
+                                          int &lhe_n_partons) {
+    // pass_VBF_filter: emulation of VBFGenJetFilter with leadJetsNoLepMass
+    gen_mll = FLOAT_NULL_VALUE;
+    pass_VBF_filter = false;
+    lhe_mll = FLOAT_NULL_VALUE;
+    lhe_n_partons = INT_NULL_VALUE;
+
+    if (has_LHE_info) {
+        lhe_n_partons = LHE_NpNLO;
+        TLorentzVector lheMuPlus, lheMuMinus;
+        bool foundLheMuPlus = false;
+        bool foundLheMuMinus = false;
+        for (int i = 0; i < nLHEPart; i++) {
+            if (LHEPart_status[i] != 1)
+                continue;
+            if (LHEPart_pdgId[i] == -13 && !foundLheMuPlus) {
+                lheMuPlus.SetPtEtaPhiM(LHEPart_pt[i], LHEPart_eta[i], LHEPart_phi[i], LHEPart_mass[i]);
+                foundLheMuPlus = true;
+            } else if (LHEPart_pdgId[i] == 13 && !foundLheMuMinus) {
+                lheMuMinus.SetPtEtaPhiM(LHEPart_pt[i], LHEPart_eta[i], LHEPart_phi[i], LHEPart_mass[i]);
+                foundLheMuMinus = true;
+            }
+        }
+        if (foundLheMuPlus && foundLheMuMinus)
+            lhe_mll = (lheMuPlus + lheMuMinus).M();
+    }
+
+    std::vector<TLorentzVector> filteredGenLeptons;
+    TLorentzVector lepVec, muPlus, muMinus;
+    bool foundMuPlus = false;
+    bool foundMuMinus = false;
+    for (int i = 0; i < nGenPart; i++) {
+        int absPdgId = abs(GenPart_pdgId[i]);
+        bool isHardProcess = GenPart_statusFlags[i] & (1 << 7);
+        if (!isHardProcess || !(absPdgId == 11 || absPdgId == 13 || absPdgId == 15))
+            continue;
+        lepVec.SetPtEtaPhiM(GenPart_pt[i], GenPart_eta[i], GenPart_phi[i], GenPart_mass[i]);
+        filteredGenLeptons.push_back(lepVec);
+        if (GenPart_pdgId[i] == -13 && !foundMuPlus) {
+            muPlus = lepVec;
+            foundMuPlus = true;
+        } else if (GenPart_pdgId[i] == 13 && !foundMuMinus) {
+            muMinus = lepVec;
+            foundMuMinus = true;
+        }
+    }
+    if (foundMuPlus && foundMuMinus)
+        gen_mll = (muPlus + muMinus).M();
+
+    std::vector<TLorentzVector> filteredGenJets;
+    TLorentzVector jetVec;
+    for (int i = 0; i < nGenJet && filteredGenJets.size() < 2; i++) {
+        jetVec.SetPtEtaPhiM(GenJet_pt[i], GenJet_eta[i], GenJet_phi[i], GenJet_mass[i]);
+        bool lepClean = true;
+        for (const auto &lepton : filteredGenLeptons) {
+            if (DeltaR(lepton.Eta(), lepton.Phi(), jetVec.Eta(), jetVec.Phi()) < 0.3) {
+                lepClean = false;
+                break;
+            }
+        }
+        if (lepClean)
+            filteredGenJets.push_back(jetVec);
+    }
+    if (filteredGenJets.size() == 2 && (filteredGenJets[0] + filteredGenJets[1]).M() > 300.0)
+        pass_VBF_filter = true;
 }
 
 void HmmAnalyzer::EventLoop() {
@@ -226,6 +307,18 @@ void HmmAnalyzer::EventLoop() {
 
             value_h_sumOfgpw = value_h_sumOfgpw + genWeight * puWeight;
 
+            // Before any selection, so the stitching sums cover all generated events
+            bool pass_VBF_filter;
+            ComputeGenStitchingInfo(t_gen_mll, pass_VBF_filter, t_LHE_mll, t_LHE_NpNLO);
+            t_pass_VBF_filter = pass_VBF_filter;
+            float stitch_mll = has_LHE_info ? t_LHE_mll : t_gen_mll;
+            h_sumOfgw_genMll->Fill(stitch_mll, genWeight);
+            if (t_pass_VBF_filter)
+                h_sumOfgw_genMll_VBFFilter->Fill(stitch_mll, genWeight);
+            int stitch_cell = dy_stitch::Cell(t_LHE_mll, t_LHE_NpNLO, t_pass_VBF_filter);
+            h_sumOfgw_stitchCells->Fill(stitch_cell + 0.5, genWeight);
+            h_sumOfgw2_stitchCells->Fill(stitch_cell + 0.5, genWeight * genWeight);
+
             for (unsigned int i = 0; i < nLHEPdfWeight; i++) {
                 t_LHEPdfWeight->push_back(LHEPdfWeight[i]);
             }
@@ -308,6 +401,32 @@ void HmmAnalyzer::EventLoop() {
         bool two_valid_muons = false;
         bool trig_match = false;
 
+        // FSR RECO
+        const int n_fsr = std::max(0, std::min<int>(nFsrPhoton, sizeof(FsrPhoton_pt) / sizeof(FsrPhoton_pt[0])));
+        std::vector<float> fsr_dR(n_fsr, FLOAT_NULL_VALUE);  // DeltaR(photon, its NanoAOD muon)
+        auto pickFsr = [&](int nano_mu_idx, float mu_pt) {
+            int best = -1;
+            for (int j = 0; j < n_fsr; j++) {
+                if (FsrPhoton_muonIdx[j] != nano_mu_idx || FsrPhoton_electronIdx[j] >= 0)
+                    continue;
+                const float dR = DeltaR(Muon_eta[nano_mu_idx], Muon_phi[nano_mu_idx],
+                                        FsrPhoton_eta[j], FsrPhoton_phi[j]);
+                fsr_dR[j] = dR;
+                const bool pass = FsrPhoton_pt[j] > FSR_PHOTON_PT_MIN &&
+                                  fabs(FsrPhoton_eta[j]) < FSR_PHOTON_ABSETA_MAX &&
+                                  dR < FSR_DR_MAX &&
+                                  FsrPhoton_relIso03[j] < FSR_RELISO03_MAX &&
+                                  FsrPhoton_dROverEt2[j] < FSR_DROVERET2_MAX &&
+                                  mu_pt > 0 && FsrPhoton_pt[j] / mu_pt < FSR_PT_RATIO_MAX;
+                if (pass && (best < 0 || FsrPhoton_dROverEt2[j] < FsrPhoton_dROverEt2[best]))
+                    best = j;
+            }
+            return best;
+        };
+        std::vector<int> mu_fsr_idx(nMuon, -1);
+        std::vector<ROOT::Math::PtEtaPhiMVector> mu_p4_fsr(nMuon);  // dressed (muon + photon) four-vector
+        std::vector<float> mu_pt_fsr(nMuon, FLOAT_NULL_VALUE);
+
         for (int i = 0; i < nMuon; i++) {
             const float pt_raw = Muon_bsConstrainedPt[i];
 
@@ -348,8 +467,18 @@ void HmmAnalyzer::EventLoop() {
             mu_pt_corr[i] = pt_corr;
             mu_ptErr_corr[i] = ptErr_corr;
 
+            // FSR dressing
+            mu_fsr_idx[i] = pickFsr(i, pt_corr);
+            mu_p4_fsr[i] = ROOT::Math::PtEtaPhiMVector(pt_corr, Muon_eta[i], Muon_phi[i], MUON_MASS);
+            if (mu_fsr_idx[i] >= 0) {
+                const int j = mu_fsr_idx[i];
+                const ROOT::Math::PtEtaPhiMVector photon(FsrPhoton_pt[j], FsrPhoton_eta[j], FsrPhoton_phi[j], 0.0);
+                mu_p4_fsr[i] = ROOT::Math::PtEtaPhiMVector(mu_p4_fsr[i] + photon);
+            }
+            mu_pt_fsr[i] = mu_p4_fsr[i].Pt();
+
             if (!ifSync){
-                if(pt_corr > 10 &&
+                if(mu_pt_fsr[i] > 10 &&
                 fabs(Muon_eta[i]) < 2.4 &&
                 Muon_isGlobal[i] &&
                 Muon_pfRelIso04_all[i] < 0.25 &&
@@ -368,12 +497,13 @@ void HmmAnalyzer::EventLoop() {
             continue;
         }
 
+        // Pair selection, ranking and mu1/mu2 ordering use the FSR-dressed pT
         float best_pair_pt_sum = -1.0;
-
+        // TODO par and iso calculation with/without FSR
         for (int muon_index_1 = 0; muon_index_1 < nMuon; muon_index_1++) {
 
             if (!(Muon_isGlobal[muon_index_1] &&
-                  mu_pt_corr[muon_index_1] > muon_pt_cut.at(yearst) &&
+                  mu_pt_fsr[muon_index_1] > muon_pt_cut.at(yearst) &&
                   Muon_mediumId[muon_index_1] &&
                   fabs(Muon_eta[muon_index_1]) < 2.4 &&
                   Muon_pfRelIso04_all[muon_index_1] < 0.25))
@@ -385,20 +515,20 @@ void HmmAnalyzer::EventLoop() {
 
                 if (!(Muon_isGlobal[muon_index_2] &&
                       Muon_charge[muon_index_1] * Muon_charge[muon_index_2] == -1 &&
-                      mu_pt_corr[muon_index_2] > 20. &&
+                      mu_pt_fsr[muon_index_2] > 20. &&
                       Muon_mediumId[muon_index_2] &&
                       fabs(Muon_eta[muon_index_2]) < 2.4 &&
                       Muon_pfRelIso04_all[muon_index_2] < 0.25))
                     continue;
 
                 float pair_pt_sum =
-                    mu_pt_corr[muon_index_1] + mu_pt_corr[muon_index_2];
+                    mu_pt_fsr[muon_index_1] + mu_pt_fsr[muon_index_2];
 
                 if (pair_pt_sum > best_pair_pt_sum) { //is this how we want to sort muons?
                     best_pair_pt_sum = pair_pt_sum;
 
                     // Store the higher-pT muon as mu1
-                    if (mu_pt_corr[muon_index_1] >= mu_pt_corr[muon_index_2]) {
+                    if (mu_pt_fsr[muon_index_1] >= mu_pt_fsr[muon_index_2]) {
                         index_mu1 = muon_index_1;
                         index_mu2 = muon_index_2;
                     } else {
@@ -472,6 +602,7 @@ void HmmAnalyzer::EventLoop() {
 
         h_nNoExtraElectron->Fill(0.5);
     
+        // Trigger matching uses the bare corrected muon pT (the trigger fires on the muon track)
         bool trig_match_mu1 = false;
         bool trig_match_mu2 = false;
         for (int trigger_index = 0; trigger_index < nTrigObj; trigger_index++) {
@@ -553,7 +684,8 @@ void HmmAnalyzer::EventLoop() {
             t_Mu_charge->push_back(Muon_charge[i]);
             t_Mu_pt->push_back(Muon_pt[i]);
             t_Mu_ptErr->push_back(Muon_ptErr[i]);
-            t_Mu_bsConstrainedPt->push_back(mu_pt_corr[i]);
+            t_Mu_bsConstrainedPt->push_back(mu_pt_fsr[i]);
+            t_Mu_bsConstrainedPt_noFSR->push_back(mu_pt_corr[i]);
             t_Mu_bsConstrainedPtErr->push_back(mu_ptErr_corr[i]);
             t_Mu_bsConstrainedPt_nanoAOD->push_back(Muon_bsConstrainedPt[i]);
             t_Mu_bsConstrainedPtErr_nanoAOD->push_back(Muon_bsConstrainedPtErr[i]);
@@ -586,7 +718,7 @@ void HmmAnalyzer::EventLoop() {
                 continue;
             }
 
-            
+            // Muon POG efficiencies/SFs are measured vs the bare muon pT
             t_Mu_EffTRIG_DATA->push_back(corrector.give_eff(
                 "Muon_eff_DATAeff_TRIG",
                 mu_pt_corr[i], Muon_eta[i]));
@@ -661,23 +793,68 @@ void HmmAnalyzer::EventLoop() {
         // mu2.SetPtEtaPhiM((mu_pt_corr)[index_mu2], (Muon_eta)[index_mu2],
         //(Muon_phi)[index_mu2], MUON_MASS);
         dimu = mu1 + mu2;
-        dimuBSC = mu1BSC + mu2BSC;
+        dimuBSC = mu1BSC + mu2BSC;  // bare (no FSR recovery)
         dimuBSC_nanoAOD = mu1BSC_nanoAOD + mu2BSC_nanoAOD;
         t_diMuon_pt = dimu.Pt();
-        t_diMuon_eta = dimuBSC.Eta();
-        t_diMuon_phi = dimuBSC.Phi();
         t_diMuon_mass = dimu.M();
 
-        t_diMuon_bsConstrainedPt = dimuBSC.Pt();
-        t_diMuon_bsConstrainedMass = dimuBSC.M();
+        t_diMuon_bsConstrainedPt_noFSR = dimuBSC.Pt();
+        t_diMuon_bsConstrainedMass_noFSR = dimuBSC.M();
 
         t_diMuon_bsConstrainedPt_nanoAOD = dimuBSC_nanoAOD.Pt();
         t_diMuon_bsConstrainedMass_nanoAOD = dimuBSC_nanoAOD.M();
 
+        // Baseline dimuon: FSR-dressed (beamspot-constrained, corrected) muons
+        const ROOT::Math::PtEtaPhiMVector &mu1BSC_FSR = mu_p4_fsr[index_mu1];
+        const ROOT::Math::PtEtaPhiMVector &mu2BSC_FSR = mu_p4_fsr[index_mu2];
+        const ROOT::Math::PtEtaPhiMVector dimuBSC_FSR = mu1BSC_FSR + mu2BSC_FSR;
+        t_diMuon_bsConstrainedPt = dimuBSC_FSR.Pt();
+        t_diMuon_bsConstrainedMass = dimuBSC_FSR.M();
+        t_diMuon_eta = dimuBSC_FSR.Eta();
+        t_diMuon_phi = dimuBSC_FSR.Phi();
+
+        t_mu1_bsConstrainedPt = mu1BSC_FSR.Pt();
+        t_mu1_bsConstrainedEta = mu1BSC_FSR.Eta();
+        t_mu1_bsConstrainedPhi = mu1BSC_FSR.Phi();
+        t_mu1_bsConstrainedMass = mu1BSC_FSR.M();
+        t_mu2_bsConstrainedPt = mu2BSC_FSR.Pt();
+        t_mu2_bsConstrainedEta = mu2BSC_FSR.Eta();
+        t_mu2_bsConstrainedPhi = mu2BSC_FSR.Phi();
+        t_mu2_bsConstrainedMass = mu2BSC_FSR.M();
+
+        const int mu1_fsr_idx = mu_fsr_idx[index_mu1];
+        const int mu2_fsr_idx = mu_fsr_idx[index_mu2];
+        t_mu1_hasFSR = mu1_fsr_idx >= 0;
+        t_mu2_hasFSR = mu2_fsr_idx >= 0;
+        t_diMuon_nFSR = int(t_mu1_hasFSR) + int(t_mu2_hasFSR);
+        if (t_mu1_hasFSR) {
+            t_mu1_fsrPhoton_pt = FsrPhoton_pt[mu1_fsr_idx];
+            t_mu1_fsrPhoton_dR = fsr_dR[mu1_fsr_idx];
+        }
+        if (t_mu2_hasFSR) {
+            t_mu2_fsrPhoton_pt = FsrPhoton_pt[mu2_fsr_idx];
+            t_mu2_fsrPhoton_dR = fsr_dR[mu2_fsr_idx];
+        }
+
+        // pfRelIso04_all with the chosen FSR photon removed if it is inside the isolation cone. Approximate:
+        // [TODO] Stored only, not used in the selection yet (isolation is still on the bare pfRelIso04_all)
+        auto isoFsr = [&](int nano_mu_idx, int photon_idx) {
+            const float iso = Muon_pfRelIso04_all[nano_mu_idx];
+            if (photon_idx < 0 || Muon_pt[nano_mu_idx] <= 0)
+                return iso;
+            const float dR = fsr_dR[photon_idx];
+            if (dR <= FSR_MUON_ISO_VETO_DR || dR >= FSR_MUON_ISO_CONE_DR)
+                return iso;
+            return std::max(0.f, iso - FsrPhoton_pt[photon_idx] / Muon_pt[nano_mu_idx]);
+        };
+        t_mu1_pfRelIso04_all_FSR = isoFsr(index_mu1, mu1_fsr_idx);
+        t_mu2_pfRelIso04_all_FSR = isoFsr(index_mu2, mu2_fsr_idx);
+
         //std::cout << "looking at diMuon mass" << std::endl;
+        // Mass window on the FSR-dressed dimuon mass (sync mode keeps the NanoAOD mass)
         if(!ifSync){
             if ((include_Z && include_H) || (!include_Z && !include_H)){
-                if (t_diMuon_bsConstrainedMass < 70 || t_diMuon_bsConstrainedMass > 180){
+                if (t_diMuon_bsConstrainedMass < 50 || t_diMuon_bsConstrainedMass > 180){
                     continue;
                 }    
             }
@@ -970,12 +1147,18 @@ void HmmAnalyzer::EventLoop() {
             //}
             //
             
-
+            
+            // Jet cleaning (Run 2 strategy): remove jets within dR < 0.4 of either selected muon
+            // or of either muon's chosen FSR photon
             double dR1 = DeltaR(Muon_eta[index_mu1], Muon_phi[index_mu1],
                                 Jet_eta[j], Jet_phi[j]);
             double dR2 = DeltaR(Muon_eta[index_mu2], Muon_phi[index_mu2],
                                 Jet_eta[j], Jet_phi[j]);
-            if (dR1 < 0.4 || dR2 < 0.4) {
+            const double dR_fsr1 = mu1_fsr_idx >= 0 ? DeltaR(FsrPhoton_eta[mu1_fsr_idx], FsrPhoton_phi[mu1_fsr_idx],
+                                                             Jet_eta[j], Jet_phi[j]) : 999.;
+            const double dR_fsr2 = mu2_fsr_idx >= 0 ? DeltaR(FsrPhoton_eta[mu2_fsr_idx], FsrPhoton_phi[mu2_fsr_idx],
+                                                             Jet_eta[j], Jet_phi[j]) : 999.;
+            if (dR1 < 0.4 || dR2 < 0.4 || dR_fsr1 < 0.4 || dR_fsr2 < 0.4) {
                 //std::cout << "Jet " << j << " not well seperated" << std::endl;
                 continue;
             }
@@ -1260,6 +1443,7 @@ void HmmAnalyzer::EventLoop() {
 
         if (!is_data) {
             t_genWeight = genWeight;
+            t_GenFilter_Efficiency = gen_filter_efficiency;
             // t_puWeight = 1.0;     // puWeight;
             // t_puWeightUp = 1.0;   // puWeightUp;
             // t_puWeightDown = 1.0; // puWeightDown;
@@ -1273,24 +1457,35 @@ void HmmAnalyzer::EventLoop() {
             t_PrefireWeight_Up = 1.0;
             t_PrefireWeight_Down = 1.0;
             //}
-            for (int i = 0; i < nGenPart; i++) {
-
-                if ((abs(GenPart_pdgId[i]) >= 11 &&
-                     abs(GenPart_pdgId[i]) <= 16) ||
-                    (abs(GenPart_pdgId[i]) >= 23 &&
-                     abs(GenPart_pdgId[i]) <= 25) ||
-                    (abs(GenPart_genPartIdxMother[i]) >= 23 &&
-                     abs(GenPart_genPartIdxMother[i]) <= 25) ||
-                    (abs(GenPart_genPartIdxMother[i]) >= 11 &&
-                     abs(GenPart_genPartIdxMother[i]) <= 16)) {
+            // Keep leptons/neutrinos (11-16), Z/W/H (23-25), and every particle whose *mother* is one of
+            {
+                auto keepPdg = [](int pdg) {
+                    const int a = abs(pdg);
+                    return (a >= 11 && a <= 16) || (a >= 23 && a <= 25);
+                };
+                // pass 1: decide what is kept and its position in the stored subset
+                std::vector<int> storedIdx(nGenPart, -1);
+                int nStored = 0;
+                for (int i = 0; i < nGenPart; i++) {
+                    const int mother = GenPart_genPartIdxMother[i];
+                    const bool motherKept = mother >= 0 && mother < nGenPart && keepPdg(GenPart_pdgId[mother]);
+                    if (keepPdg(GenPart_pdgId[i]) || motherKept)
+                        storedIdx[i] = nStored++;
+                }
+                // pass 2: store, with the mother index remapped into the stored subset
+                for (int i = 0; i < nGenPart; i++) {
+                    if (storedIdx[i] < 0)
+                        continue;
+                    const int mother = GenPart_genPartIdxMother[i];
                     t_GenPart_eta->push_back(GenPart_eta[i]);
                     t_GenPart_mass->push_back(GenPart_mass[i]);
                     t_GenPart_phi->push_back(GenPart_phi[i]);
                     t_GenPart_pt->push_back(GenPart_pt[i]);
                     t_GenPart_genPartIdxMother->push_back(
-                        GenPart_genPartIdxMother[i]);
+                        (mother >= 0 && mother < nGenPart) ? storedIdx[mother] : -1);
                     t_GenPart_pdgId->push_back(GenPart_pdgId[i]);
                     t_GenPart_status->push_back(GenPart_status[i]);
+                    t_GenPart_statusFlags->push_back(GenPart_statusFlags[i]);
                 }
             }
             for (int i = 0; i < nGenJet; i++) {

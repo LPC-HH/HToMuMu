@@ -1,10 +1,11 @@
 #!/bin/bash
 
-ANALYZER_VERSION="v2.4"
-TUPLES_VERSION="v2.4.2"
+ANALYZER_VERSION="v2.8"
+TUPLES_VERSION="v2.8.0"
 
 inEOS_PATH="/store/group/lpchmumu/$USER/analyzer_HiggsMuMu_$ANALYZER_VERSION/tuples_$TUPLES_VERSION/"
 EOS_HADD_PATH="root://cmseos.fnal.gov/${inEOS_PATH}haddTuples/"
+#EOS_HADD_PATH="./"
 
 COPY_TO_EOS=false
 
@@ -52,6 +53,13 @@ hadd -f EWK_Combined_tuples.root \
     ${EOS_HADD_PATH}EWK_2024_tuples.root \
     ${EOS_HADD_PATH}EWK_2025_tuples.root
 
+hadd -f EWK_pythia_Combined_tuples.root \
+    ${EOS_HADD_PATH}EWK_pythia_2022_tuples.root \
+    ${EOS_HADD_PATH}EWK_pythia_2022EE_tuples.root \
+    ${EOS_HADD_PATH}EWK_pythia_2023_tuples.root \
+    ${EOS_HADD_PATH}EWK_pythia_2023BPix_tuples.root \
+    ${EOS_HADD_PATH}EWK_pythia_2024_tuples.root \
+    ${EOS_HADD_PATH}EWK_pythia_2025_tuples.root
 
 hadd -f TT_Combined_tuples.root \
     ${EOS_HADD_PATH}TT_2022_tuples.root \
@@ -89,13 +97,13 @@ hadd -f VBF_Combined_tuples.root \
     ${EOS_HADD_PATH}VBF_2025_tuples.root
 
 
-hadd -f ttH_Combined_tuples.root \
-    ${EOS_HADD_PATH}ttH_2022_tuples.root \
-    ${EOS_HADD_PATH}ttH_2022EE_tuples.root \
-    ${EOS_HADD_PATH}ttH_2023_tuples.root \
-    ${EOS_HADD_PATH}ttH_2023BPix_tuples.root \
-    ${EOS_HADD_PATH}ttH_2024_tuples.root \
-    ${EOS_HADD_PATH}ttH_2025_tuples.root
+#hadd -f ttH_Combined_tuples.root \
+#    ${EOS_HADD_PATH}ttH_2022_tuples.root \
+#    ${EOS_HADD_PATH}ttH_2022EE_tuples.root \
+#    ${EOS_HADD_PATH}ttH_2023_tuples.root \
+#    ${EOS_HADD_PATH}ttH_2023BPix_tuples.root \
+#    ${EOS_HADD_PATH}ttH_2024_tuples.root \
+#   ${EOS_HADD_PATH}ttH_2025_tuples.root
 
 
 ############### Copy to EOS ################

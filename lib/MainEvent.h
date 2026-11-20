@@ -200,14 +200,14 @@ public :
    Float_t         FatJet_tau3[8];   //[nFatJet]
    Float_t         FatJet_tau4[8];   //[nFatJet]
    // Float_t         FatJet_lsf3[8];   //[nFatJet]
-   // Int_t           nFsrPhoton;
-   // Short_t         FsrPhoton_electronIdx[2];   //[nFsrPhoton]
-   // Short_t         FsrPhoton_muonIdx[2];   //[nFsrPhoton]
-   // Float_t         FsrPhoton_dROverEt2[2];   //[nFsrPhoton]
-   // Float_t         FsrPhoton_eta[2];   //[nFsrPhoton]
-   // Float_t         FsrPhoton_phi[2];   //[nFsrPhoton]
-   // Float_t         FsrPhoton_pt[2];   //[nFsrPhoton]
-   // Float_t         FsrPhoton_relIso03[2];   //[nFsrPhoton]
+   Int_t           nFsrPhoton;
+   Short_t         FsrPhoton_electronIdx[32];   //[nFsrPhoton]
+   Short_t         FsrPhoton_muonIdx[32];   //[nFsrPhoton]
+   Float_t         FsrPhoton_dROverEt2[32];   //[nFsrPhoton]
+   Float_t         FsrPhoton_eta[32];   //[nFsrPhoton]
+   Float_t         FsrPhoton_phi[32];   //[nFsrPhoton]
+   Float_t         FsrPhoton_pt[32];   //[nFsrPhoton]
+   Float_t         FsrPhoton_relIso03[32];   //[nFsrPhoton]
    // Int_t           nGenJetAK8;
    // Float_t         GenJetAK8_eta[5];   //[nGenJetAK8]
    // Float_t         GenJetAK8_mass[5];   //[nGenJetAK8]
@@ -220,7 +220,7 @@ public :
    Float_t         GenJet_pt[22];   //[nGenJet]
    Int_t           nGenPart;
    Short_t         GenPart_genPartIdxMother[109];   //[nGenPart]
-   // UShort_t        GenPart_statusFlags[109];   //[nGenPart]
+   UShort_t        GenPart_statusFlags[109];   //[nGenPart]
    Int_t           GenPart_pdgId[109];   //[nGenPart]
    Int_t           GenPart_status[109];   //[nGenPart]
    Float_t         GenPart_eta[109];   //[nGenPart]
@@ -337,20 +337,21 @@ public :
    // UChar_t         LHE_Nc;
    // UChar_t         LHE_Nuds;
    // UChar_t         LHE_Nglu;
-   // UChar_t         LHE_NpNLO;
+   UChar_t         LHE_NpNLO;
+   bool            has_LHE_info = false; /**< set in InitSimulationVariables */
    // UChar_t         LHE_NpLO;
    // Float_t         LHE_HT;
    // Float_t         LHE_HTIncoming;
    // Float_t         LHE_Vpt;
    // Float_t         LHE_AlphaS;
-   // Int_t           nLHEPart;
-   // Int_t           LHEPart_pdgId[6];   //[nLHEPart]
-   // Int_t           LHEPart_status[6];   //[nLHEPart]
+   Int_t           nLHEPart;
+   Int_t           LHEPart_pdgId[16];   //[nLHEPart]
+   Int_t           LHEPart_status[16];   //[nLHEPart]
    // Int_t           LHEPart_spin[6];   //[nLHEPart]
-   // Float_t         LHEPart_pt[6];   //[nLHEPart]
-   // Float_t         LHEPart_eta[6];   //[nLHEPart]
-   // Float_t         LHEPart_phi[6];   //[nLHEPart]
-   // Float_t         LHEPart_mass[6];   //[nLHEPart]
+   Float_t         LHEPart_pt[16];   //[nLHEPart]
+   Float_t         LHEPart_eta[16];   //[nLHEPart]
+   Float_t         LHEPart_phi[16];   //[nLHEPart]
+   Float_t         LHEPart_mass[16];   //[nLHEPart]
    // Float_t         LHEPart_incomingpz[6];   //[nLHEPart]
    // Int_t           nLowPtElectron;
    // Bool_t          LowPtElectron_convVeto[5];   //[nLowPtElectron]
@@ -420,7 +421,7 @@ public :
    // Bool_t          Muon_triggerIdLoose[20];   //[nMuon]
    // Short_t         Muon_jetIdx[20];   //[nMuon]
    // Short_t         Muon_svIdx[20];   //[nMuon]
-   // Short_t         Muon_fsrPhotonIdx[20];   //[nMuon]
+   Short_t         Muon_fsrPhotonIdx[20];   //[nMuon]
    Int_t           Muon_charge[20];   //[nMuon]
    // Int_t           Muon_pdgId[20];   //[nMuon]
    Float_t         Muon_dxy[20];   //[nMuon]
@@ -531,13 +532,6 @@ public :
    // Float_t         Rho_fixedGridRhoFastjetCentralCalo;
    // Float_t         Rho_fixedGridRhoFastjetCentralChargedPileUp;
    // Float_t         Rho_fixedGridRhoFastjetCentralNeutral;
-   // Int_t           nGenDressedLepton;
-   // Bool_t          GenDressedLepton_hasTauAnc[4];   //[nGenDressedLepton]
-   // Int_t           GenDressedLepton_pdgId[4];   //[nGenDressedLepton]
-   // Float_t         GenDressedLepton_eta[4];   //[nGenDressedLepton]
-   // Float_t         GenDressedLepton_mass[4];   //[nGenDressedLepton]
-   // Float_t         GenDressedLepton_phi[4];   //[nGenDressedLepton]
-   // Float_t         GenDressedLepton_pt[4];   //[nGenDressedLepton]
    // Int_t           nGenIsolatedPhoton;
    // Float_t         GenIsolatedPhoton_eta[2];   //[nGenIsolatedPhoton]
    // Float_t         GenIsolatedPhoton_mass[2];   //[nGenIsolatedPhoton]
@@ -2046,14 +2040,14 @@ public :
    TBranch        *b_FatJet_tau3;   //!
    TBranch        *b_FatJet_tau4;   //!
    // TBranch        *b_FatJet_lsf3;   //!
-   // TBranch        *b_nFsrPhoton;   //!
-   // TBranch        *b_FsrPhoton_electronIdx;   //!
-   // TBranch        *b_FsrPhoton_muonIdx;   //!
-   // TBranch        *b_FsrPhoton_dROverEt2;   //!
-   // TBranch        *b_FsrPhoton_eta;   //!
-   // TBranch        *b_FsrPhoton_phi;   //!
-   // TBranch        *b_FsrPhoton_pt;   //!
-   // TBranch        *b_FsrPhoton_relIso03;   //!
+   TBranch        *b_nFsrPhoton;   //!
+   TBranch        *b_FsrPhoton_electronIdx;   //!
+   TBranch        *b_FsrPhoton_muonIdx;   //!
+   TBranch        *b_FsrPhoton_dROverEt2;   //!
+   TBranch        *b_FsrPhoton_eta;   //!
+   TBranch        *b_FsrPhoton_phi;   //!
+   TBranch        *b_FsrPhoton_pt;   //!
+   TBranch        *b_FsrPhoton_relIso03;   //!
    // TBranch        *b_nGenJetAK8;   //!
    // TBranch        *b_GenJetAK8_eta;   //!
    // TBranch        *b_GenJetAK8_mass;   //!
@@ -2066,7 +2060,7 @@ public :
    TBranch        *b_GenJet_pt;   //!
    TBranch        *b_nGenPart;   //!
    TBranch        *b_GenPart_genPartIdxMother;   //!
-   // TBranch        *b_GenPart_statusFlags;   //!
+   TBranch        *b_GenPart_statusFlags;   //!
    TBranch        *b_GenPart_pdgId;   //!
    TBranch        *b_GenPart_status;   //!
    TBranch        *b_GenPart_eta;   //!
@@ -2185,20 +2179,20 @@ public :
    // TBranch        *b_LHE_Nc;   //!
    // TBranch        *b_LHE_Nuds;   //!
    // TBranch        *b_LHE_Nglu;   //!
-   // TBranch        *b_LHE_NpNLO;   //!
+   TBranch        *b_LHE_NpNLO;   //!
    // TBranch        *b_LHE_NpLO;   //!
    // TBranch        *b_LHE_HT;   //!
    // TBranch        *b_LHE_HTIncoming;   //!
    // TBranch        *b_LHE_Vpt;   //!
    // TBranch        *b_LHE_AlphaS;   //!
-   // TBranch        *b_nLHEPart;   //!
-   // TBranch        *b_LHEPart_pdgId;   //!
-   // TBranch        *b_LHEPart_status;   //!
+   TBranch        *b_nLHEPart;   //!
+   TBranch        *b_LHEPart_pdgId;   //!
+   TBranch        *b_LHEPart_status;   //!
    // TBranch        *b_LHEPart_spin;   //!
-   // TBranch        *b_LHEPart_pt;   //!
-   // TBranch        *b_LHEPart_eta;   //!
-   // TBranch        *b_LHEPart_phi;   //!
-   // TBranch        *b_LHEPart_mass;   //!
+   TBranch        *b_LHEPart_pt;   //!
+   TBranch        *b_LHEPart_eta;   //!
+   TBranch        *b_LHEPart_phi;   //!
+   TBranch        *b_LHEPart_mass;   //!
    // TBranch        *b_LHEPart_incomingpz;   //!
    // TBranch        *b_nLowPtElectron;   //!
    // TBranch        *b_LowPtElectron_convVeto;   //!
@@ -2268,7 +2262,7 @@ public :
    // TBranch        *b_Muon_triggerIdLoose;   //!
    // TBranch        *b_Muon_jetIdx;   //!
    // TBranch        *b_Muon_svIdx;   //!
-   // TBranch        *b_Muon_fsrPhotonIdx;   //!
+   TBranch        *b_Muon_fsrPhotonIdx;   //!
    TBranch        *b_Muon_charge;   //!
    // TBranch        *b_Muon_pdgId;   //!
    TBranch        *b_Muon_dxy;   //!
@@ -2379,13 +2373,6 @@ public :
    // TBranch        *b_Rho_fixedGridRhoFastjetCentralCalo;   //!
    // TBranch        *b_Rho_fixedGridRhoFastjetCentralChargedPileUp;   //!
    // TBranch        *b_Rho_fixedGridRhoFastjetCentralNeutral;   //!
-   // TBranch        *b_nGenDressedLepton;   //!
-   // TBranch        *b_GenDressedLepton_hasTauAnc;   //!
-   // TBranch        *b_GenDressedLepton_pdgId;   //!
-   // TBranch        *b_GenDressedLepton_eta;   //!
-   // TBranch        *b_GenDressedLepton_mass;   //!
-   // TBranch        *b_GenDressedLepton_phi;   //!
-   // TBranch        *b_GenDressedLepton_pt;   //!
    // TBranch        *b_nGenIsolatedPhoton;   //!
    // TBranch        *b_GenIsolatedPhoton_eta;   //!
    // TBranch        *b_GenIsolatedPhoton_mass;   //!
@@ -4058,22 +4045,22 @@ void MainEvent::Init(TTree *tree, TString nanoAODVersion)
    fChain->SetBranchAddress("FatJet_tau4", FatJet_tau4, &b_FatJet_tau4);
    // fChain->SetBranchStatus("FatJet_lsf3", 1);
    // fChain->SetBranchAddress("FatJet_lsf3", FatJet_lsf3, &b_FatJet_lsf3);
-   // fChain->SetBranchStatus("nFsrPhoton", 1);
-   // fChain->SetBranchAddress("nFsrPhoton", &nFsrPhoton, &b_nFsrPhoton);
-   // fChain->SetBranchStatus("FsrPhoton_electronIdx", 1);
-   // fChain->SetBranchAddress("FsrPhoton_electronIdx", FsrPhoton_electronIdx, &b_FsrPhoton_electronIdx);
-   // fChain->SetBranchStatus("FsrPhoton_muonIdx", 1);
-   // fChain->SetBranchAddress("FsrPhoton_muonIdx", FsrPhoton_muonIdx, &b_FsrPhoton_muonIdx);
-   // fChain->SetBranchStatus("FsrPhoton_dROverEt2", 1);
-   // fChain->SetBranchAddress("FsrPhoton_dROverEt2", FsrPhoton_dROverEt2, &b_FsrPhoton_dROverEt2);
-   // fChain->SetBranchStatus("FsrPhoton_eta", 1);
-   // fChain->SetBranchAddress("FsrPhoton_eta", FsrPhoton_eta, &b_FsrPhoton_eta);
-   // fChain->SetBranchStatus("FsrPhoton_phi", 1);
-   // fChain->SetBranchAddress("FsrPhoton_phi", FsrPhoton_phi, &b_FsrPhoton_phi);
-   // fChain->SetBranchStatus("FsrPhoton_pt", 1);
-   // fChain->SetBranchAddress("FsrPhoton_pt", FsrPhoton_pt, &b_FsrPhoton_pt);
-   // fChain->SetBranchStatus("FsrPhoton_relIso03", 1);
-   // fChain->SetBranchAddress("FsrPhoton_relIso03", FsrPhoton_relIso03, &b_FsrPhoton_relIso03);
+   fChain->SetBranchStatus("nFsrPhoton", 1);
+   fChain->SetBranchAddress("nFsrPhoton", &nFsrPhoton, &b_nFsrPhoton);
+   fChain->SetBranchStatus("FsrPhoton_electronIdx", 1);
+   fChain->SetBranchAddress("FsrPhoton_electronIdx", FsrPhoton_electronIdx, &b_FsrPhoton_electronIdx);
+   fChain->SetBranchStatus("FsrPhoton_muonIdx", 1);
+   fChain->SetBranchAddress("FsrPhoton_muonIdx", FsrPhoton_muonIdx, &b_FsrPhoton_muonIdx);
+   fChain->SetBranchStatus("FsrPhoton_dROverEt2", 1);
+   fChain->SetBranchAddress("FsrPhoton_dROverEt2", FsrPhoton_dROverEt2, &b_FsrPhoton_dROverEt2);
+   fChain->SetBranchStatus("FsrPhoton_eta", 1);
+   fChain->SetBranchAddress("FsrPhoton_eta", FsrPhoton_eta, &b_FsrPhoton_eta);
+   fChain->SetBranchStatus("FsrPhoton_phi", 1);
+   fChain->SetBranchAddress("FsrPhoton_phi", FsrPhoton_phi, &b_FsrPhoton_phi);
+   fChain->SetBranchStatus("FsrPhoton_pt", 1);
+   fChain->SetBranchAddress("FsrPhoton_pt", FsrPhoton_pt, &b_FsrPhoton_pt);
+   fChain->SetBranchStatus("FsrPhoton_relIso03", 1);
+   fChain->SetBranchAddress("FsrPhoton_relIso03", FsrPhoton_relIso03, &b_FsrPhoton_relIso03);
    // fChain->SetBranchStatus("nIsoTrack", 1);
    // fChain->SetBranchAddress("nIsoTrack", &nIsoTrack, &b_nIsoTrack);
    // fChain->SetBranchStatus("IsoTrack_isHighPurityTrack", 1);
@@ -4336,6 +4323,8 @@ void MainEvent::Init(TTree *tree, TString nanoAODVersion)
    fChain->SetBranchAddress("Muon_tightCharge", Muon_tightCharge, &b_Muon_tightCharge);
    fChain->SetBranchStatus("Muon_tightId", 1);
    fChain->SetBranchAddress("Muon_tightId", Muon_tightId, &b_Muon_tightId);
+   fChain->SetBranchStatus("Muon_fsrPhotonIdx", 1);
+   fChain->SetBranchAddress("Muon_fsrPhotonIdx", Muon_fsrPhotonIdx, &b_Muon_fsrPhotonIdx);
    // fChain->SetBranchStatus("Muon_tkIsoId", 1);
    // fChain->SetBranchAddress("Muon_tkIsoId", Muon_tkIsoId, &b_Muon_tkIsoId);
    // fChain->SetBranchStatus("Muon_triggerIdLoose", 1);
@@ -6968,6 +6957,27 @@ void MainEvent::Init(TTree *tree, TString nanoAODVersion)
 void MainEvent::InitSimulationVariables(TTree *tree){
 
    if (!tree) return;
+   // LHE information for the DY stitching (LHE mll, Born parton multiplicity of the FxFx jet bins).
+   // Guarded: not every simulated sample has an LHE table
+   has_LHE_info = fChain->GetBranch("LHE_NpNLO") && fChain->GetBranch("nLHEPart");
+   if (has_LHE_info) {
+      fChain->SetBranchStatus("LHE_NpNLO", 1);
+      fChain->SetBranchAddress("LHE_NpNLO", &LHE_NpNLO, &b_LHE_NpNLO);
+      fChain->SetBranchStatus("nLHEPart", 1);
+      fChain->SetBranchAddress("nLHEPart", &nLHEPart, &b_nLHEPart);
+      fChain->SetBranchStatus("LHEPart_pdgId", 1);
+      fChain->SetBranchAddress("LHEPart_pdgId", LHEPart_pdgId, &b_LHEPart_pdgId);
+      fChain->SetBranchStatus("LHEPart_status", 1);
+      fChain->SetBranchAddress("LHEPart_status", LHEPart_status, &b_LHEPart_status);
+      fChain->SetBranchStatus("LHEPart_pt", 1);
+      fChain->SetBranchAddress("LHEPart_pt", LHEPart_pt, &b_LHEPart_pt);
+      fChain->SetBranchStatus("LHEPart_eta", 1);
+      fChain->SetBranchAddress("LHEPart_eta", LHEPart_eta, &b_LHEPart_eta);
+      fChain->SetBranchStatus("LHEPart_phi", 1);
+      fChain->SetBranchAddress("LHEPart_phi", LHEPart_phi, &b_LHEPart_phi);
+      fChain->SetBranchStatus("LHEPart_mass", 1);
+      fChain->SetBranchAddress("LHEPart_mass", LHEPart_mass, &b_LHEPart_mass);
+   }
    // fChain->SetBranchStatus("HTXS_njets25", 1);
    // fChain->SetBranchAddress("HTXS_njets25", &HTXS_njets25, &b_HTXS_njets25);
    // fChain->SetBranchStatus("HTXS_njets30", 1);
@@ -7022,8 +7032,8 @@ void MainEvent::InitSimulationVariables(TTree *tree){
    fChain->SetBranchAddress("nGenPart", &nGenPart, &b_nGenPart);
    fChain->SetBranchStatus("GenPart_genPartIdxMother", 1);
    fChain->SetBranchAddress("GenPart_genPartIdxMother", GenPart_genPartIdxMother, &b_GenPart_genPartIdxMother);
-   // fChain->SetBranchStatus("GenPart_statusFlags", 1);
-   // fChain->SetBranchAddress("GenPart_statusFlags", GenPart_statusFlags, &b_GenPart_statusFlags);
+   fChain->SetBranchStatus("GenPart_statusFlags", 1);
+   fChain->SetBranchAddress("GenPart_statusFlags", GenPart_statusFlags, &b_GenPart_statusFlags);
    fChain->SetBranchStatus("GenPart_pdgId", 1);
    fChain->SetBranchAddress("GenPart_pdgId", GenPart_pdgId, &b_GenPart_pdgId);
    fChain->SetBranchStatus("GenPart_status", 1);
@@ -7174,20 +7184,6 @@ void MainEvent::InitSimulationVariables(TTree *tree){
    // fChain->SetBranchAddress("Pileup_pudensity", &Pileup_pudensity, &b_Pileup_pudensity);
    // fChain->SetBranchStatus("Pileup_gpudensity", 1);
    // fChain->SetBranchAddress("Pileup_gpudensity", &Pileup_gpudensity, &b_Pileup_gpudensity);
-   // fChain->SetBranchStatus("nGenDressedLepton", 1);
-   // fChain->SetBranchAddress("nGenDressedLepton", &nGenDressedLepton, &b_nGenDressedLepton);
-   // fChain->SetBranchStatus("GenDressedLepton_hasTauAnc", 1);
-   // fChain->SetBranchAddress("GenDressedLepton_hasTauAnc", GenDressedLepton_hasTauAnc, &b_GenDressedLepton_hasTauAnc);
-   // fChain->SetBranchStatus("GenDressedLepton_pdgId", 1);
-   // fChain->SetBranchAddress("GenDressedLepton_pdgId", GenDressedLepton_pdgId, &b_GenDressedLepton_pdgId);
-   // fChain->SetBranchStatus("GenDressedLepton_eta", 1);
-   // fChain->SetBranchAddress("GenDressedLepton_eta", GenDressedLepton_eta, &b_GenDressedLepton_eta);
-   // fChain->SetBranchStatus("GenDressedLepton_mass", 1);
-   // fChain->SetBranchAddress("GenDressedLepton_mass", GenDressedLepton_mass, &b_GenDressedLepton_mass);
-   // fChain->SetBranchStatus("GenDressedLepton_phi", 1);
-   // fChain->SetBranchAddress("GenDressedLepton_phi", GenDressedLepton_phi, &b_GenDressedLepton_phi);
-   // fChain->SetBranchStatus("GenDressedLepton_pt", 1);
-   // fChain->SetBranchAddress("GenDressedLepton_pt", GenDressedLepton_pt, &b_GenDressedLepton_pt);
    // fChain->SetBranchStatus("nGenIsolatedPhoton", 1);
    // fChain->SetBranchAddress("nGenIsolatedPhoton", &nGenIsolatedPhoton, &b_nGenIsolatedPhoton);
    // fChain->SetBranchStatus("GenIsolatedPhoton_eta", 1);

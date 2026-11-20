@@ -121,6 +121,141 @@ mark_failed_job() {
     fi
 }
 
+###############################
+# Fast batch scanners
+###############################
+# The original checker forked several processes per job (head/tail/grep/sed/to_seconds)
+# and read every .log several times over NFS.  Below, each block's files are read once by
+# one awk per block, with no per-job forks.  Checks and output are unchanged.
+
+HARMLESS_ERR_LINE="WARNING: In non-interactive mode release checks e.g. deprecated releases, production architectures are disabled."
+export HARMLESS_ERR_LINE
+
+# On the LPC NFS disk a cold file open costs ~0.1-0.4 s, so reading many small files one
+# after another is slow.  Before scanning a block, read all of its .err/.log files in
+# parallel to pull them into the page cache; the serial scan then hits the cache.  This only
+# reads the files (output to /dev/null), so it cannot change any result.  Lower
+# CHECKER_PARALLEL_READS to be gentler on the file server.
+CHECKER_PARALLEL_READS=${CHECKER_PARALLEL_READS:-32}
+
+prefetch_files() {
+    (( $# > 0 )) || return 0
+    printf '%s\0' "$@" | xargs -0 -P "$CHECKER_PARALLEL_READS" -n 16 cat > /dev/null 2>&1 || true
+}
+
+# Same as get_job_I_from_filename (basename | sed), without forking. Result in $job_i.
+job_i_from_path() {
+    local base="${1##*/}"
+    if [[ "$base" =~ ^jobR([0-9]+)\. ]]; then
+        job_i="${BASH_REMATCH[1]}"
+    else
+        job_i="$base"
+    fi
+}
+
+# stdin: one .err path per line. stdout per file: 1 if its last line (tail -n 1) is the harmless one, else 0.
+scan_err_files() {
+    LC_ALL=C awk '
+        {
+            f = $0; last = ""
+            while ((getline line < f) > 0) last = line
+            close(f)
+            print (last == ENVIRON["HARMLESS_ERR_LINE"] ? 1 : 0)
+        }'
+}
+
+# stdin: one .log path per line. stdout per file: "<st>|<tt>|<ft>" in seconds since midnight,
+# empty field when no HH:MM:SS was found.  Same lines as the original:
+#   st: line 1                  (head -n 1)
+#   tt: line 3, or last if < 3  (head -n 3 | tail -n 1)
+#   ft: 20th line from the end, or line 1 if < 20 lines   (tail -n 20 | head -n 1)
+# and the first HH:MM:SS in the line, as to_seconds used the first grep -o match.
+scan_log_files() {
+    LC_ALL=C awk '
+        function secs(s,   t) {
+            if (!match(s, /[0-9][0-9]:[0-9][0-9]:[0-9][0-9]/)) return ""
+            t = substr(s, RSTART, RLENGTH)
+            return (substr(t, 1, 2) + 0) * 3600 + (substr(t, 4, 2) + 0) * 60 + (substr(t, 7, 2) + 0)
+        }
+        {
+            f = $0; n = 0; l1 = ""; l3 = ""; lN = ""
+            delete ring
+            while ((getline line < f) > 0) {
+                n++
+                if (n == 1) l1 = line
+                if (n <= 3) l3 = line
+                ring[n % 20] = line
+            }
+            close(f)
+            if (n >= 20) lN = ring[(n - 19) % 20]
+            else         lN = l1
+            print secs(l1) "|" secs(l3) "|" secs(lN)
+        }'
+}
+
+# Original per-file .err check (fallback if the scanner output does not line up).
+check_err_slow() {
+    local file="$1"
+
+    job_i=$(get_job_I_from_filename "$file")
+    last_line=$(tail -n 1 "$file")
+
+    if [[ "$last_line" != "$HARMLESS_ERR_LINE" ]]; then
+        blockError=true
+        ((fail_count++))
+        echo "$file" >> "$OUTFILE"
+        mark_failed_job "$failed_jobs_file" "$job_i"
+    fi
+}
+
+# Timing bookkeeping shared by the fast and slow paths: needs $file, $st, $tt, $ft (empty = missing).
+record_ctuple_times() {
+    if [[ -z "$st" || -z "$tt" || -z "$ft" ]]; then
+        blockError=true
+        ((fail_count++))
+        job_i_from_path "$file"
+        echo "$file has missing timing information" >> "$OUTFILE"
+        mark_failed_job "$failed_jobs_file" "$job_i"
+        return
+    fi
+
+    total_job_time=$(( ft - st ))
+    running_job_time=$(( ft - tt))
+
+    if (( total_job_time <= 0)); then
+        total_job_time=$(( 86400 - st + ft))
+    fi
+
+    if (( running_job_time <= 0)); then
+        running_job_time=$(( 86400 - tt + ft))
+    fi
+
+    total_job_times+=( "$total_job_time" )
+    running_job_times+=( "$running_job_time" )
+}
+
+# Original per-file .log check (fallback if the scanner output does not line up).
+check_log_slow() {
+    local file="$1"
+
+    first_line=$(head -n 1 "$file")
+    second_line=$(head -n 3 "$file" | tail -n 1)
+    last_line=$(tail -n 20 "$file" | head -n 1)
+
+    submission_time=$(grep -oE '[0-9]{2}:[0-9]{2}:[0-9]{2}' <<< "$first_line")
+    transfer_time=$(grep -oE '[0-9]{2}:[0-9]{2}:[0-9]{2}' <<< "$second_line")
+    finish_time=$(grep -oE '[0-9]{2}:[0-9]{2}:[0-9]{2}' <<< "$last_line")
+
+    st=""; tt=""; ft=""
+    if [[ -n "$submission_time" && -n "$transfer_time" && -n "$finish_time" ]]; then
+        st=$(to_seconds "$submission_time")
+        tt=$(to_seconds "$transfer_time")
+        ft=$(to_seconds "$finish_time")
+    fi
+
+    record_ctuple_times
+}
+
 total_job_times=()
 running_job_times=()
 
@@ -158,8 +293,18 @@ for block in "$DIR"/*; do
     # Check missing output files
     ###############################
 
+    # One directory listing per block (bash glob, no fork) instead of one compgen per job.
+    # The regex is the exact equivalent of the old glob "jobR${job_i}.*.*.out".
+    unset have_out
+    declare -A have_out=()
+    for f in "$block"/out/*.out; do
+        if [[ "${f##*/}" =~ ^jobR([0-9]+)\..*\..*\.out$ ]]; then
+            have_out["${BASH_REMATCH[1]}"]=1
+        fi
+    done
+
     for job_i in "${expected_jobs[@]}"; do
-        if ! compgen -G "$block/out/jobR${job_i}.*.*.out" > /dev/null; then
+        if [[ -z "${have_out[$job_i]+x}" ]]; then
             blockError=true
             ((fail_count++))
             echo "$block is missing output for job I=$job_i" >> "$OUTFILE"
@@ -171,62 +316,60 @@ for block in "$DIR"/*; do
     # Check .err files
     ###############################
 
+    err_files=()
     for file in "$block"/err/*.err; do
-        [[ -e "$file" ]] || continue
-
-        job_i=$(get_job_I_from_filename "$file")
-        last_line=$(tail -n 1 "$file")
-
-        if [[ "$last_line" != "WARNING: In non-interactive mode release checks e.g. deprecated releases, production architectures are disabled." ]]; then
-            blockError=true
-            ((fail_count++))
-            echo "$file" >> "$OUTFILE"
-            mark_failed_job "$failed_jobs_file" "$job_i"
-        fi
+        [[ -e "$file" ]] && err_files+=( "$file" )
     done
+
+    log_files=()
+    for file in "$block"/log/*.log; do
+        [[ -e "$file" ]] && log_files+=( "$file" )
+    done
+
+    prefetch_files "${err_files[@]}" "${log_files[@]}"
+
+    err_results=()
+    if (( ${#err_files[@]} > 0 )); then
+        mapfile -t err_results < <(printf '%s\n' "${err_files[@]}" | scan_err_files)
+    fi
+
+    if (( ${#err_results[@]} != ${#err_files[@]} )); then
+        for file in "${err_files[@]}"; do
+            check_err_slow "$file"
+        done
+    else
+        for idx in "${!err_files[@]}"; do
+            file="${err_files[idx]}"
+            if [[ "${err_results[idx]}" != 1 ]]; then
+                job_i_from_path "$file"
+                blockError=true
+                ((fail_count++))
+                echo "$file" >> "$OUTFILE"
+                mark_failed_job "$failed_jobs_file" "$job_i"
+            fi
+        done
+    fi
 
     ###############################
     # Find ctuple timing information
     ###############################
 
-    for file in "$block"/log/*.log; do
-        [[ -e "$file" ]] || continue
+    log_results=()
+    if (( ${#log_files[@]} > 0 )); then
+        mapfile -t log_results < <(printf '%s\n' "${log_files[@]}" | scan_log_files)
+    fi
 
-        first_line=$(head -n 1 "$file")
-        second_line=$(head -n 3 "$file" | tail -n 1)
-        last_line=$(tail -n 20 "$file" | head -n 1)
-
-        submission_time=$(grep -oE '[0-9]{2}:[0-9]{2}:[0-9]{2}' <<< "$first_line")
-        transfer_time=$(grep -oE '[0-9]{2}:[0-9]{2}:[0-9]{2}' <<< "$second_line")
-        finish_time=$(grep -oE '[0-9]{2}:[0-9]{2}:[0-9]{2}' <<< "$last_line")
-
-        if [[ -z "$submission_time" || -z "$transfer_time" || -z "$finish_time" ]]; then
-            blockError=true
-            ((fail_count++))
-            job_i=$(get_job_I_from_filename "$file")
-            echo "$file has missing timing information" >> "$OUTFILE"
-            mark_failed_job "$failed_jobs_file" "$job_i"
-            continue
-        fi
-
-        st=$(to_seconds "$submission_time")
-        tt=$(to_seconds "$transfer_time")
-        ft=$(to_seconds "$finish_time")
-
-        total_job_time=$(( ft - st ))
-        running_job_time=$(( ft - tt))
-
-        if (( total_job_time <= 0)); then
-            total_job_time=$(( 86400 - st + ft))
-        fi
-
-        if (( running_job_time <= 0)); then
-            running_job_time=$(( 86400 - tt + ft))
-        fi
-
-        total_job_times+=( "$total_job_time" )
-        running_job_times+=( "$running_job_time" )
-    done
+    if (( ${#log_results[@]} != ${#log_files[@]} )); then
+        for file in "${log_files[@]}"; do
+            check_log_slow "$file"
+        done
+    else
+        for idx in "${!log_files[@]}"; do
+            file="${log_files[idx]}"
+            IFS='|' read -r st tt ft <<< "${log_results[idx]}"
+            record_ctuple_times
+        done
+    fi
 
     ###############################
     # Create resubmit JDL if needed

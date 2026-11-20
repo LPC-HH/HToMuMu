@@ -1,13 +1,37 @@
 #!/bin/bash
+#
+# hadd the per-job CreateTuple outputs on EOS into <Type>_<Era>_tuples.root.
+#
+# Usage:
+#   ./hadd_tuples_EOS.sh [-e ERAS] [-t TYPES] [-c | -eos] [-s]
+#   ./hadd_tuples_EOS.sh -e 2024 -t "ggH VBF"          # only ggH_2024 and VBF_2024
+#   ./hadd_tuples_EOS.sh -e "2023 2023BPix" -t DY -c   # DY for two eras, copy to EOS
+#   ./hadd_tuples_EOS.sh -e 2024 -t DY -s -eos         # Z-peak-sized DY: build on scratch, move to EOS
+#   ./hadd_tuples_EOS.sh                               # everything
+# ERAS / TYPES are space- or comma-separated; default is all of ALL_ERAS / ALL_TYPES.
+# -s writes the merged files to 3DayLifetime scratch instead of the current directory
+#    (use it when outputs won't fit in the nobackup quota, e.g. with the Z region included).
+# Merging goes through merge_large_tree.C (not plain hadd) so trees > 100 GB are not
+# split into <name>_1.root.
 
-ANALYZER_VERSION="v2.4"
-TUPLES_VERSION="v2.4.2"
+ANALYZER_VERSION="v2.8"
+TUPLES_VERSION="v2.8.0"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRATCH_DIR="/uscmst1b_scratch/lpc1/3DayLifetime/$USER/hadd_tuples_${TUPLES_VERSION}"
+WORK_DIR="."
+USE_SCRATCH=false
 
 EOS_PATH="/eos/uscms/store/group/lpchmumu/$USER/analyzer_HiggsMuMu_$ANALYZER_VERSION/tuples_$TUPLES_VERSION/"
 inEOS_PATH="/store/group/lpchmumu/$USER/analyzer_HiggsMuMu_$ANALYZER_VERSION/tuples_$TUPLES_VERSION/"
 
 COPY_TO_EOS=false
 DELETE_AFTER_COPY=false
+
+ALL_ERAS="2022 2022EE 2023 2023BPix 2024 2025 2026"
+ALL_TYPES="Data DY EWK TT DiBoson ggH VBF ttH"
+SEL_ERAS="${ALL_ERAS}"
+SEL_TYPES="${ALL_TYPES}"
 
 
 ############################################################
@@ -28,6 +52,20 @@ while [[ $# -gt 0 ]]; do
             DELETE_AFTER_COPY=true
             ;;
 
+        -s|--scratch)
+            USE_SCRATCH=true
+            ;;
+
+        -e|--eras)
+            SEL_ERAS="${2//,/ }"
+            shift
+            ;;
+
+        -t|--types)
+            SEL_TYPES="${2//,/ }"
+            shift
+            ;;
+
         *)
             echo "[ERROR] Unknown option: $1"
             echo
@@ -35,6 +73,10 @@ while [[ $# -gt 0 ]]; do
             echo "  $0          # hadd locally and keep local files"
             echo "  $0 -c       # hadd locally, copy to EOS, keep local files"
             echo "  $0 -eos     # hadd locally, copy to EOS, delete local files"
+            echo "  -e|--eras  \"2024 2023BPix\"   only these eras  (${ALL_ERAS})"
+            echo "  -t|--types \"ggH VBF DY\"      only these types (${ALL_TYPES})"
+            echo "  -s|--scratch                 write merged files to ${SCRATCH_DIR}"
+            echo "                               instead of the current directory (e.g. $0 -e 2024 -t DY -s -eos)"
             exit 1
             ;;
 
@@ -43,6 +85,38 @@ while [[ $# -gt 0 ]]; do
     shift
 
 done
+
+
+############################################################
+# Era / type selection
+############################################################
+
+in_list()  # in_list WORD "LIST": exact, case-sensitive word match
+{
+    [[ " $2 " == *" $1 "* ]]
+}
+
+for ERA in ${SEL_ERAS}; do
+    in_list "${ERA}" "${ALL_ERAS}" || { echo "[ERROR] Unknown era '${ERA}'. Valid: ${ALL_ERAS}"; exit 1; }
+done
+for TYPE in ${SEL_TYPES}; do
+    in_list "${TYPE}" "${ALL_TYPES}" || { echo "[ERROR] Unknown type '${TYPE}'. Valid: ${ALL_TYPES}"; exit 1; }
+done
+
+if $USE_SCRATCH; then
+    WORK_DIR="${SCRATCH_DIR}"
+    mkdir -p "${WORK_DIR}" || { echo "[ERROR] cannot create ${WORK_DIR}"; exit 1; }
+fi
+
+echo "Eras : ${SEL_ERAS}"
+echo "Types: ${SEL_TYPES}"
+echo "Work dir (hadd output): ${WORK_DIR}"
+
+if $USE_SCRATCH && ! $COPY_TO_EOS; then
+    echo
+    echo "[WARNING] -s without -c/-eos: merged files stay only on 3DayLifetime scratch"
+    echo "          and will be purged after 3 days."
+fi
 
 
 ############################################################
@@ -90,21 +164,48 @@ merge()
 {
     OUTPUT_FILE="$1"
     shift
+    OUT_PATH="${WORK_DIR}/${OUTPUT_FILE}"
 
     echo
     echo "============================================================"
-    echo "Creating: ${OUTPUT_FILE}"
+    echo "Creating: ${OUT_PATH}"
     echo "============================================================"
 
 
-    hadd -f "${OUTPUT_FILE}" "$@"
+    # Inputs: a pattern that matches nothing (e.g. <dataset>{,_ext*}/*.root for a dataset without
+    # extensions) stays unexpanded and is dropped here; duplicates are removed.
+    local -a INPUTS=()
+    local -A SEEN=()
+    local INPUT
+    for INPUT in "$@"; do
+        if [[ ! -e "${INPUT}" ]]; then
+            [[ "${INPUT}" == *_ext\** ]] || echo "[WARNING] no input matches ${INPUT}"
+            continue
+        fi
+        [[ -n "${SEEN[${INPUT}]:-}" ]] && continue
+        SEEN[${INPUT}]=1
+        INPUTS+=("${INPUT}")
+    done
+    if (( ${#INPUTS[@]} == 0 )); then
+        echo "[ERROR] no input files for ${OUT_PATH}"
+        return 1
+    fi
+    # Directories merged (extensions are normalised together by CreateTuple: h_sumOfgenWeight_sample)
+    printf '%s\n' "${INPUTS[@]}" | xargs -n1 dirname | sort | uniq -c | sed 's/^/    /'
+
+    # hadd equivalent that lifts the 100 GB TTree limit (see merge_large_tree.C)
+    INPUT_LIST="$(mktemp "${WORK_DIR}/.hadd_inputs_XXXXXX.txt")"
+    printf '%s\n' "${INPUTS[@]}" > "${INPUT_LIST}"
+
+    root -l -b -q "${SCRIPT_DIR}/merge_large_tree.C+(\"${OUT_PATH}\",\"${INPUT_LIST}\")"
 
     HADD_STATUS=$?
+    rm -f "${INPUT_LIST}"
 
     if [ $HADD_STATUS -ne 0 ]; then
         echo
         echo "[ERROR] hadd failed for:"
-        echo "        ${OUTPUT_FILE}"
+        echo "        ${OUT_PATH}"
         echo
         return 1
     fi
@@ -114,7 +215,7 @@ merge()
         EOS_OUTPUT="root://cmseos.fnal.gov//${inEOS_PATH#/}haddTuples/${OUTPUT_FILE}"
 
         echo
-        echo "Copying ${OUTPUT_FILE} to EOS..."
+        echo "Copying ${OUT_PATH} to EOS..."
         echo "Destination:"
         echo "    ${EOS_OUTPUT}"
         echo
@@ -127,7 +228,7 @@ merge()
             echo "EOS copy attempt ${ATTEMPT}/${COPY_MAX_RETRIES}"
             echo "------------------------------------------------------------"
 
-            eos cp "${OUTPUT_FILE}" "${EOS_OUTPUT}"
+            eos cp "${OUT_PATH}" "${EOS_OUTPUT}"
 
             COPY_STATUS=$?
 
@@ -163,7 +264,7 @@ merge()
             echo "[ERROR] EOS COPY FAILED"
             echo "============================================================"
             echo "File:"
-            echo "    ${OUTPUT_FILE}"
+            echo "    ${OUT_PATH}"
             echo
             echo "Failed after ${COPY_MAX_RETRIES} attempts."
             echo
@@ -179,14 +280,14 @@ merge()
         if $DELETE_AFTER_COPY; then
 
             echo "Removing local file:"
-            echo "    ${OUTPUT_FILE}"
+            echo "    ${OUT_PATH}"
 
-            rm -f "${OUTPUT_FILE}"
+            rm -f "${OUT_PATH}"
 
         else
 
             echo "Keeping local file:"
-            echo "    ${OUTPUT_FILE}"
+            echo "    ${OUT_PATH}"
 
         fi
 
@@ -196,47 +297,72 @@ merge()
 }
 
 
+# merge only if <Type>_<Era>_tuples.root is in the -t / -e selection
+merge_selected()
+{
+    local NAME="${1%_tuples.root}"
+    local TYPE="${NAME%%_*}"   # first field: EWK_pythia_2024 is selected by -t EWK
+    local ERA="${NAME##*_}"    # last field
+    in_list "${TYPE}" "${SEL_TYPES}" && in_list "${ERA}" "${SEL_ERAS}" || return 0
+    merge "$@"
+}
+
+
+era_banner()
+{
+    in_list "$1" "${SEL_ERAS}" || return 0
+    echo
+    echo "############################################################"
+    echo "# $1"
+    echo "############################################################"
+}
+
+
 
 ############################################################
 # 2022
 ############################################################
 
-echo
-echo "############################################################"
-echo "# 2022"
-echo "############################################################"
+era_banner 2022
 
-merge Data_2022_tuples.root \
+merge_selected Data_2022_tuples.root \
     ${EOS_PATH}Muon_2022{C..D}/*.root \
     ${EOS_PATH}SingleMuon_2022C/*.root
 
-merge DY_2022_tuples.root \
-    ${EOS_PATH}DY50to120_Summer22/*.root \
-    ${EOS_PATH}DY120to200_Summer22/*.root
+# All-aMC@NLO DY (stitch_weight is already in the weights, lib/DYStitching.h): jet-binned 0J/1J/2J
+# everywhere + 105to160 and VBFFilter inside LHE mll [105, 160). No POWHEG.
+merge_selected DY_2022_tuples.root \
+    ${EOS_PATH}DYto2L-2Jets_{0,1,2}J_Summer22{,_ext*}/*.root \
+    ${EOS_PATH}DYto2Mu-2Jets_105to160_Summer22{,_ext*}/*.root \
+    ${EOS_PATH}DYto2Mu-2Jets_105to160_VBFFilter_Summer22{,_ext*}/*.root
 
-merge EWK_2022_tuples.root \
-    ${EOS_PATH}EWK_2L2J_Summer22/*.root
+merge_selected EWK_2022_tuples.root \
+    ${EOS_PATH}EWK_2Mu2J_Summer22{,_ext*}/*.root
 
-merge TT_2022_tuples.root \
-    ${EOS_PATH}TTto2L2Nu_Summer22/*.root \
-    ${EOS_PATH}TTtoLNu2Q_Summer22/*.root
+# Same EWK process showered with Pythia (alternative to the nominal Herwig7 2Mu2J sample)
+merge_selected EWK_pythia_2022_tuples.root \
+    ${EOS_PATH}EWK_2Mu2J_pythia_Summer22{,_ext*}/*.root
 
-merge DiBoson_2022_tuples.root \
-    ${EOS_PATH}WZto2L2Q_*22/*.root \
-    ${EOS_PATH}WZto3LNu_*22/*.root \
-    ${EOS_PATH}ZZto2L2Nu_*22/*.root \
-    ${EOS_PATH}ZZto2L2Q_*22/*.root \
-    ${EOS_PATH}ZZto4L_*22/*.root \
-    ${EOS_PATH}WWto2L2Nu_*22/*.root
+merge_selected TT_2022_tuples.root \
+    ${EOS_PATH}TTto2L2Nu_Summer22{,_ext*}/*.root \
+    ${EOS_PATH}TTtoLNu2Q_Summer22{,_ext*}/*.root
 
-merge ggH_2022_tuples.root \
-    ${EOS_PATH}ggH_*22/*.root
+merge_selected DiBoson_2022_tuples.root \
+    ${EOS_PATH}WZto2L2Q_*22{,_ext*}/*.root \
+    ${EOS_PATH}WZto3LNu_*22{,_ext*}/*.root \
+    ${EOS_PATH}ZZto2L2Nu_*22{,_ext*}/*.root \
+    ${EOS_PATH}ZZto2L2Q_*22{,_ext*}/*.root \
+    ${EOS_PATH}ZZto4L_*22{,_ext*}/*.root \
+    ${EOS_PATH}WWto2L2Nu_*22{,_ext*}/*.root
 
-merge VBF_2022_tuples.root \
-    ${EOS_PATH}VBF_*22/*.root
+merge_selected ggH_2022_tuples.root \
+    ${EOS_PATH}ggH_*22{,_ext*}/*.root
 
-merge ttH_2022_tuples.root \
-    ${EOS_PATH}ttH_*22/*.root
+merge_selected VBF_2022_tuples.root \
+    ${EOS_PATH}VBF_*22{,_ext*}/*.root
+
+merge_selected ttH_2022_tuples.root \
+    ${EOS_PATH}ttH_*22{,_ext*}/*.root
 
 
 
@@ -244,41 +370,45 @@ merge ttH_2022_tuples.root \
 # 2022EE
 ############################################################
 
-echo
-echo "############################################################"
-echo "# 2022EE"
-echo "############################################################"
+era_banner 2022EE
 
-merge Data_2022EE_tuples.root \
+merge_selected Data_2022EE_tuples.root \
     ${EOS_PATH}Muon*_2022{E..G}/*.root
 
-merge DY_2022EE_tuples.root \
-    ${EOS_PATH}DY50to120_Summer22EE/*.root \
-    ${EOS_PATH}DY120to200_Summer22EE/*.root
+# All-aMC@NLO DY (stitch_weight is already in the weights, lib/DYStitching.h): jet-binned 0J/1J/2J
+# everywhere + 105to160 and VBFFilter inside LHE mll [105, 160). No POWHEG.
+merge_selected DY_2022EE_tuples.root \
+    ${EOS_PATH}DYto2L-2Jets_{0,1,2}J_Summer22EE{,_ext*}/*.root \
+    ${EOS_PATH}DYto2Mu-2Jets_105to160_Summer22EE{,_ext*}/*.root \
+    ${EOS_PATH}DYto2Mu-2Jets_105to160_VBFFilter_Summer22EE{,_ext*}/*.root
 
-merge EWK_2022EE_tuples.root \
-    ${EOS_PATH}EWK_2L2J_Summer22EE/*.root
+merge_selected EWK_2022EE_tuples.root \
+    ${EOS_PATH}EWK_2Mu2J_Summer22EE{,_ext*}/*.root
 
-merge TT_2022EE_tuples.root \
-    ${EOS_PATH}TTto2L2Nu_Summer22EE/*.root \
-    ${EOS_PATH}TTtoLNu2Q_Summer22EE/*.root
+# Same EWK process showered with Pythia (alternative to the nominal Herwig7 2Mu2J sample)
+merge_selected EWK_pythia_2022EE_tuples.root \
+    ${EOS_PATH}EWK_2Mu2J_pythia_Summer22EE{,_ext*}/*.root
 
-merge DiBoson_2022EE_tuples.root \
-    ${EOS_PATH}WZto2L2Q_*22EE/*.root \
-    ${EOS_PATH}WZto3LNu_*22EE/*.root \
-    ${EOS_PATH}ZZto2L2Nu_*22EE/*.root \
-    ${EOS_PATH}ZZto2L2Q_*22EE/*.root \
-    ${EOS_PATH}ZZto4L_*22EE/*.root \
-    ${EOS_PATH}WWto2L2Nu_*22EE/*.root
+merge_selected TT_2022EE_tuples.root \
+    ${EOS_PATH}TTto2L2Nu_Summer22EE{,_ext*}/*.root \
+    ${EOS_PATH}TTtoLNu2Q_Summer22EE{,_ext*}/*.root
 
-merge ggH_2022EE_tuples.root \
-    ${EOS_PATH}ggH_*22EE/*.root
+merge_selected DiBoson_2022EE_tuples.root \
+    ${EOS_PATH}WZto2L2Q_*22EE{,_ext*}/*.root \
+    ${EOS_PATH}WZto3LNu_*22EE{,_ext*}/*.root \
+    ${EOS_PATH}ZZto2L2Nu_*22EE{,_ext*}/*.root \
+    ${EOS_PATH}ZZto2L2Q_*22EE{,_ext*}/*.root \
+    ${EOS_PATH}ZZto4L_*22EE{,_ext*}/*.root \
+    ${EOS_PATH}WWto2L2Nu_*22EE{,_ext*}/*.root
 
-merge VBF_2022EE_tuples.root \
-    ${EOS_PATH}VBF_*22EE/*.root
+merge_selected ggH_2022EE_tuples.root \
+    ${EOS_PATH}ggH_*22EE{,_ext*}/*.root
 
-merge ttH_2022EE_tuples.root \
-    ${EOS_PATH}ttH_*22EE/*.root
+merge_selected VBF_2022EE_tuples.root \
+    ${EOS_PATH}VBF_*22EE{,_ext*}/*.root
+
+merge_selected ttH_2022EE_tuples.root \
+    ${EOS_PATH}ttH_*22EE{,_ext*}/*.root
 
 
 
@@ -286,116 +416,128 @@ merge ttH_2022EE_tuples.root \
 # 2023
 ############################################################
 
-echo
-echo "############################################################"
-echo "# 2023"
-echo "############################################################"
+era_banner 2023
 
-merge Data_2023_tuples.root \
+merge_selected Data_2023_tuples.root \
     ${EOS_PATH}Muon*_2023C*/*.root
 
-merge DY_2023_tuples.root \
-    ${EOS_PATH}DY50to120_Summer23/*.root \
-    ${EOS_PATH}DY120to200_Summer23/*.root
+# All-aMC@NLO DY (stitch_weight is already in the weights, lib/DYStitching.h): jet-binned 0J/1J/2J
+# everywhere + 105to160 and VBFFilter inside LHE mll [105, 160). No POWHEG.
+merge_selected DY_2023_tuples.root \
+    ${EOS_PATH}DYto2L-2Jets_{0,1,2}J_Summer23{,_ext*}/*.root \
+    ${EOS_PATH}DYto2Mu-2Jets_105to160_Summer23{,_ext*}/*.root \
+    ${EOS_PATH}DYto2Mu-2Jets_105to160_VBFFilter_Summer23{,_ext*}/*.root
 
-merge EWK_2023_tuples.root \
-    ${EOS_PATH}EWK_2L2J_Summer23/*.root
+merge_selected EWK_2023_tuples.root \
+    ${EOS_PATH}EWK_2Mu2J_Summer23{,_ext*}/*.root
 
-merge TT_2023_tuples.root \
-    ${EOS_PATH}TTto2L2Nu_Summer23/*.root \
-    ${EOS_PATH}TTtoLNu2Q_Summer23/*.root
+# Same EWK process showered with Pythia (alternative to the nominal Herwig7 2Mu2J sample)
+merge_selected EWK_pythia_2023_tuples.root \
+    ${EOS_PATH}EWK_2Mu2J_pythia_Summer23{,_ext*}/*.root
 
-merge DiBoson_2023_tuples.root \
-    ${EOS_PATH}WZto2L2Q_*23/*.root \
-    ${EOS_PATH}WZto3LNu_*23/*.root \
-    ${EOS_PATH}ZZto2L2Nu_*23/*.root \
-    ${EOS_PATH}ZZto2L2Q_*23/*.root \
-    ${EOS_PATH}ZZto4L_*23/*.root \
-    ${EOS_PATH}WWto2L2Nu_*23/*.root
+merge_selected TT_2023_tuples.root \
+    ${EOS_PATH}TTto2L2Nu_Summer23{,_ext*}/*.root \
+    ${EOS_PATH}TTtoLNu2Q_Summer23{,_ext*}/*.root
 
-merge ggH_2023_tuples.root \
-    ${EOS_PATH}ggH_*23/*.root
+merge_selected DiBoson_2023_tuples.root \
+    ${EOS_PATH}WZto2L2Q_*23{,_ext*}/*.root \
+    ${EOS_PATH}WZto3LNu_*23{,_ext*}/*.root \
+    ${EOS_PATH}ZZto2L2Nu_*23{,_ext*}/*.root \
+    ${EOS_PATH}ZZto2L2Q_*23{,_ext*}/*.root \
+    ${EOS_PATH}ZZto4L_*23{,_ext*}/*.root \
+    ${EOS_PATH}WWto2L2Nu_*23{,_ext*}/*.root
 
-merge VBF_2023_tuples.root \
-    ${EOS_PATH}VBF_*23/*.root
+merge_selected ggH_2023_tuples.root \
+    ${EOS_PATH}ggH_*23{,_ext*}/*.root
 
-merge ttH_2023_tuples.root \
-    ${EOS_PATH}ttH_*23/*.root
+merge_selected VBF_2023_tuples.root \
+    ${EOS_PATH}VBF_*23{,_ext*}/*.root
+
+merge_selected ttH_2023_tuples.root \
+    ${EOS_PATH}ttH_*23{,_ext*}/*.root
 
 
 
-echo
-echo "############################################################"
-echo "# 2023BPix"
-echo "############################################################"
+era_banner 2023BPix
 
-merge Data_2023BPix_tuples.root \
+merge_selected Data_2023BPix_tuples.root \
     ${EOS_PATH}Muon*_2023D*/*.root
 
-merge DY_2023BPix_tuples.root \
-    ${EOS_PATH}DY50to120_Summer23BPix/*.root \
-    ${EOS_PATH}DY120to200_Summer23BPix/*.root
+# All-aMC@NLO DY (stitch_weight is already in the weights, lib/DYStitching.h): jet-binned 0J/1J/2J
+# everywhere + 105to160 and VBFFilter inside LHE mll [105, 160). No POWHEG.
+merge_selected DY_2023BPix_tuples.root \
+    ${EOS_PATH}DYto2L-2Jets_{0,1,2}J_Summer23BPix{,_ext*}/*.root \
+    ${EOS_PATH}DYto2Mu-2Jets_105to160_Summer23BPix{,_ext*}/*.root \
+    ${EOS_PATH}DYto2Mu-2Jets_105to160_VBFFilter_Summer23BPix{,_ext*}/*.root
 
-merge EWK_2023BPix_tuples.root \
-    ${EOS_PATH}EWK_2L2J_Summer23BPix/*.root
+merge_selected EWK_2023BPix_tuples.root \
+    ${EOS_PATH}EWK_2Mu2J_Summer23BPix{,_ext*}/*.root
 
-merge TT_2023BPix_tuples.root \
-    ${EOS_PATH}TTto2L2Nu_Summer23BPix/*.root \
-    ${EOS_PATH}TTtoLNu2Q_Summer23BPix/*.root
+# Same EWK process showered with Pythia (alternative to the nominal Herwig7 2Mu2J sample)
+merge_selected EWK_pythia_2023BPix_tuples.root \
+    ${EOS_PATH}EWK_2Mu2J_pythia_Summer23BPix{,_ext*}/*.root
 
-merge DiBoson_2023BPix_tuples.root \
-    ${EOS_PATH}WZto2L2Q_*23BPix/*.root \
-    ${EOS_PATH}WZto3LNu_*23BPix/*.root \
-    ${EOS_PATH}ZZto2L2Nu_*23BPix/*.root \
-    ${EOS_PATH}ZZto2L2Q_*23BPix/*.root \
-    ${EOS_PATH}ZZto4L_*23BPix/*.root \
-    ${EOS_PATH}WWto2L2Nu_*23BPix/*.root
+merge_selected TT_2023BPix_tuples.root \
+    ${EOS_PATH}TTto2L2Nu_Summer23BPix{,_ext*}/*.root \
+    ${EOS_PATH}TTtoLNu2Q_Summer23BPix{,_ext*}/*.root
 
-merge ggH_2023BPix_tuples.root \
-    ${EOS_PATH}ggH_*23BPix/*.root
+merge_selected DiBoson_2023BPix_tuples.root \
+    ${EOS_PATH}WZto2L2Q_*23BPix{,_ext*}/*.root \
+    ${EOS_PATH}WZto3LNu_*23BPix{,_ext*}/*.root \
+    ${EOS_PATH}ZZto2L2Nu_*23BPix{,_ext*}/*.root \
+    ${EOS_PATH}ZZto2L2Q_*23BPix{,_ext*}/*.root \
+    ${EOS_PATH}ZZto4L_*23BPix{,_ext*}/*.root \
+    ${EOS_PATH}WWto2L2Nu_*23BPix{,_ext*}/*.root
 
-merge VBF_2023BPix_tuples.root \
-    ${EOS_PATH}VBF_*23BPix/*.root
+merge_selected ggH_2023BPix_tuples.root \
+    ${EOS_PATH}ggH_*23BPix{,_ext*}/*.root
 
-merge ttH_2023BPix_tuples.root \
-    ${EOS_PATH}ttH_*23BPix/*.root
+merge_selected VBF_2023BPix_tuples.root \
+    ${EOS_PATH}VBF_*23BPix{,_ext*}/*.root
+
+merge_selected ttH_2023BPix_tuples.root \
+    ${EOS_PATH}ttH_*23BPix{,_ext*}/*.root
 
 
-echo
-echo "############################################################"
-echo "# 2024"
-echo "############################################################"
+era_banner 2024
 
-merge Data_2024_tuples.root \
+merge_selected Data_2024_tuples.root \
     ${EOS_PATH}Muon*_2024*/*.root
 
-merge DY_2024_tuples.root \
-    ${EOS_PATH}DY50to120_Summer24/*.root \
-    ${EOS_PATH}DY120to200_Summer24/*.root
+# All-aMC@NLO DY (stitch_weight is already in the weights, lib/DYStitching.h): jet-binned 0J/1J/2J
+# everywhere + 105to160 and VBFFilter inside LHE mll [105, 160). No POWHEG.
+merge_selected DY_2024_tuples.root \
+    ${EOS_PATH}DYto2Mu-2Jets_{0,1,2}J_Summer24{,_ext*}/*.root \
+    ${EOS_PATH}DYto2Mu-2Jets_105to160_Summer24{,_ext*}/*.root \
+    ${EOS_PATH}DYto2Mu-2Jets_105to160_VBFFilter_Summer24{,_ext*}/*.root
 
-merge EWK_2024_tuples.root \
-    ${EOS_PATH}EWK_2L2J_Summer24/*.root
+merge_selected EWK_2024_tuples.root \
+    ${EOS_PATH}EWK_2Mu2J_Summer24{,_ext*}/*.root
 
-merge TT_2024_tuples.root \
-    ${EOS_PATH}TTto2L2Nu_Summer24/*.root \
-    ${EOS_PATH}TTtoLNu2Q_Summer24/*.root
+# Same EWK process showered with Pythia (alternative to the nominal Herwig7 2Mu2J sample)
+merge_selected EWK_pythia_2024_tuples.root \
+    ${EOS_PATH}EWK_2Mu2J_pythia_Summer24{,_ext*}/*.root
 
-merge DiBoson_2024_tuples.root \
-    ${EOS_PATH}WZto2L2Q_*24/*.root \
-    ${EOS_PATH}WZto3LNu_*24/*.root \
-    ${EOS_PATH}ZZto2L2Nu_*24/*.root \
-    ${EOS_PATH}ZZto2L2Q_*24/*.root \
-    ${EOS_PATH}ZZto4L_*24/*.root \
-    ${EOS_PATH}WWto2L2Nu_*24/*.root
+merge_selected TT_2024_tuples.root \
+    ${EOS_PATH}TTto2L2Nu_Summer24{,_ext*}/*.root \
+    ${EOS_PATH}TTtoLNu2Q_Summer24{,_ext*}/*.root
 
-merge ggH_2024_tuples.root \
-    ${EOS_PATH}ggH_*24/*.root
+merge_selected DiBoson_2024_tuples.root \
+    ${EOS_PATH}WZto2L2Q_*24{,_ext*}/*.root \
+    ${EOS_PATH}WZto3LNu_*24{,_ext*}/*.root \
+    ${EOS_PATH}ZZto2L2Nu_*24{,_ext*}/*.root \
+    ${EOS_PATH}ZZto2L2Q_*24{,_ext*}/*.root \
+    ${EOS_PATH}ZZto4L_*24{,_ext*}/*.root \
+    ${EOS_PATH}WWto2L2Nu_*24{,_ext*}/*.root
 
-merge VBF_2024_tuples.root \
-    ${EOS_PATH}VBF_*24/*.root
+merge_selected ggH_2024_tuples.root \
+    ${EOS_PATH}ggH_*24{,_ext*}/*.root
 
-merge ttH_2024_tuples.root \
-    ${EOS_PATH}ttH_*24/*.root
+merge_selected VBF_2024_tuples.root \
+    ${EOS_PATH}VBF_*24{,_ext*}/*.root
+
+merge_selected ttH_2024_tuples.root \
+    ${EOS_PATH}ttH_*24{,_ext*}/*.root
 
 
 
@@ -403,49 +545,50 @@ merge ttH_2024_tuples.root \
 # 2025
 ############################################################
 
-echo
-echo "############################################################"
-echo "# 2025"
-echo "############################################################"
+era_banner 2025
 
-merge Data_2025_tuples.root \
+merge_selected Data_2025_tuples.root \
     ${EOS_PATH}Muon*_2025*/*.root
 
-merge DY_2025_tuples.root \
-    ${EOS_PATH}DY50to120_Summer25/*.root \
-    ${EOS_PATH}DY120to200_Summer25/*.root
+# All-aMC@NLO DY (stitch_weight is already in the weights, lib/DYStitching.h): jet-binned 0J/1J/2J
+# everywhere + 105to160 and VBFFilter inside LHE mll [105, 160). No POWHEG.
+merge_selected DY_2025_tuples.root \
+    ${EOS_PATH}DYto2Mu-2Jets_{0,1,2}J_Summer25{,_ext*}/*.root \
+    ${EOS_PATH}DYto2Mu-2Jets_105to160_Summer25{,_ext*}/*.root \
+    ${EOS_PATH}DYto2Mu-2Jets_105to160_VBFFilter_Summer25{,_ext*}/*.root
 
-merge EWK_2025_tuples.root \
-    ${EOS_PATH}EWK_2L2J_Summer25/*.root
+merge_selected EWK_2025_tuples.root \
+    ${EOS_PATH}EWK_2Mu2J_Summer25{,_ext*}/*.root
 
-merge TT_2025_tuples.root \
-    ${EOS_PATH}TTto2L2Nu_Summer25/*.root \
-    ${EOS_PATH}TTtoLNu2Q_Summer25/*.root
+# Same EWK process showered with Pythia (alternative to the nominal Herwig7 2Mu2J sample)
+merge_selected EWK_pythia_2025_tuples.root \
+    ${EOS_PATH}EWK_2Mu2J_pythia_Summer25{,_ext*}/*.root
 
-merge DiBoson_2025_tuples.root \
-    ${EOS_PATH}WZto2L2Q_*25/*.root \
-    ${EOS_PATH}WZto3LNu_*25/*.root \
-    ${EOS_PATH}ZZto2L2Nu_*25/*.root \
-    ${EOS_PATH}ZZto2L2Q_*25/*.root \
-    ${EOS_PATH}ZZto4L_*25/*.root \
-    ${EOS_PATH}WWto2L2Nu_*25/*.root
+merge_selected TT_2025_tuples.root \
+    ${EOS_PATH}TTto2L2Nu_Summer25{,_ext*}/*.root \
+    ${EOS_PATH}TTtoLNu2Q_Summer25{,_ext*}/*.root
 
-merge ggH_2025_tuples.root \
-    ${EOS_PATH}ggH_*25/*.root
+merge_selected DiBoson_2025_tuples.root \
+    ${EOS_PATH}WZto2L2Q_*25{,_ext*}/*.root \
+    ${EOS_PATH}WZto3LNu_*25{,_ext*}/*.root \
+    ${EOS_PATH}ZZto2L2Nu_*25{,_ext*}/*.root \
+    ${EOS_PATH}ZZto2L2Q_*25{,_ext*}/*.root \
+    ${EOS_PATH}ZZto4L_*25{,_ext*}/*.root \
+    ${EOS_PATH}WWto2L2Nu_*25{,_ext*}/*.root
 
-merge VBF_2025_tuples.root \
-    ${EOS_PATH}VBF_*25/*.root
+merge_selected ggH_2025_tuples.root \
+    ${EOS_PATH}ggH_*25{,_ext*}/*.root
+
+merge_selected VBF_2025_tuples.root \
+    ${EOS_PATH}VBF_*25{,_ext*}/*.root
 
 ############################################################
 # 2026
 ############################################################
 
-echo
-echo "############################################################"
-echo "# 2026"
-echo "############################################################"
+era_banner 2026
 
-merge Data_2026_tuples.root \
+merge_selected Data_2026_tuples.root \
     ${EOS_PATH}Muon*_2026*/*.root
 
 ############################################################
@@ -465,12 +608,12 @@ if $COPY_TO_EOS; then
     if $DELETE_AFTER_COPY; then
         echo "Local copies were deleted after successful EOS copies."
     else
-        echo "Local copies were kept."
+        echo "Local copies were kept in ${WORK_DIR}."
     fi
 
 else
 
-    echo "Files were stored locally only."
+    echo "Files were stored in ${WORK_DIR} only."
 
 fi
 

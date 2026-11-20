@@ -19,3 +19,4 @@ python/xgboost/optunaStudies/
 Tutorials/AsimovOptuna/
 markdownFiles/
 list/missingDatasets_Run3.py
+list/*.lost

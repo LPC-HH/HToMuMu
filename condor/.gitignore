@@ -10,5 +10,6 @@ docker_stderror
 *.json
 *.txt
 submit_all_failed_jobs.sh
+submit_all_failed_ctuple_jobs.sh
 #files used in cross CMS synchronization
 sync*

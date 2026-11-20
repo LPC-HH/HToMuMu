@@ -24,6 +24,7 @@
 // Header file for the classes stored in the TTree if any.
 #include "../src/BTagCalibrationStandalone.cpp"
 #include "BTagCalibrationStandalone.h"
+#include "DYStitching.h"
 #include "LeptonEfficiencyCorrector.h"
 #include "MainEvent.h"
 #include "TAxis.h"
@@ -308,6 +309,9 @@ class HmmAnalyzer : public MainEvent {
     // label);
 
     Bool_t FillChain(TChain *chain, const TString &inputFileList);
+    void ComputeGenFilterEfficiency();
+    void WriteGenFilterInfo();
+    void ComputeGenStitchingInfo(float &gen_mll, bool &pass_VBF_filter, float &lhe_mll, int &lhe_n_partons);
     Long64_t LoadTree(Long64_t entry);
     void getPileupHistograms();
     float getPileupWeight(int);
@@ -324,6 +328,8 @@ class HmmAnalyzer : public MainEvent {
     void clearTreeVectors();
     void BookTreeBranches();
     bool is_data;
+    TString input_file_list;
+    float gen_filter_efficiency = FLOAT_NULL_VALUE; /**< sum passed / sum total over all lumi blocks (MC only) */
     TString year;
     bool include_Z; /**< Flag indicating if save Z region. */
     bool include_H; /**< Flag indicating if save H region. */
@@ -339,6 +345,17 @@ class HmmAnalyzer : public MainEvent {
     TH1D *h_sumOfgpw =
         new TH1D("h_sumOfgenpuWeight", "h_sumOfgenpuWeight", 1, 0, 1);
     TH1D *h_pileup = new TH1D("h_pileup", "h_pileup", 99, 0, 99);
+    // Pre-selection sum of genWeight vs LHE dimuon mass (hard-process mass if there is no LHE info), for
+    // the DY stitching. 1 GeV bins so that the 105 and 160 GeV sample boundaries are bin edges.
+    TH1D *h_sumOfgw_genMll =
+        new TH1D("h_sumOfgenWeight_genMll", "h_sumOfgenWeight_genMll", 200, 50, 250);
+    TH1D *h_sumOfgw_genMll_VBFFilter =
+        new TH1D("h_sumOfgenWeight_genMll_VBFFilter", "h_sumOfgenWeight_genMll_VBFFilter", 200, 50, 250);
+    // Pre-selection sum of genWeight and of genWeight^2 per DY stitching cell (lib/DYStitching.h)
+    TH1D *h_sumOfgw_stitchCells = new TH1D("h_sumOfgenWeight_stitchCells", "h_sumOfgenWeight_stitchCells",
+                                           dy_stitch::N_CELLS, 0, dy_stitch::N_CELLS);
+    TH1D *h_sumOfgw2_stitchCells = new TH1D("h_sumOfgenWeight2_stitchCells", "h_sumOfgenWeight2_stitchCells",
+                                            dy_stitch::N_CELLS, 0, dy_stitch::N_CELLS);
     TH1D *h_pileup_nTrue = new TH1D("h_pileup_nTrue", "h_pileup_nTrue", 99, 0, 99);
     TH1D *h_sumOfLHEPdfWeight =
         new TH1D(
@@ -390,6 +407,7 @@ class HmmAnalyzer : public MainEvent {
     uint t_luminosityBlock;
     ulong t_event;
     float t_genWeight;
+    float t_GenFilter_Efficiency;
     std::vector<float> *t_LHEPdfWeight;
     std::vector<float> *t_LHEScaleWeight;
     float t_pileup;
@@ -479,6 +497,7 @@ class HmmAnalyzer : public MainEvent {
     std::vector<bool> *t_Mu_tightId;
     std::vector<int> *t_Mu_nStations;
     std::vector<int> *t_Mu_nTrackerLayers;
+    std::vector<float> *t_Mu_bsConstrainedPt_noFSR;  // bare corrected pT (t_Mu_bsConstrainedPt is FSR-dressed)
 
     float t_diMuon_pt;
     float t_diMuon_bsConstrainedPt;
@@ -486,6 +505,9 @@ class HmmAnalyzer : public MainEvent {
     float t_diMuon_phi;
     float t_diMuon_mass;
     float t_diMuon_bsConstrainedMass;
+    // bare (no FSR recovery) dimuon; the un-suffixed bsConstrained/eta/phi dimuon variables are FSR-dressed
+    float t_diMuon_bsConstrainedPt_noFSR;
+    float t_diMuon_bsConstrainedMass_noFSR;
 
     float t_diMuon_bsConstrainedPt_nanoAOD;
     float t_diMuon_bsConstrainedMass_nanoAOD;
@@ -512,6 +534,17 @@ class HmmAnalyzer : public MainEvent {
     //std::vector<int> *t_FatJet_jetId;
     std::vector<int> *t_FatJet_subJetIdx1;
     std::vector<int> *t_FatJet_subJetIdx2;
+
+    // FSR recovery
+    bool t_mu1_hasFSR;
+    bool t_mu2_hasFSR;
+    float t_mu1_bsConstrainedPt, t_mu1_bsConstrainedEta, t_mu1_bsConstrainedPhi, t_mu1_bsConstrainedMass;
+    float t_mu2_bsConstrainedPt, t_mu2_bsConstrainedEta, t_mu2_bsConstrainedPhi, t_mu2_bsConstrainedMass;
+    float t_mu1_fsrPhoton_pt, t_mu1_fsrPhoton_dR;  // chosen photon (FLOAT_NULL_VALUE if none)
+    float t_mu2_fsrPhoton_pt, t_mu2_fsrPhoton_dR;  // chosen photon (FLOAT_NULL_VALUE if none)
+    float t_mu1_pfRelIso04_all_FSR;  // pfRelIso04_all with the chosen photon removed (stored only, not used in selection)
+    float t_mu2_pfRelIso04_all_FSR;  // pfRelIso04_all with the chosen photon removed (stored only, not used in selection)
+    int t_diMuon_nFSR;
 
     std::vector<float> *t_SubJet_btagCMVA;
     std::vector<float> *t_SubJet_btagCSVV2;
@@ -621,6 +654,7 @@ class HmmAnalyzer : public MainEvent {
     std::vector<int> *t_GenPart_genPartIdxMother;
     std::vector<int> *t_GenPart_pdgId;
     std::vector<int> *t_GenPart_status;
+    std::vector<int> *t_GenPart_statusFlags;
 
     std::vector<float> *t_GenJet_eta;
     std::vector<float> *t_GenJet_mass;
@@ -634,6 +668,11 @@ class HmmAnalyzer : public MainEvent {
     Bool_t t_pass_jet_veto;
 
     //jets
+    //VBFFiltering
+    Bool_t t_pass_VBF_filter;
+    float t_gen_mll; /**< mass of the two hard-process gen muons */
+    float t_LHE_mll; /**< mass of the two LHE muons (FLOAT_NULL_VALUE if not a mumu event or no LHE info) */
+    int t_LHE_NpNLO; /**< Born parton multiplicity of the FxFx samples (INT_NULL_VALUE if no LHE info) */
 
 };
 
@@ -647,6 +686,7 @@ HmmAnalyzer::HmmAnalyzer(const TString &inputFileList, const char *outFileName,
     // used to generate this class and read the Tree.
 
     is_data = is_data_input;
+    input_file_list = inputFileList;
     year = year_num;
     include_Z = include_Z_;
     include_H = include_H_;
@@ -728,6 +768,7 @@ HmmAnalyzer::HmmAnalyzer(const TString &inputFileList, const char *outFileName,
     //tree->Scan("Jet_jetId","","",5);
     if (!is_data) {
         MainEvent::InitSimulationVariables(tree);
+        ComputeGenFilterEfficiency();
     }
     oFile = new TFile(outFileName, "recreate");
     TString histname(outFileName);
@@ -992,6 +1033,64 @@ bool HmmAnalyzer::FillChain(TChain *chain, const TString &inputFileList) {
     return kTRUE;
 }
 
+void HmmAnalyzer::ComputeGenFilterEfficiency() {
+    // Generator filter efficiency of the input files, sum passed / sum total over the
+    // NanoAOD LuminosityBlocks tree. Stays FLOAT_NULL_VALUE if the info is missing. MC only.
+    if (is_data)
+        return;
+
+    TChain lumi_chain("LuminosityBlocks");
+    if (!FillChain(&lumi_chain, input_file_list) || lumi_chain.GetEntries() == 0 ||
+        !lumi_chain.GetBranch("GenFilter_numEventsTotal")) {
+        std::cout << "No GenFilter info in LuminosityBlocks, efficiency not set" << std::endl;
+        return;
+    }
+
+    lumi_chain.SetBranchStatus("*", 0);
+    lumi_chain.SetBranchStatus("GenFilter_numEventsTotal", 1);
+    lumi_chain.SetBranchStatus("GenFilter_numEventsPassed", 1);
+    Int_t num_events_total = 0;
+    Int_t num_events_passed = 0;
+    lumi_chain.SetBranchAddress("GenFilter_numEventsTotal", &num_events_total);
+    lumi_chain.SetBranchAddress("GenFilter_numEventsPassed", &num_events_passed);
+    long long sum_total = 0;
+    long long sum_passed = 0;
+    for (Long64_t i = 0; i < lumi_chain.GetEntries(); i++) {
+        lumi_chain.GetEntry(i);
+        sum_total += num_events_total;
+        sum_passed += num_events_passed;
+    }
+    if (sum_total > 0)
+        gen_filter_efficiency = double(sum_passed) / sum_total;
+    std::cout << "GenFilter: " << lumi_chain.GetEntries() << " lumi blocks, passed/total = "
+              << sum_passed << "/" << sum_total << " = " << gen_filter_efficiency << std::endl;
+}
+
+void HmmAnalyzer::WriteGenFilterInfo() {
+    // Copies the per-lumi-block generator filter info (NanoAOD LuminosityBlocks tree) to the
+    // output, needed for the DY VBF-filter stitching. MC only; data output is unchanged.
+    if (is_data)
+        return;
+
+    TChain lumi_chain("LuminosityBlocks");
+    if (!FillChain(&lumi_chain, input_file_list) || lumi_chain.GetEntries() == 0 ||
+        !lumi_chain.GetBranch("GenFilter_numEventsTotal")) {
+        std::cout << "No GenFilter info in LuminosityBlocks, not stored" << std::endl;
+        return;
+    }
+
+    lumi_chain.SetBranchStatus("*", 0);
+    for (const char *name : {"run", "luminosityBlock", "GenFilter_numEventsTotal",
+                             "GenFilter_numEventsPassed", "GenFilter_filterEfficiency",
+                             "GenFilter_filterEfficiencyError"}) {
+        lumi_chain.SetBranchStatus(name, 1);
+    }
+
+    // The clone lives in oFile and is written by the oFile->Write() in the destructor
+    oFile->cd();
+    lumi_chain.CloneTree(-1);
+}
+
 HmmAnalyzer::~HmmAnalyzer() {
     if (!fChain)
         return;
@@ -1001,6 +1100,10 @@ HmmAnalyzer::~HmmAnalyzer() {
     h_sumOfgpw->Write();
     h_pileup->Write();
     h_pileup_nTrue->Write();
+    h_sumOfgw_genMll->Write();
+    h_sumOfgw_genMll_VBFFilter->Write();
+    h_sumOfgw_stitchCells->Write();
+    h_sumOfgw2_stitchCells->Write();
     if (h_sumOfLHEPdfWeight != nullptr)
         h_sumOfLHEPdfWeight->Write();
     if (h_sumOfLHEScaleWeight != nullptr)
@@ -1021,7 +1124,9 @@ HmmAnalyzer::~HmmAnalyzer() {
     h_nValidJets->Write();
     h_nValidSeperatedJets->Write();
     h_nValidNotVetoedJets->Write();
-    
+
+    WriteGenFilterInfo();
+
     oFile->Write();
     oFile->Close();
     if (!is_data) {
@@ -1048,6 +1153,7 @@ void HmmAnalyzer::clearTreeVectors() {
     t_luminosityBlock = 0;
     t_event = 0;
     t_genWeight = FLOAT_NULL_VALUE;
+    t_GenFilter_Efficiency = FLOAT_NULL_VALUE;
     t_LHEPdfWeight->clear();
     t_LHEScaleWeight->clear();
     t_pileup = FLOAT_NULL_VALUE;
@@ -1103,9 +1209,29 @@ void HmmAnalyzer::clearTreeVectors() {
     t_Mu_genPartIdx->clear();
     t_Mu_genPartFlav->clear();
     t_Mu_charge->clear();
+    t_Mu_bsConstrainedPt_noFSR->clear();
     //t_Mu_EffSF_TRIG->clear();
     //t_Mu_EffSF_TRIG_up->clear();
     //t_Mu_EffSF_TRIG_down->clear();
+
+    //FSR variables
+    t_mu1_hasFSR = false;
+    t_mu1_bsConstrainedPt = FLOAT_NULL_VALUE;
+    t_mu1_bsConstrainedEta = FLOAT_NULL_VALUE;
+    t_mu1_bsConstrainedPhi = FLOAT_NULL_VALUE;
+    t_mu1_bsConstrainedMass = FLOAT_NULL_VALUE;
+    t_mu1_fsrPhoton_pt = FLOAT_NULL_VALUE;
+    t_mu1_fsrPhoton_dR = FLOAT_NULL_VALUE;
+    t_mu1_pfRelIso04_all_FSR = FLOAT_NULL_VALUE;
+    t_mu2_hasFSR = false;
+    t_mu2_bsConstrainedPt = FLOAT_NULL_VALUE;
+    t_mu2_bsConstrainedEta = FLOAT_NULL_VALUE;
+    t_mu2_bsConstrainedPhi = FLOAT_NULL_VALUE;
+    t_mu2_bsConstrainedMass = FLOAT_NULL_VALUE;
+    t_mu2_fsrPhoton_pt = FLOAT_NULL_VALUE;
+    t_mu2_fsrPhoton_dR = FLOAT_NULL_VALUE;
+    t_mu2_pfRelIso04_all_FSR = FLOAT_NULL_VALUE;
+    t_diMuon_nFSR = 0;
     
     t_Mu_EffTRIG_DATA->clear();
     t_Mu_EffTRIG_DATA_up->clear();
@@ -1156,6 +1282,8 @@ void HmmAnalyzer::clearTreeVectors() {
     t_diMuon_phi = FLOAT_NULL_VALUE;
     t_diMuon_mass = FLOAT_NULL_VALUE;
     t_diMuon_bsConstrainedMass = FLOAT_NULL_VALUE;
+    t_diMuon_bsConstrainedPt_noFSR = FLOAT_NULL_VALUE;
+    t_diMuon_bsConstrainedMass_noFSR = FLOAT_NULL_VALUE;
 
     t_diMuon_bsConstrainedPt_nanoAOD = FLOAT_NULL_VALUE;
     t_diMuon_bsConstrainedMass_nanoAOD = FLOAT_NULL_VALUE;
@@ -1290,6 +1418,7 @@ void HmmAnalyzer::clearTreeVectors() {
     t_GenPart_genPartIdxMother->clear();
     t_GenPart_pdgId->clear();
     t_GenPart_status->clear();
+    t_GenPart_statusFlags->clear();
 
     t_GenJet_eta->clear();
     t_GenJet_mass->clear();
@@ -1300,6 +1429,12 @@ void HmmAnalyzer::clearTreeVectors() {
     //syncronization values
     t_pass_muon_trigger_match = false;
     t_pass_jet_veto = false;
+
+    //VBF Filter
+    t_pass_VBF_filter = false;
+    t_gen_mll = FLOAT_NULL_VALUE;
+    t_LHE_mll = FLOAT_NULL_VALUE;
+    t_LHE_NpNLO = INT_NULL_VALUE;
 }
 
 void HmmAnalyzer::BookTreeBranches() {
@@ -1312,6 +1447,7 @@ void HmmAnalyzer::BookTreeBranches() {
                  "t_luminosityBlock/i");
     tree->Branch("t_event", &t_event, "t_event/l");
     tree->Branch("t_genWeight", &t_genWeight, "t_genWeight/F");
+    tree->Branch("t_GenFilter_Efficiency", &t_GenFilter_Efficiency, "t_GenFilter_Efficiency/F");
     
     t_LHEPdfWeight = new std::vector<float>();
     t_LHEScaleWeight = new std::vector<float>();
@@ -1451,6 +1587,7 @@ void HmmAnalyzer::BookTreeBranches() {
     t_Mu_tightId = new std::vector<bool>();
     t_Mu_nStations = new std::vector<int>();
     t_Mu_nTrackerLayers = new std::vector<int>();
+    t_Mu_bsConstrainedPt_noFSR = new std::vector<float>();
 
     tree->Branch("t_Mu_genPartIdx", "vector<int>", &t_Mu_genPartIdx);
     tree->Branch("t_Mu_genPartFlav", "vector<UChar_t>", &t_Mu_genPartFlav);
@@ -1503,6 +1640,7 @@ void HmmAnalyzer::BookTreeBranches() {
     tree->Branch("t_Mu_tightId", "vector<bool>", &t_Mu_tightId);
     tree->Branch("t_Mu_nStations", "vector<int>", &t_Mu_nStations);
     tree->Branch("t_Mu_nTrackerLayers", "vector<int>", &t_Mu_nTrackerLayers);
+    tree->Branch("t_Mu_bsConstrainedPt_noFSR", "vector<float>", &t_Mu_bsConstrainedPt_noFSR);
 
     tree->Branch("t_diMuon_pt", &t_diMuon_pt, "t_diMuon_pt/F");
     tree->Branch("t_diMuon_bsConstrainedPt", &t_diMuon_bsConstrainedPt, "t_diMuon_bsConstrainedPt/F");
@@ -1511,6 +1649,8 @@ void HmmAnalyzer::BookTreeBranches() {
     tree->Branch("t_diMuon_phi", &t_diMuon_phi, "t_diMuon_phi/F");
     tree->Branch("t_diMuon_mass", &t_diMuon_mass, "t_diMuon_mass/F");
     tree->Branch("t_diMuon_bsConstrainedMass", &t_diMuon_bsConstrainedMass, "t_diMuon_bsConstrainedMass/F");
+    tree->Branch("t_diMuon_bsConstrainedPt_noFSR", &t_diMuon_bsConstrainedPt_noFSR, "t_diMuon_bsConstrainedPt_noFSR/F");
+    tree->Branch("t_diMuon_bsConstrainedMass_noFSR", &t_diMuon_bsConstrainedMass_noFSR, "t_diMuon_bsConstrainedMass_noFSR/F");
     tree->Branch("t_diMuon_bsConstrainedMass_nanoAOD", &t_diMuon_bsConstrainedMass_nanoAOD, "t_diMuon_bsConstrainedMass_nanoAOD/F");
 
     tree->Branch("t_PuppiMET_phi", &t_PuppiMET_phi, "t_PuppiMET_phi/F");
@@ -1554,6 +1694,25 @@ void HmmAnalyzer::BookTreeBranches() {
     //tree->Branch("t_FatJet_jetId", "vector<int>", &t_FatJet_jetId);
     tree->Branch("t_FatJet_subJetIdx1", "vector<int>", &t_FatJet_subJetIdx1);
     tree->Branch("t_FatJet_subJetIdx2", "vector<int>", &t_FatJet_subJetIdx2);
+
+    //FSR variables
+    tree->Branch("t_mu1_hasFSR", &t_mu1_hasFSR, "t_mu1_hasFSR/O");
+    tree->Branch("t_mu1_bsConstrainedPt", &t_mu1_bsConstrainedPt, "t_mu1_bsConstrainedPt/F");
+    tree->Branch("t_mu1_bsConstrainedEta", &t_mu1_bsConstrainedEta, "t_mu1_bsConstrainedEta/F");
+    tree->Branch("t_mu1_bsConstrainedPhi", &t_mu1_bsConstrainedPhi, "t_mu1_bsConstrainedPhi/F");
+    tree->Branch("t_mu1_bsConstrainedMass", &t_mu1_bsConstrainedMass, "t_mu1_bsConstrainedMass/F");
+    tree->Branch("t_mu1_fsrPhoton_pt", &t_mu1_fsrPhoton_pt, "t_mu1_fsrPhoton_pt/F");
+    tree->Branch("t_mu1_fsrPhoton_dR", &t_mu1_fsrPhoton_dR, "t_mu1_fsrPhoton_dR/F");
+    tree->Branch("t_mu1_pfRelIso04_all_FSR", &t_mu1_pfRelIso04_all_FSR, "t_mu1_pfRelIso04_all_FSR/F");
+    tree->Branch("t_mu2_hasFSR", &t_mu2_hasFSR, "t_mu2_hasFSR/O");
+    tree->Branch("t_mu2_bsConstrainedPt", &t_mu2_bsConstrainedPt, "t_mu2_bsConstrainedPt/F");
+    tree->Branch("t_mu2_bsConstrainedEta", &t_mu2_bsConstrainedEta, "t_mu2_bsConstrainedEta/F");
+    tree->Branch("t_mu2_bsConstrainedPhi", &t_mu2_bsConstrainedPhi, "t_mu2_bsConstrainedPhi/F");
+    tree->Branch("t_mu2_bsConstrainedMass", &t_mu2_bsConstrainedMass, "t_mu2_bsConstrainedMass/F");
+    tree->Branch("t_mu2_fsrPhoton_pt", &t_mu2_fsrPhoton_pt, "t_mu2_fsrPhoton_pt/F");
+    tree->Branch("t_mu2_fsrPhoton_dR", &t_mu2_fsrPhoton_dR, "t_mu2_fsrPhoton_dR/F");
+    tree->Branch("t_mu2_pfRelIso04_all_FSR", &t_mu2_pfRelIso04_all_FSR, "t_mu2_pfRelIso04_all_FSR/F");
+    tree->Branch("t_diMuon_nFSR", &t_diMuon_nFSR, "t_diMuon_nFSR/I");
 
     t_SubJet_btagCMVA = new std::vector<float>();
     t_SubJet_btagCSVV2 = new std::vector<float>();
@@ -1787,6 +1946,7 @@ void HmmAnalyzer::BookTreeBranches() {
     t_GenPart_genPartIdxMother = new std::vector<int>();
     t_GenPart_pdgId = new std::vector<int>();
     t_GenPart_status = new std::vector<int>();
+    t_GenPart_statusFlags = new std::vector<int>();
 
     t_GenJet_eta = new std::vector<float>();
     t_GenJet_mass = new std::vector<float>();
@@ -1801,6 +1961,7 @@ void HmmAnalyzer::BookTreeBranches() {
                  &t_GenPart_genPartIdxMother);
     tree->Branch("t_GenPart_pdgId", "vector<int>", &t_GenPart_pdgId);
     tree->Branch("t_GenPart_status", "vector<int>", &t_GenPart_status);
+    tree->Branch("t_GenPart_statusFlags", "vector<int>", &t_GenPart_statusFlags);
 
     tree->Branch("t_GenJet_eta", "vector<float>", &t_GenJet_eta);
     tree->Branch("t_GenJet_mass", "vector<float>", &t_GenJet_mass);
@@ -1808,9 +1969,13 @@ void HmmAnalyzer::BookTreeBranches() {
     tree->Branch("t_GenJet_pt", "vector<float>", &t_GenJet_pt);
 
     //synchronization branches
-   if(ifSync){
+    if(ifSync){
         tree->Branch("t_pass_muon_trigger_match", &t_pass_muon_trigger_match, "t_pass_muon_trigger_match/O");
         tree->Branch("t_pass_jet_veto", &t_pass_jet_veto, "t_pass_jet_veto/O");
     }
+    tree->Branch("t_pass_VBF_filter", &t_pass_VBF_filter, "t_pass_VBF_filter/O");
+    tree->Branch("t_gen_mll", &t_gen_mll, "t_gen_mll/F");
+    tree->Branch("t_LHE_mll", &t_LHE_mll, "t_LHE_mll/F");
+    tree->Branch("t_LHE_NpNLO", &t_LHE_NpNLO, "t_LHE_NpNLO/I");
 }
 #endif // #ifdef HmmAnalyzer_cxx

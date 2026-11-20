@@ -36,14 +36,23 @@ running_job_times=()
 for block in "$DIR"/*; do
     echo "Checking $block files"
     blockError=false
-    nFilesExpected=$(tail -n 2 $block/task.jdl | head -n 1)
+    # Number of job numbers in "Queue I from (...)" (create_ctuples_jobs_LPC.py queues the analyzer outputs
+    # that exist, so the numbers can have gaps); a bare "Queue" is one job
+    nFilesExpected=$(awk '
+        /^[[:space:]]*Queue[[:space:]]+I[[:space:]]+from[[:space:]]*\(/ {
+            in_queue = 1; sub(/^.*\(/, ""); sub(/\).*/, ""); if ($0 != "") print $0; next
+        }
+        in_queue == 1 {
+            if ($0 ~ /\)/) { sub(/\).*/, ""); if ($0 != "") print $0; in_queue = 0; next }
+            if ($0 != "") print $0
+        }
+    ' "$block/task.jdl" | awk '{print $1}' | grep -cE '^[0-9]+$')
+    if (( nFilesExpected == 0 )) && grep -qiE '^[[:space:]]*Queue[[:space:]]*$' "$block/task.jdl"; then
+        nFilesExpected=1
+    fi
     #echo "$nFilesExpected expected files"
     nFilesOut=$(ls $block/out/ | wc -l)
     #echo "$nFilesOut out files"
-
-    if [[ "$nFilesExpected" == *"Queue"* ]]; then
-        nFilesExpected=1
-    fi
     
     if [ $nFilesExpected -ne $nFilesOut ]; then
         #echo "************** Not all analyzer ran in $block **************"

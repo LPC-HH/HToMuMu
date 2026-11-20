@@ -5,7 +5,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "python"))
 from bdt_categories_io import load_bdt_categories, get_bdt_cuts, variant_dir_suffix
 
-# -v/--variant <label>: 
+# -v/--variant <label>: read the BDT_score/<channel><suffix>/ tuples of a train.py variant
 dir_suffix = ""
 for variant_flag in ("-v", "--variant"):
     if variant_flag in sys.argv:
@@ -15,9 +15,6 @@ for variant_flag in ("-v", "--variant"):
             sys.exit(1)
         dir_suffix = variant_dir_suffix(sys.argv[i + 1])
         del sys.argv[i:i + 2]
-        if "--categories" not in sys.argv:
-            print(variant_flag + " only applies with --categories")
-            sys.exit(1)
 
 production_channel = ""
 bdt_subset = ""
@@ -105,7 +102,7 @@ variables = [
     ## DiMuon variables
     #"diMuon_mass",
     # "diMuon_mass_full_range",
-     "diMuon_bsConstrainedMass",
+    "diMuon_bsConstrainedMass",
     # "diMuon_mass_Z",
     # "diMuon_bsConstrainedMass_Z",
     "diMuon_rapidity",
@@ -183,20 +180,33 @@ variables = [
 ]
 
 variables = ["leading_jet_eta", "subleading_jet_eta", "diMuon_bsConstrainedMass"]
-variables = ["diMuon_bsConstrainedMass"]
+variables = [f"BDT_{production_channel}"]
+variables = ["leading_jet_eta", "leading_jet_pt"]
 
 # eras = ["2022EE", "2022", "2023", "2023BPix", "2024"]#, "2025"]
 # eras = ["2025","2024", "Combined"]
 eras = ["Combined"]
 #eras = ["2025"]
 
+# BDT scores (and any variant) only exist in the BDT_score tuples
+if use_categories or dir_suffix or any(v.startswith("BDT_") for v in variables):
+    bdt_subset = "BFull_SNottH"
+
 for era in eras:
-    if production_channel == "":
-        bdt_cuts = []
-    elif use_categories:
+    bdt_cuts = []
+    category_boundaries = None
+    if production_channel != "" and use_categories:
         bdt_cuts = get_bdt_cuts(
             bdt_categories_info, production_channel + dir_suffix, era, bdt_subset, bdt_mass_variable
         )
+    elif production_channel != "":
+        # Inclusive BDT plot: mark the category boundaries if they exist
+        try:
+            category_boundaries = get_bdt_cuts(
+                bdt_categories_info, production_channel + dir_suffix, era, bdt_subset, bdt_mass_variable
+            )
+        except KeyError:
+            print("No BDT category boundaries found for " + production_channel + dir_suffix + ", not drawing them")
     for variable in variables:
         print(production_channel)
         draw_data_and_simul_and_ratio(
@@ -211,6 +221,7 @@ for era in eras:
             bdt_dir_suffix=dir_suffix,
             jet_pT_study=False,
             version=version,
+            category_boundaries=category_boundaries if variable.startswith("BDT_") else None,
         )
 
     # draw_data_and_simul_and_ratio("PV", era, background_sources, signal_sources)

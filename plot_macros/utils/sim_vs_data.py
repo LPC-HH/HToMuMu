@@ -178,6 +178,23 @@ def _join_cuts(cuts):
     return " & ".join(f"({cut})" for cut in cuts)
 
 
+def _mass_variable(variable):
+    # BDT scores are trained/categorized on the bs-constrained mass
+    if "bsConstrained" in variable or variable.startswith("BDT"):
+        return "diMuon_bsConstrainedMass"
+    return "diMuon_mass"
+
+
+def _mass_window_cuts(variable, Z_study, veto_signal_region):
+    mass = _mass_variable(variable)
+    cuts = []
+    if veto_signal_region:
+        cuts.append(f"({mass} > 130) | ({mass} < 120)")
+    if not Z_study:
+        cuts.append(f"({mass} > 110) & ({mass} < 150)")
+    return cuts
+
+
 def get_histograms_from_tuple(
     sources,
     era,
@@ -243,34 +260,9 @@ def get_histograms_from_tuple(
 
     cuts = []
 
-    # Background sideband selection
-    if is_background:
-
-        if variable != "diMuon_bsConstrainedMass" and "bsConstrained" in variable:
-
-            cuts.append(
-                "(diMuon_bsConstrainedMass > 130) | "
-                "(diMuon_bsConstrainedMass < 120)"
-            )
-
-            if not Z_study:
-                cuts.append(
-                    "(diMuon_bsConstrainedMass > 110) & "
-                    "(diMuon_bsConstrainedMass < 150)"
-                )
-
-        elif variable != "diMuon_mass" and "bsConstrained" not in variable:
-
-            cuts.append(
-                "(diMuon_mass > 130) | "
-                "(diMuon_mass < 120)"
-            )
-
-            if not Z_study:
-                cuts.append(
-                    "(diMuon_mass > 110) & "
-                    "(diMuon_mass < 150)"
-                )
+    # Mass window: background on the same sidebands as data, signal on the full 110-150 window
+    if variable != _mass_variable(variable):
+        cuts += _mass_window_cuts(variable, Z_study, veto_signal_region=is_background)
 
     # Production category
     if production_channel != "":
@@ -576,34 +568,8 @@ def get_data_histograms_from_tuple(
     # Build selection
     # ------------------------------------------------------------
 
-    cuts = []
-
-    # Data sidebands / blinding
-    if "bsConstrained" in variable:
-
-        cuts.append(
-            "(diMuon_bsConstrainedMass > 130) | "
-            "(diMuon_bsConstrainedMass < 120)"
-        )
-
-        if not Z_study:
-            cuts.append(
-                "(diMuon_bsConstrainedMass > 110) & "
-                "(diMuon_bsConstrainedMass < 150)"
-            )
-
-    else:
-
-        cuts.append(
-            "(diMuon_mass > 130) | "
-            "(diMuon_mass < 120)"
-        )
-
-        if not Z_study:
-            cuts.append(
-                "(diMuon_mass > 110) & "
-                "(diMuon_mass < 150)"
-            )
+    # Data sidebands / blinding (always applied)
+    cuts = _mass_window_cuts(variable, Z_study, veto_signal_region=True)
 
     if production_channel != "":
         cuts.append(
@@ -660,6 +626,98 @@ def get_data_histograms_from_tuple(
 
 
 
+def _draw_normalized_shapes(
+    data_histogram,
+    data_bins,
+    bkg_histograms_list,
+    tot_bg_numpy_hist,
+    signal_histograms_list,
+    background_sources,
+    signal_sources,
+    era,
+    label,
+    info_text,
+    category_boundaries,
+    x_label,
+    ratio_ylabel,
+    output_directory,
+    output_name,
+):
+    #Data as raw counts
+    data_sum = np.sum(data_histogram)
+
+    data_shape = data_histogram
+    data_shape_error = np.sqrt(data_histogram)
+    bkg_shapes = bkg_histograms_list
+    signal_shapes = [h * data_sum / np.sum(h) for h in signal_histograms_list]
+
+    fig, axs = get_canvas(True)
+
+    hep.histplot(
+        bkg_shapes,
+        data_bins,
+        histtype="fill",
+        label=get_background_label_list(background_sources),
+        ax=axs[0],
+        stack=True,
+        color=get_color_list(len(background_sources)),
+    )
+    hep.histplot(
+        data_shape,
+        data_bins,
+        yerr=data_shape_error,
+        histtype="errorbar",
+        label="Data",
+        color="black",
+        ax=axs[0],
+    )
+    for source, shape in zip(signal_sources, signal_shapes):
+        hep.histplot(
+            shape, data_bins, yerr=False, label=source + " (norm. to data)", color=signal_colors[source], ax=axs[0]
+        )
+
+    hep.cms.label(data="True", label=label, year=era, com="13.6", lumi=luminosity[era], ax=axs[0])
+
+    if category_boundaries is not None:
+        for boundary in category_boundaries:
+            if data_bins[0] < boundary < data_bins[-1]:
+                for ax in axs:
+                    ax.axvline(boundary, color="grey", linestyle="--", alpha=0.7)
+
+    axs[0].set_ylabel("Events")
+    axs[0].set_xlim(data_bins[0], data_bins[-1])
+    axs[0].legend(
+        frameon=False, loc="upper right", ncols=2, title=info_text, title_fontsize=18, alignment="left"
+    )
+    axs[0].tick_params(axis="x", which="both", bottom=True, top=True, labelbottom=False)
+
+    ratio_hist, ratio_error = get_histograms_ratio(data_histogram, tot_bg_numpy_hist)
+    hep.histplot(
+        ratio_hist,
+        data_bins,
+        yerr=ratio_error,
+        histtype="errorbar",
+        color="black",
+        ax=axs[1],
+    )
+    axs[1].axhline(y=1, color="grey", linestyle="--", alpha=0.5)
+    axs[1].set_ylabel(ratio_ylabel, loc="center")
+    axs[1].set_ylim(0.5, 1.5)
+    axs[1].set_xlim(data_bins[0], data_bins[-1])
+    axs[1].set_xlabel(x_label)
+
+    y_max = max(np.max(data_shape), np.max(tot_bg_numpy_hist), max(np.max(s) for s in signal_shapes))
+    axs[0].set_yscale("log")
+    axs[0].set_ylim(1e-4 * y_max, 3e4 * y_max)
+    save_figure(fig, output_directory, output_name)
+
+    axs[0].set_yscale("linear")
+    axs[0].set_ylim(0, 2.2 * y_max)
+    save_figure(fig, output_directory, output_name + "_linear")
+
+    plt.close()
+
+
 def draw_data_and_simul_and_ratio(
     variable,
     era,
@@ -673,6 +731,7 @@ def draw_data_and_simul_and_ratio(
     Z_study=False,
     jet_pT_study=False,
     version="2.0.0",
+    category_boundaries=None,
 ):
     plt.style.use(hep.style.CMS)
     tuple_version = f"tuples_v{version}"
@@ -770,7 +829,7 @@ def draw_data_and_simul_and_ratio(
         data_bins,
         yerr=True,
         histtype="errorbar",
-        label="data",
+        label="Data",
         color="black",
         ax=axs[0],
     )
@@ -801,11 +860,21 @@ def draw_data_and_simul_and_ratio(
         ax=axs[0],
     )
 
+    info_text = production_channel + " category" if production_channel != "" else None
+
+    if category_boundaries is not None:
+        for boundary in category_boundaries:
+            if data_bins[0] < boundary < data_bins[-1]:
+                for ax in axs:
+                    ax.axvline(boundary, color="grey", linestyle="--", alpha=0.7)
+
     axs[0].set_ylabel(r"Events")
     axs[0].set_ylim(0.1, 1000 * np.max(data_histogram))
     axs[0].set_xlim(data_bins[0], data_bins[-1])
     axs[0].set_yscale("log")
-    axs[0].legend(frameon=False, loc="upper right", ncols=2)
+    legend = axs[0].legend(
+        frameon=False, loc="upper right", ncols=2, title=info_text, title_fontsize=18, alignment="left"
+    )
     axs[0].tick_params(axis="x", which="both", bottom=True, top=True, labelbottom=False)
 
     plt.axhline(y=1, color="grey", linestyle="--", alpha=0.5)
@@ -850,7 +919,7 @@ def draw_data_and_simul_and_ratio(
     if production_channel != "":
         output_directory = (
             f"../plots/ratio/{tuple_version}/"
-            + production_channel + "_category/" + era + "/"
+            + production_channel + bdt_dir_suffix + "_category/" + era + "/"
         )
 
         if len(bdt_cuts) > 1:
@@ -863,7 +932,37 @@ def draw_data_and_simul_and_ratio(
 
     save_figure(fig, output_directory, output_name + label + labelAdd)
 
+    # BDT scores: also save a linear-y version, with headroom for the legend
+    if variable.startswith("BDT"):
+        y_max = max(
+            np.max(data_histogram),
+            np.max(tot_bg_numpy_hist),
+            signal_scale_factor * max(np.max(h) for h in signal_histograms_list),
+        )
+        axs[0].set_yscale("linear")
+        axs[0].set_ylim(0, 2.2 * y_max)
+        save_figure(fig, output_directory, output_name + label + labelAdd + "_linear")
+
     plt.close()
+
+    if variable.startswith("BDT"):
+        _draw_normalized_shapes(
+            data_histogram,
+            data_bins,
+            bkg_histograms_list,
+            tot_bg_numpy_hist,
+            signal_histograms_list,
+            background_sources,
+            signal_sources,
+            era,
+            label,
+            info_text,
+            category_boundaries,
+            x_labels[variable],
+            axs[1].get_ylabel(),
+            output_directory,
+            output_name + label + labelAdd + "_normalized",
+        )
 
     if len(bdt_cuts) > 2:
         draw_data_and_simul_and_ratio(

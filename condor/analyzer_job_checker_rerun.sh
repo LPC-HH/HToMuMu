@@ -124,6 +124,185 @@ mark_failed_job() {
 }
 
 ###############################
+# Fast batch scanners
+###############################
+# The original checker forked ~20 processes per job (grep/sed/tail/date per file) and
+# read every .log/.err three times over NFS, which took >1 h on ~40k jobs.  The functions
+# below read each file exactly once with one awk per dataset and convert all datetimes
+# with one `date -f` per dataset.  The checks and messages are unchanged; any unusual case
+# falls back to the original per-file code (check_err_slow / check_log_slow), so the
+# output is identical to the old script, except that a .log whose datetime `date` cannot
+# parse is now flagged ("unparseable timing information") instead of getting a bogus time.
+# Known non-replicated corner case: a .log containing NUL bytes (grep would print
+# "Binary file matches"); condor user logs are plain text.
+
+HARMLESS_ERR_LINE="cp: cannot stat 'data/pileup/*.root': No such file or directory"
+export HARMLESS_ERR_LINE
+
+# On the LPC NFS disk a cold file open costs ~0.1-0.4 s, so reading ~80k small files one
+# after another takes hours even with no forks.  Before scanning a block, read all of its
+# .err/.log files in parallel to pull them into the page cache; the serial scan that follows
+# then hits the cache.  This only reads the files (output to /dev/null), so it cannot
+# change any result.  Lower CHECKER_PARALLEL_READS to be gentler on the file server.
+CHECKER_PARALLEL_READS=${CHECKER_PARALLEL_READS:-32}
+
+prefetch_files() {
+    (( $# > 0 )) || return 0
+    printf '%s\0' "$@" | xargs -0 -P "$CHECKER_PARALLEL_READS" -n 16 cat > /dev/null 2>&1 || true
+}
+
+# Same as get_job_I_from_filename (basename | sed), without forking. Result in $job_i.
+job_i_from_path() {
+    local base="${1##*/}"
+    if [[ "$base" =~ ^jobR([0-9]+)\. ]]; then
+        job_i="${BASH_REMATCH[1]}"
+    else
+        job_i="$base"
+    fi
+}
+
+# stdin: one .err path per line. stdout per file: "<n lines matching corrupt-read regex>|<1 if last line is the harmless one>"
+scan_err_files() {
+    LC_ALL=C awk '
+        {
+            f = $0; n = 0; last = ""
+            while ((getline line < f) > 0) {
+                if (line ~ /R__unzip|ReadBasketBuffers|TBranch::GetBasket/) n++
+                last = line
+            }
+            close(f)
+            print n "|" (last == ENVIRON["HARMLESS_ERR_LINE"] ? 1 : 0)
+        }'
+}
+
+# stdin: one .log path per line. stdout per file: "<submit dt>|<execute dt>|<finish dt>|<multi>"
+# Same line selection as the original greps: first 000 line, first 001 line, last
+# "005 ... Job terminated." line; dt = first YYYY-MM-DD HH:MM:SS in that line.
+# multi=1 if a selected line holds more than one datetime (grep -o would have returned
+# several lines) -> caller uses the original code for that file.
+scan_log_files() {
+    LC_ALL=C awk '
+        BEGIN {
+            DT    = "[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9]"
+            SUBRE = "^000 \\([0-9]+\\.[0-9]+\\.[0-9]+\\)"
+            EXERE = "^001 \\([0-9]+\\.[0-9]+\\.[0-9]+\\)"
+            FINRE = "^005 \\([0-9]+\\.[0-9]+\\.[0-9]+\\) " DT " Job terminated\\.$"
+        }
+        function first_dt(s,   out) {
+            NDT = 0; out = ""
+            while (match(s, DT)) {
+                if (NDT == 0) out = substr(s, RSTART, RLENGTH)
+                NDT++
+                s = substr(s, RSTART + RLENGTH)
+            }
+            return out
+        }
+        {
+            f = $0; s = ""; e = ""; fin = ""; hs = 0; he = 0
+            while ((getline line < f) > 0) {
+                if (!hs && line ~ SUBRE) { s = line; hs = 1 }
+                if (!he && line ~ EXERE) { e = line; he = 1 }
+                if (line ~ FINRE) fin = line
+            }
+            close(f)
+            multi = 0
+            sd = first_dt(s);   if (NDT > 1) multi = 1
+            ed = first_dt(e);   if (NDT > 1) multi = 1
+            fd = first_dt(fin); if (NDT > 1) multi = 1
+            print sd "|" ed "|" fd "|" multi
+        }'
+}
+
+# Original per-file .err check (fallback). Uses the same globals as the main loop.
+check_err_slow() {
+    local file="$1"
+
+    job_i=$(get_job_I_from_filename "$file")
+
+    n_corrupt=$(grep -cE 'R__unzip|ReadBasketBuffers|TBranch::GetBasket' "$file")
+    if (( n_corrupt > 0 )); then
+        bad_inputs=$(grep -oE 'File: [^ ,]+\.root' "$file" | sed 's#.*/##' | sort -u | tr '\n' ' ')
+        blockError=true
+        ((fail_count++))
+        echo "$file has $n_corrupt corrupted-read errors, bad input: ${bad_inputs:-unknown}" >> "$OUTFILE"
+        mark_failed_job "$failed_jobs_file" "$job_i"
+        return
+    fi
+
+    last_line=$(tail -n 1 "$file")
+
+    if [[ "$last_line" != "$HARMLESS_ERR_LINE" ]]; then
+        blockError=true
+        ((fail_count++))
+        echo "$file" >> "$OUTFILE"
+        mark_failed_job "$failed_jobs_file" "$job_i"
+    fi
+}
+
+# Timing bookkeeping shared by the fast and slow paths: needs $file, $job_i, $st, $tt, $ft.
+record_job_times() {
+    total_job_time=$(( ft - st ))
+    running_job_time=$(( ft - tt ))
+
+    if (( total_job_time <= 0 || running_job_time <= 0 )); then
+        blockError=true
+        ((fail_count++))
+        echo "$file has invalid timing information" >> "$OUTFILE"
+        mark_failed_job "$failed_jobs_file" "$job_i"
+        return
+    fi
+
+    if (( running_job_time >= 36000 )); then
+        ((n_long_jobs++))
+        echo "long job in $file of $(seconds_to_hms "$running_job_time")"
+    fi
+
+    total_job_times+=( "$total_job_time" )
+    running_job_times+=( "$running_job_time" )
+}
+
+record_missing_timing() {
+    blockError=true
+    ((fail_count++))
+    echo "$file has missing timing information" >> "$OUTFILE"
+    mark_failed_job "$failed_jobs_file" "$job_i"
+}
+
+# Original per-file .log check (fallback).
+check_log_slow() {
+    local file="$1"
+
+    job_i=$(get_job_I_from_filename "$file")
+
+    submission_line=$(grep -E '^000 \([0-9]+\.[0-9]+\.[0-9]+\)' "$file" | head -n 1)
+    execute_line=$(grep -E '^001 \([0-9]+\.[0-9]+\.[0-9]+\)' "$file" | head -n 1)
+    finish_line=$(grep -E '^005 \([0-9]+\.[0-9]+\.[0-9]+\) [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} Job terminated\.$' "$file" | tail -n 1)
+
+    submission_datetime=$(grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}' <<< "$submission_line")
+    transfer_datetime=$(grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}' <<< "$execute_line")
+    finish_datetime=$(grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}' <<< "$finish_line")
+
+    if [[ -z "$submission_datetime" || -z "$transfer_datetime" || -z "$finish_datetime" ]]; then
+        record_missing_timing
+        return
+    fi
+
+    # An unparseable datetime (e.g. month 13, or two datetimes on one line) used to leave
+    # st/tt/ft empty, which bash arithmetic treats as 0 -> absurd job times.  Flag it instead.
+    if ! st=$(date -d "$submission_datetime" +%s 2>/dev/null) ||
+       ! tt=$(date -d "$transfer_datetime" +%s 2>/dev/null) ||
+       ! ft=$(date -d "$finish_datetime" +%s 2>/dev/null); then
+        blockError=true
+        ((fail_count++))
+        echo "$file has unparseable timing information" >> "$OUTFILE"
+        mark_failed_job "$failed_jobs_file" "$job_i"
+        return
+    fi
+
+    record_job_times
+}
+
+###############################
 # Main loop over datasets
 ###############################
 
@@ -162,8 +341,18 @@ for block in "$DIR"/*; do
     # Check missing output files
     ###############################
 
+    # One directory listing per block (bash glob, no fork) instead of one compgen per job.
+    # The regex is the exact equivalent of the old glob "jobR${job_i}.*.*.out".
+    unset have_out
+    declare -A have_out=()
+    for f in "$block"/out/*.out; do
+        if [[ "${f##*/}" =~ ^jobR([0-9]+)\..*\..*\.out$ ]]; then
+            have_out["${BASH_REMATCH[1]}"]=1
+        fi
+    done
+
     for job_i in "${expected_jobs[@]}"; do
-        if ! compgen -G "$block/out/jobR${job_i}.*.*.out" > /dev/null; then
+        if [[ -z "${have_out[$job_i]+x}" ]]; then
             blockError=true
             ((fail_count++))
             echo "$block is missing output for job I=$job_i" >> "$OUTFILE"
@@ -175,69 +364,122 @@ for block in "$DIR"/*; do
     # Check .err files
     ###############################
 
+    # Corrupted input reads (e.g. R__unzipLZMA): the job still exits 0 with garbage in the affected entries.
+    # A resubmit fixes a corrupted transfer; if the source file itself is bad (adler32 matches DAS), drop it
+    # from the job's input_list.tgz and from list/ before resubmitting.
+    # The only accepted last line is $HARMLESS_ERR_LINE (missing pileup copy).
+
+    err_files=()
     for file in "$block"/err/*.err; do
-        [[ -e "$file" ]] || continue
-
-        job_i=$(get_job_I_from_filename "$file")
-        last_line=$(tail -n 1 "$file")
-
-        # This is the one known harmless message
-        if [[ "$last_line" != "cp: cannot stat 'data/pileup/*.root': No such file or directory" ]]; then
-            blockError=true
-            ((fail_count++))
-            echo "$file" >> "$OUTFILE"
-            mark_failed_job "$failed_jobs_file" "$job_i"
-        fi
+        [[ -e "$file" ]] && err_files+=( "$file" )
     done
+
+    log_files=()
+    for file in "$block"/log/*.log; do
+        [[ -e "$file" ]] && log_files+=( "$file" )
+    done
+
+    prefetch_files "${err_files[@]}" "${log_files[@]}"
+
+    err_results=()
+    if (( ${#err_files[@]} > 0 )); then
+        mapfile -t err_results < <(printf '%s\n' "${err_files[@]}" | scan_err_files)
+    fi
+
+    if (( ${#err_results[@]} != ${#err_files[@]} )); then
+        # Scanner output does not line up: use the original per-file check.
+        for file in "${err_files[@]}"; do
+            check_err_slow "$file"
+        done
+    else
+        for idx in "${!err_files[@]}"; do
+            file="${err_files[idx]}"
+            res="${err_results[idx]}"
+            n_corrupt="${res%%|*}"
+            last_ok="${res##*|}"
+
+            job_i_from_path "$file"
+
+            if (( n_corrupt > 0 )); then
+                # Rare: run the original pipeline so the bad-input text is identical.
+                bad_inputs=$(grep -oE 'File: [^ ,]+\.root' "$file" | sed 's#.*/##' | sort -u | tr '\n' ' ')
+                blockError=true
+                ((fail_count++))
+                echo "$file has $n_corrupt corrupted-read errors, bad input: ${bad_inputs:-unknown}" >> "$OUTFILE"
+                mark_failed_job "$failed_jobs_file" "$job_i"
+                continue
+            fi
+
+            if [[ "$last_ok" != 1 ]]; then
+                blockError=true
+                ((fail_count++))
+                echo "$file" >> "$OUTFILE"
+                mark_failed_job "$failed_jobs_file" "$job_i"
+            fi
+        done
+    fi
 
     ###############################
     # Check timing information
     ###############################
 
-    for file in "$block"/log/*.log; do
-        [[ -e "$file" ]] || continue
+    log_results=()
+    if (( ${#log_files[@]} > 0 )); then
+        mapfile -t log_results < <(printf '%s\n' "${log_files[@]}" | scan_log_files)
+    fi
 
-        job_i=$(get_job_I_from_filename "$file")
-
-        submission_line=$(grep -E '^000 \([0-9]+\.[0-9]+\.[0-9]+\)' "$file" | head -n 1)
-        execute_line=$(grep -E '^001 \([0-9]+\.[0-9]+\.[0-9]+\)' "$file" | head -n 1)
-        finish_line=$(grep -E '^005 \([0-9]+\.[0-9]+\.[0-9]+\) [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} Job terminated\.$' "$file" | tail -n 1)
-
-        submission_datetime=$(grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}' <<< "$submission_line")
-        transfer_datetime=$(grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}' <<< "$execute_line")
-        finish_datetime=$(grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}' <<< "$finish_line")
-
-        if [[ -z "$submission_datetime" || -z "$transfer_datetime" || -z "$finish_datetime" ]]; then
-            blockError=true
-            ((fail_count++))
-            echo "$file has missing timing information" >> "$OUTFILE"
-            mark_failed_job "$failed_jobs_file" "$job_i"
-            continue
+    # Convert every datetime of the block with a single `date -f` (same parser as `date -d`).
+    log_fast=true
+    epochs=()
+    if (( ${#log_results[@]} != ${#log_files[@]} )); then
+        log_fast=false
+    else
+        dts=()
+        for res in "${log_results[@]}"; do
+            IFS='|' read -r sd ed fd multi <<< "$res"
+            if [[ "$multi" == 0 && -n "$sd" && -n "$ed" && -n "$fd" ]]; then
+                dts+=( "$sd" "$ed" "$fd" )
+            fi
+        done
+        if (( ${#dts[@]} > 0 )); then
+            if epoch_out=$(printf '%s\n' "${dts[@]}" | date -f - +%s 2>/dev/null); then
+                mapfile -t epochs <<< "$epoch_out"
+                (( ${#epochs[@]} == ${#dts[@]} )) || log_fast=false
+            else
+                log_fast=false
+            fi
         fi
+    fi
 
-        st=$(date -d "$submission_datetime" +%s)
-        tt=$(date -d "$transfer_datetime" +%s)
-        ft=$(date -d "$finish_datetime" +%s)
+    if ! $log_fast; then
+        # Unusual dates or scanner mismatch: use the original per-file check for the whole block.
+        for file in "${log_files[@]}"; do
+            check_log_slow "$file"
+        done
+    else
+        k=0
+        for idx in "${!log_files[@]}"; do
+            file="${log_files[idx]}"
+            IFS='|' read -r sd ed fd multi <<< "${log_results[idx]}"
 
-        total_job_time=$(( ft - st ))
-        running_job_time=$(( ft - tt ))
+            if [[ "$multi" != 0 ]]; then
+                check_log_slow "$file"
+                continue
+            fi
 
-        if (( total_job_time <= 0 || running_job_time <= 0 )); then
-            blockError=true
-            ((fail_count++))
-            echo "$file has invalid timing information" >> "$OUTFILE"
-            mark_failed_job "$failed_jobs_file" "$job_i"
-            continue
-        fi
+            job_i_from_path "$file"
 
-        if (( running_job_time >= 36000 )); then
-            ((n_long_jobs++))
-            echo "long job in $file of $(seconds_to_hms "$running_job_time")"
-        fi
+            if [[ -z "$sd" || -z "$ed" || -z "$fd" ]]; then
+                record_missing_timing
+                continue
+            fi
 
-        total_job_times+=( "$total_job_time" )
-        running_job_times+=( "$running_job_time" )
-    done
+            st="${epochs[k]}"; tt="${epochs[k+1]}"; ft="${epochs[k+2]}"
+            (( k += 3 ))
+
+            record_job_times
+        done
+    fi
 
     ###############################
     # Create resubmit JDL if needed
