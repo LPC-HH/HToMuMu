@@ -46,6 +46,12 @@ cd /your_path/HmmAnalysis/python/xgboost
 source setup.sh #activates the xgboost_env
 ```
 
+## How to run with optuna new hyperparameters and k-fold training
+Here's a simple nohup command to run the full training
+```
+nohup bash -c 'python3 train.py VBF Combined --stage all --use-optuna --objective asimov_fit --weights flatMassRes && python3 train.py ggH Combined --stage all --use-optuna --objective asimov_fit --weights flatMassRes' > training.log 2>&1 &
+```
+
 ## K-fold training BDT scoring
 
 *train* (fits one model), *validation* (early stopping / Optuna), *test* (untouched 20%,
