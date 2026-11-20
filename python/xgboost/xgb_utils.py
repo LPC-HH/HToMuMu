@@ -1,4 +1,6 @@
 """BDT input variables, tuple scoring and plotting helpers for train.py."""
+import fnmatch
+import json
 import os
 import shutil
 import subprocess
@@ -149,6 +151,35 @@ SYSTEMATICS_TUPLE_DIR = ("/eos/uscms/store/user/lpchmumu/mbarrial/"
                          "analyzer_HiggsMuMu_v2.0/tuples_v2.0.0/systematics/")
 SYSTEMATIC_ERAS = ["2022", "2022EE", "2023", "2023BPix", "2024", "2025"]
 
+# BDT_score tuples keep only what their readers use (split_tuples.py, plot_sim_vs_data.py,
+SLIM_SCORE_TUPLES = True
+SCORE_TUPLE_DROP_BRANCHES = [
+    # per-muon FSR details (FSR is the baseline; diMuon_bsConstrainedMass_noFSR and diMuon_nFSR are kept)
+    "mu?_fsrPhoton*", "mu?_RelIso04_FSR", "mu?_hasFSR", "mu?_bsConstrainedPt_noFSR", "diMuon_bsConstrainedPt_noFSR",
+    # generator truth and DY stitching bookkeeping (*GenDressedLepton*: only in pre-v2.9 tuples)
+    "*GenDressedLepton*", "gen_mll", "LHE_mll", "stitch_*",
+    # NanoAOD reference copies of the corrected kinematics
+    "*_nanoAOD",
+    # kinematics and bookkeeping nothing downstream reads
+    "mu?_phi", "leading_jet_phi", "subleading_jet_phi", "PuppiMET_*", "mu?_dz", "mu?_dzErr",
+    "n_bjet", "n_bjet_Loose", "scale_factor", "luminosityBlock",
+]
+
+
+def dropped_branch_patterns(branch_names, protected=()):
+    if not SLIM_SCORE_TUPLES:
+        return []
+    clash = sorted({b for b in protected for pat in SCORE_TUPLE_DROP_BRANCHES if fnmatch.fnmatchcase(b, pat)})
+    if clash:
+        raise RuntimeError(f"SCORE_TUPLE_DROP_BRANCHES would drop branches the scoring needs: {clash}")
+    return [pat for pat in SCORE_TUPLE_DROP_BRANCHES if any(fnmatch.fnmatchcase(b, pat) for b in branch_names)]
+
+
+def _disable_branches(tree, patterns):
+    for pattern in patterns:
+        tree.SetBranchStatus(pattern, 0)
+
+
 # CopyTree is single threaded, so large skims are split into entry ranges copied by parallel
 # subprocesses and merged with hadd (~4x faster). Each subprocess costs a few hundred MB.
 SKIM_CHUNKS = max(1, min(6, (os.cpu_count() or 2) - 2))
@@ -158,12 +189,17 @@ _SKIM_CHUNK_PROGRAM = """
 import sys
 import ROOT
 ROOT.gROOT.SetBatch(True)
+import json
 src, out, cuts, first, n = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4]), int(sys.argv[5])
+drop = json.loads(sys.argv[6]) if len(sys.argv) > 6 else []
 source = ROOT.TFile.Open(src)
 if not source or source.IsZombie():
     sys.exit("could not open " + src)
+tree = source.Get("tree_output")
+for pattern in drop:
+    tree.SetBranchStatus(pattern, 0)
 skim = ROOT.TFile.Open(out, "RECREATE")
-selected = source.Get("tree_output").CopyTree(cuts, "", n, first)
+selected = tree.CopyTree(cuts, "", n, first)
 rows = selected.GetEntries()
 selected.Write("tree_output")
 skim.Close()
@@ -191,17 +227,25 @@ def skim_cut(channel_US, category_var, use_bsConstrain):
             f"&& is_{channel_US}{category_var} == 1")
 
 
-def copy_and_skim_tree(source_path, skim_path, cuts):
+def copy_and_skim_tree(source_path, skim_path, cuts, protected=()):
     """Copy the entries of `source_path` passing `cuts` into `skim_path`, in the original
-    entry order (parallel entry ranges merged by hadd for big files)."""
+    entry order (parallel entry ranges merged by hadd for big files), without the
+    SCORE_TUPLE_DROP_BRANCHES branches. `protected`: branches that must survive (checked)."""
     print(f"[INFO] skim {source_path} -> {skim_path}\n[INFO] cut: {cuts}")
     source = root.TFile.Open(source_path)
     if not source or source.IsZombie():
         raise RuntimeError(f"could not open {source_path} with ROOT")
-    n_entries = int(source.Get("tree_output").GetEntries())
+    tree = source.Get("tree_output")
+    n_entries = int(tree.GetEntries())
+    all_branches = [b.GetName() for b in tree.GetListOfBranches()]
+    drop = dropped_branch_patterns(all_branches, protected)
+    n_dropped = sum(any(fnmatch.fnmatchcase(b, pat) for pat in drop) for b in all_branches)
+    print(f"[INFO] keeping {len(all_branches) - n_dropped} of {len(all_branches)} branches "
+          f"({n_dropped} study-only branches dropped, see SCORE_TUPLE_DROP_BRANCHES)")
     if SKIM_CHUNKS == 1 or n_entries < SKIM_CHUNK_MIN_ENTRIES:
+        _disable_branches(tree, drop)
         skim = root.TFile.Open(skim_path, "RECREATE")
-        source.Get("tree_output").CopyTree(cuts).Write("tree_output")
+        tree.CopyTree(cuts).Write("tree_output")
         skim.Close()
         source.Close()
         return
@@ -213,7 +257,7 @@ def copy_and_skim_tree(source_path, skim_path, cuts):
              for i in range(SKIM_CHUNKS)]
     try:
         workers = [subprocess.Popen([sys.executable, "-c", _SKIM_CHUNK_PROGRAM, source_path, out, cuts,
-                                     str(first), str(n)], stdout=subprocess.PIPE,
+                                     str(first), str(n), json.dumps(drop)], stdout=subprocess.PIPE,
                                     stderr=subprocess.PIPE, text=True)
                    for out, first, n in parts]
         for (_, first, n), worker in zip(parts, workers):
@@ -260,17 +304,14 @@ def score_skim_in_chunks(file_name, names, bundles, legacy=False):
 
 def score_tuple_into(source_dir, source_name, out_dir, out_name, channel_US, category_var,
                      use_bsConstrain, names, bundles, tag, legacy=False):
-    """Skim one tuple into out_dir/out_name and append one score branch per entry of `bundles`
-    ({branch name, e.g. BDT_<channel>: bundle}) and BDT_fold, skimming and reading it once.
-    The single scoring path for the nominal and the systematic tuples. Every bundle is
-    fold-matched on the same `event % N_FOLDS`, so one BDT_fold serves all of them. Legacy
-    scores are written with BDT_fold = -1 (not fold-matched: in-sample for the legacy model's
-    train set)."""
+    """Skim one tuple into out_dir/out_name"""
     os.makedirs(out_dir, exist_ok=True)
     file_name = out_dir + out_name
     t0 = time.time()
+    mass = "diMuon_bsConstrainedMass" if use_bsConstrain else "diMuon_mass"
+    protected = list(names) + [kf.EVENT_ID, mass, f"is_{channel_US}{category_var}"]
     copy_and_skim_tree(source_dir + source_name, file_name,
-                       skim_cut(channel_US, category_var, use_bsConstrain))
+                       skim_cut(channel_US, category_var, use_bsConstrain), protected=protected)
     t1 = time.time()
     scores, folds = score_skim_in_chunks(file_name, names, bundles, legacy=legacy)
     n_folds = max(len(b) for b in bundles.values())
@@ -1115,6 +1156,32 @@ def plot_roc_per_fold(y, scores, folds, weights, era, plot_path, tag):
               title=f"mean AUC {np.mean(aucs):.4f} $\\pm$ {np.std(aucs):.4f}" if aucs else None)
     _cms_label(ax, era)
     _save(fig, f"{plot_path}training/roc_per_fold_{tag}")
+
+
+def plot_discriminator_by_njet(y, scores, njet, weights, era, plot_path, tag):
+    """OOF signal/background BDT shapes per jet multiplicity (0, 1, >=2), each normalised to its
+    share of the class, so the curves of one class add up to its total shape."""
+    edges = np.linspace(0, 1, 51)
+    colors = ("#5790FC", "#F89C20", "#E42536")
+    fig, ax = plt.subplots()
+    for cls, style in ((1, "-"), (0, "--")):
+        cls_mask = y == cls
+        total = weights[cls_mask].sum()
+        for j, color in enumerate(colors):
+            m = cls_mask & (njet == j)
+            if m.any() and total != 0:
+                h, _ = np.histogram(scores[m], bins=edges, weights=weights[m])
+                hep.histplot(h / (total * np.diff(edges)), edges, ax=ax, color=color, ls=style, lw=1.8)
+    labels_j = ("0 jets", "1 jet", r"$\geq$2 jets")
+    handles = [Line2D([], [], color=c, lw=1.8, label=l) for c, l in zip(colors, labels_j)]
+    handles += [Line2D([], [], color="black", lw=1.8, ls="-", label="signal"),
+                Line2D([], [], color="black", lw=1.8, ls="--", label="background")]
+    ax.legend(handles=handles, fontsize=12, loc="upper left", bbox_to_anchor=(1.02, 1), frameon=False)
+    ax.set_xlim(0, 1)
+    ax.set_xlabel("BDT response (out-of-fold)")
+    ax.set_ylabel("Normalized events (share of class)")
+    _cms_label(ax, era)
+    _save(fig, f"{plot_path}training/discriminator_by_njet_{tag}")
 
 
 def plot_discriminator_per_fold(y, scores, folds, weights, era, plot_path, tag):

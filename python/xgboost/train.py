@@ -67,6 +67,16 @@ USE_WEIGHT_MASS_RES = True  # mutually exclusive with USE_WEIGHT
 REWEIGHT_BKG_FLAT = True  # background w_fit flat in mass (signal untouched)
 FLAT_BEFORE_MASS_RES = True  # with USE_WEIGHT_MASS_RES: flatten |w| first, then divide by rel_err
 FLAT_BIN_WIDTH = 0.5  # GeV, bin width of the flattening factors
+# Negative MC weights (aMC@NLO DY: ~20-30%, rising with n_jet). xgboost needs positive weights.
+# "abs":   train on |w| -- inflates the background, most in the jet-rich cells (Sigma|w|/Sigma w up
+#          to ~2.5 for >=2 jets), so the trained background composition is unphysical.
+# "local": |w_i| * Sigma_cell w / Sigma_cell |w| (see cancel_negative_weights): positive weights with the
+#          physical normalisation in every class x n_jet x campaign x pT(mumu) [x m_jj] cell.
+NEG_WEIGHT_TREATMENT = "local"
+NEG_WEIGHT_PT_BINS = 10  # quantile bins of the dimuon pT per (class, n_jet, campaign) group
+NEG_WEIGHT_MJJ_BINS = 5  # additional quantile bins of m_jj for n_jet >= 2
+NEG_WEIGHT_MIN_ROWS = 200  # smaller cells (or Sigma w <= 0) take the factor of their parent group
+NEG_WEIGHT_NAME_TAG = "_negLocal" if NEG_WEIGHT_TREATMENT == "local" else ""  # in model/plot/config names
 PLOT_MASS_WEIGHTS = True  # M_mumu shape under physical / flat / uniform / mass-res weights
 APPEND_VARIABLES = True
 USE_BSCONSTRAIN = True
@@ -84,6 +94,10 @@ DEFAULT_N_ROUNDS = 400
 N_OPTUNA_TRIALS = 3 #can also be set by --optuna-trials N
 MAX_ESTIMATORS = 3000  # cap on rounds in the CV (early stopping on the validation fold)
 EARLY_STOPPING_ROUNDS = 50
+# --stage dev: Optuna tunes on at most this many development rows (None: all), a stratified
+# subsample whose weights keep every class x n_jet x campaign total (see subsample_dev);
+# the test sample and the final models always use all the MC. --dev-max-rows overrides it.
+DEV_MAX_ROWS = {"ggH": 15_000_000, "VBF": None}
 N_ROUNDS_SCALE = 1.0  # final rounds = median(best_iteration + 1) * scale
 
 PROGRESS_EVERY = 10  # print boosting progress every N rounds (0 = silent)
@@ -102,9 +116,11 @@ SMOKE_ROUNDS = 20
 
 STAGES = ("dev", "test", "final", "apply", "all", "legacy", "compare")
 NOMINAL_TUPLES = ["Data", "DY", "EWK", "TT", "DiBoson", "ggH", "VBF"]
+# The training background skims use EWK_merged (Herwig + Pythia EWK, scripts/merge_ewk.py) for more MC
+# statistics; BDT scores are appended to the Herwig "EWK" tuple only, which stays the nominal EWK downstream.
 # --stage compare --plots-only reads these per-sample compare tuples instead of re-scoring the
 # training skims; they must be the samples hadded into the skims (root_io/skim/<ch>/hadd_skim.sh)
-COMPARE_SAMPLES = {"background": ["DY", "EWK", "TT", "DiBoson"], "signal": ["ggH", "VBF"]}
+COMPARE_SAMPLES = {"background": ["DY", "EWK_merged", "TT", "DiBoson"], "signal": ["ggH", "VBF"]}
 
 # Training-weight schemes (see compute_w_fit), keyed by the weight tag used in the output names
 WEIGHT_SCHEMES = {
@@ -138,6 +154,9 @@ def parse_cli(argv):
     p.add_argument("--optuna-timeout", type=float, default=None, metavar="HOURS",
                    help="with --stage dev: start no new Optuna trial after this many hours (the running "
                         "one finishes and the best configuration is still written)")
+    p.add_argument("--dev-max-rows", type=int, default=None, metavar="N",
+                   help="with --stage dev: tune on a weight-preserving subsample of at most N development "
+                        "rows (0 = all; default: DEV_MAX_ROWS of the channel)")
     p.add_argument("--optuna-resume", action="store_true",
                    help="with --stage dev: continue the study stored in optunaStudies/ (after a crash); "
                         "without it a new study is started and a stored one is archived")
@@ -226,7 +245,7 @@ def weight_tag_of(scheme):
 def training_weights_of(scheme):
     tag = weight_tag_of(scheme)
     return ("mass_res" if scheme["mass_res"] else ("weight" if scheme["use_weight"] else "none")) \
-        + (f"+{tag}" if tag else "")
+        + (f"+{tag}" if tag else "") + ("+negLocal" if NEG_WEIGHT_TREATMENT == "local" else "")
 
 
 # the scheme of every stage except compare: --weights, else the module flags
@@ -269,14 +288,18 @@ def make_variant(w_tag, opt_tag):
     the DEFAULT_PARAMS ones; the AUC dev config and test marker are shared (base_name), the
     Asimov ones carry "_<opt_tag>". The weight tag is part of base_name: the Optuna objective
     depends on the training weights."""
-    base = f"{channel_US}{file_append}_{era}_{subset_title}" + (f"_{w_tag}" if w_tag else "") + run_tag
+    # the negative-weight cancellation changes the training weights, so its models, plots, Optuna
+    # studies/configs and test markers get their own names (frozen_config falls back to the |w|
+    # Optuna config until a negLocal one exists); the BDT_score directory and branch are shared
+    neg_tag = NEG_WEIGHT_NAME_TAG
+    base = f"{channel_US}{file_append}_{era}_{subset_title}" + (f"_{w_tag}" if w_tag else "") + neg_tag + run_tag
     suffix = opt_tag + w_tag  # BDT_score/<channel><suffix>/ and plots/xgboost/<channel><suffix>/
     label = "_".join(t for t in (opt_tag, w_tag) if t) or "base"
     dev_tag = f"_{opt_tag}" if opt_tag in OBJECTIVE_OPT_TAG.values() else ""
     return SimpleNamespace(
         weight_tag=w_tag, opt_tag=opt_tag, optimized=bool(opt_tag), label=label, base_name=base, dev_tag=dev_tag,
         test_name=base + (f"_{opt_tag}" if opt_tag else ""), dir_suffix=suffix,
-        plot_path=f"../../plots/xgboost/{channel_US}{file_append}{suffix}/{subset_title}{run_tag}/",
+        plot_path=f"../../plots/xgboost/{channel_US}{file_append}{suffix}/{subset_title}{neg_tag}{run_tag}/",
         # Optuna config: written by --stage dev, read only with --use-optuna (tracked in git)
         optuna_config_path=f"{DEV_DIR}/config_optuna_{base}{dev_tag}.json",
         test_marker_path=f"{DEV_DIR}/test_evaluated_{base}{dev_tag}.json",
@@ -338,12 +361,92 @@ def reweight_to_flat(mass, w, is_bkg, bin_width=FLAT_BIN_WIDTH, window=kf.TRAIN_
     return w_new, edges, factors
 
 
+def _quantile_bins(values, n_bins):
+    """Index (0..n_bins-1) of each value in n_bins equal-population bins (NaN -> bin 0)."""
+    values = np.nan_to_num(values.astype(np.float64), nan=-np.inf)
+    finite = values[np.isfinite(values)]
+    if n_bins <= 1 or len(finite) == 0:
+        return np.zeros(len(values), np.int64)
+    edges = np.unique(np.quantile(finite, np.linspace(0, 1, n_bins + 1)[1:-1]))
+    return np.searchsorted(edges, values, side="right").astype(np.int64)
+
+
+def _cell_factors(key, w, w_abs, min_rows):
+    """Per row: Sigma_cell w / Sigma_cell |w| of its cell, and whether that cell is usable."""
+    inv = np.unique(key, return_inverse=True)[1]
+    s, a, n = np.bincount(inv, w), np.bincount(inv, w_abs), np.bincount(inv)
+    ratio = np.divide(s, a, out=np.ones_like(s), where=a > 0)
+    usable = (s > 0) & (n >= min_rows)
+    return ratio[inv], usable[inv]
+
+
+def neg_weight_report(y, w, njet, label):
+    """Sigma w, Sigma|w| and the negative-weight fraction per class and n_jet {0, 1, >=2}."""
+    print(f"[INFO] {label}: Sigma w | Sigma|w| | Sigma|w|/Sigma w | negative-weight fraction")
+    for cls, cls_name in ((0, "background"), (1, "signal")):
+        for j, j_name in ((None, "all"), (0, "0j"), (1, "1j"), (2, ">=2j")):
+            m = (y == cls) if j is None else (y == cls) & (njet == j)
+            if not m.any():
+                continue
+            sw, sa = w[m].sum(), np.abs(w[m]).sum()
+            print(f"   {cls_name:>10s} {j_name:>4s}: {sw:.5g} | {sa:.5g} | {sa / sw if sw else float('nan'):.3f} | "
+                  f"{(w[m] < 0).mean():.3f}")
+
+
+def cancel_negative_weights(x, y, w):
+    """Positive per-row weights with the physical normalisation of every phase-space cell:
+    w_i -> |w_i| * Sigma_cell w / Sigma_cell |w|. Cells are class x n_jet {0, 1, >=2} x mc_campaign
+    x NEG_WEIGHT_PT_BINS dimuon-pT quantiles (x NEG_WEIGHT_MJJ_BINS m_jj quantiles for n_jet >= 2).
+    A cell with fewer than NEG_WEIGHT_MIN_ROWS rows or Sigma w <= 0 takes the factor of its
+    (class, n_jet, campaign) group, then of its (class, n_jet) group, then of its class.
+    Returns (w_pos, njet)."""
+    col = {n: names.index(n) for n in names}
+    pt_name = next((n for n in ("diMuon_bsConstrainedPt", "diMuon_pt") if n in col), None)
+    njet = (np.minimum(np.nan_to_num(x[:, col["n_jet"]], nan=0), 2).astype(np.int64) if "n_jet" in col
+            else np.zeros(len(y), np.int64))
+    campaign = (np.unique(x[:, col["mc_campaign"]], return_inverse=True)[1].astype(np.int64)
+                if "mc_campaign" in col else np.zeros(len(y), np.int64))
+    cls_jet = y.astype(np.int64) * 3 + njet
+    group = cls_jet * (campaign.max() + 1) + campaign
+
+    n_sub = NEG_WEIGHT_PT_BINS * NEG_WEIGHT_MJJ_BINS
+    sub = np.zeros(len(y), np.int64)
+    for g in np.unique(group):
+        rows = np.flatnonzero(group == g)
+        b = _quantile_bins(x[rows, col[pt_name]], NEG_WEIGHT_PT_BINS) if pt_name else 0
+        if "diJet_mass" in col and njet[rows[0]] == 2:
+            b = b * NEG_WEIGHT_MJJ_BINS + _quantile_bins(x[rows, col["diJet_mass"]], NEG_WEIGHT_MJJ_BINS)
+        sub[rows] = b
+    levels = (("cell", group * n_sub + sub), ("class x n_jet x campaign", group),
+              ("class x n_jet", cls_jet), ("class", y.astype(np.int64)))
+
+    w_abs = np.abs(w)
+    factor = np.full(len(y), np.nan)
+    for i, (level, key) in enumerate(levels):
+        ratio, usable = _cell_factors(key, w, w_abs, NEG_WEIGHT_MIN_ROWS if i < len(levels) - 1 else 1)
+        todo = np.isnan(factor) & usable
+        if i > 0 and todo.any():
+            print(f"[INFO] negative-weight cancellation: {todo.sum()} rows ({(y[todo] == 0).sum()} background) "
+                  f"take the factor of their {level}")
+        factor[todo] = ratio[todo]
+    if np.isnan(factor).any():
+        raise RuntimeError("negative-weight cancellation: a class has Sigma w <= 0")
+    w_pos = w_abs * factor
+    print(f"[INFO] negative-weight cancellation: {len(np.unique(levels[0][1]))} cells, factor "
+          f"{factor.min():.3f}-{factor.max():.3f} (background), "
+          f"Sigma w_pos / Sigma w = {w_pos[y == 0].sum() / w[y == 0].sum():.4f} (bkg), "
+          f"{w_pos[y == 1].sum() / w[y == 1].sum():.4f} (sig)")
+    return w_pos, njet
+
+
 # ---------------------------------------------------------------------------
 # Data loading
 # ---------------------------------------------------------------------------
 def compute_w_fit(scheme, d, path, tag):
-    """The training weights of one WEIGHT_SCHEMES entry (signal weights already scaled so both
-    classes have the same total |w|); with a flat scheme also plots the background reweighting."""
+    """The training weights of one WEIGHT_SCHEMES entry, built from the positive weights d.w_abs
+    (|w| or the negative-weight-cancelled weights, see NEG_WEIGHT_TREATMENT), with the signal
+    scaled so both classes have the same total training weight; with a flat scheme also plots
+    the background reweighting."""
     w_abs, rel_err, mass, y = d.w_abs, d.rel_err, d.mass, d.y
     if scheme["mass_res"]:
         w_fit = w_abs / rel_err
@@ -362,6 +465,13 @@ def compute_w_fit(scheme, d, path, tag):
         else:
             w_fit, edges, _ = reweight_to_flat(mass, w_fit, is_bkg)
         xgb_utils.plot_flat_reweighting(mass[is_bkg], w_before[is_bkg], w_fit[is_bkg], edges, era, path, tag)
+    # class balance on the weights the BDT actually trains with
+    w_fit = w_fit.astype(np.float64, copy=True)
+    sig = y == 1
+    scale = w_fit[~sig].sum() / w_fit[sig].sum()
+    w_fit[sig] *= scale
+    print(f"[INFO] class balance: signal training weights x {scale:.4g}; "
+          f"Sigma w_fit signal / background = {w_fit[sig].sum() / w_fit[~sig].sum():.4f}")
     return w_fit
 
 
@@ -384,8 +494,9 @@ def plot_mass_weights(d, path, tag):
 def load_training_data(scheme=FLAG_SCHEME):
     """Background + signal skims as training arrays (background rows first, y = 0 / 1).
 
-    Signal weights are scaled so both classes have the same total weight. `w_phys` keeps the
-    physics weights; `w_fit` is what the BDT trains with (see compute_w_fit). With scheme=None
+    `w_phys` keeps the (signed) physics weights; `w_abs` the positive weights the training
+    weights are built from (see NEG_WEIGHT_TREATMENT); `w_fit` is what the BDT trains with, with
+    both classes at the same total (see compute_w_fit). With scheme=None
     (--stage compare) w_fit is left to the caller, one per variant."""
     frames = []
     for path in (bkg_file_name, signal_file_name):
@@ -408,8 +519,6 @@ def load_training_data(scheme=FLAG_SCHEME):
     signal_events, bkg_events = signal_region_yield(df_sig), signal_region_yield(df_bkg)
     print(f"[INFO] S = {signal_events:.3f}; B = {bkg_events:.3f}; "
           f"S/sqrt(B) = {signal_events / math.sqrt(bkg_events):.3f}")
-    signal_scale = df_bkg["weight"].sum() / df_sig["weight"].sum()
-    df_sig["weight"] *= signal_scale
 
     # features as float32 (their type in the skim); mass, mass error and weight as float64
     service = [v[0] for v in variables[-3:]]
@@ -426,10 +535,20 @@ def load_training_data(scheme=FLAG_SCHEME):
     mass, rel_err, w_norm = mass[keep], rel_err[keep], w_norm[keep]
     print(f"[INFO] {len(y)} rows in the training region" + (" (smoke subsample)" if OPTS["smoke"] else ""))
 
-    w_phys = np.where(y == 1, w_norm / signal_scale, w_norm)
-    w_abs = np.abs(w_norm)
+    w_phys = w_norm
+    if NEG_WEIGHT_TREATMENT == "local":
+        w_abs, njet = cancel_negative_weights(x, y, w_phys)
+    elif NEG_WEIGHT_TREATMENT == "abs":
+        w_abs = np.abs(w_phys)
+        njet = (np.minimum(np.nan_to_num(x[:, names.index("n_jet")], nan=0), 2).astype(np.int64)
+                if "n_jet" in names else np.zeros(len(y), np.int64))
+    else:
+        sys.exit(f"[ERROR] unknown NEG_WEIGHT_TREATMENT {NEG_WEIGHT_TREATMENT!r} (abs or local)")
+    neg_weight_report(y, w_phys, njet, "physics weights")
+    if NEG_WEIGHT_TREATMENT == "local":
+        neg_weight_report(y, w_abs, njet, "after negative-weight cancellation")
     d = SimpleNamespace(x=x, y=y, folds=folds, mass=mass, rel_err=rel_err, w_abs=w_abs, w_phys=w_phys,
-                        w_fit=None, signal_events=signal_events, bkg_events=bkg_events)
+                        w_fit=None, njet=njet, signal_events=signal_events, bkg_events=bkg_events)
     path, tag = (plot_path, test_name) if scheme is not None else (compare_plot_path, f"{channel_US}_compare")
     if scheme is not None:
         d.w_fit = compute_w_fit(scheme, d, path, tag)
@@ -451,16 +570,31 @@ def report_peak_memory(label):
     print(f"[MEM  ] {label}: peak RSS {resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6:.2f} GB")
 
 
+def resolve_config_path(variant, verbose=True):
+    """The Optuna configuration file of a variant, or None. Smoke runs fall back to the full-run
+    config; negLocal trainings fall back to the |w| config of the same weights and objective."""
+    candidates = [variant.optuna_config_path]
+    if OPTS["smoke"]:  # smoke runs only need its parameters
+        candidates.append(candidates[0].replace(run_tag, ""))
+    if NEG_WEIGHT_NAME_TAG:
+        candidates += [c.replace(NEG_WEIGHT_NAME_TAG, "") for c in candidates]
+    for path in candidates:
+        if os.path.exists(path):
+            if verbose and NEG_WEIGHT_NAME_TAG and NEG_WEIGHT_NAME_TAG not in os.path.basename(path):
+                print(f"[WARNING] no {NEG_WEIGHT_TREATMENT}-negative-weight Optuna config {variant.optuna_config_path}: "
+                      f"using {path}, tuned with the |w| training weights (re-tune with --stage dev)")
+            return path
+    return None
+
+
 def frozen_config(variant=VARIANT):
     """DEFAULT_PARAMS, or the variant's Optuna configuration (--use-optuna)."""
     if not variant.optimized:
         print(f"[INFO] using DEFAULT_PARAMS {DEFAULT_PARAMS}, {DEFAULT_N_ROUNDS} rounds")
         return kf.make_config(OPTS["device"], DEFAULT_PARAMS, DEFAULT_N_ROUNDS, "default_fixed")
-    path = variant.optuna_config_path
-    if OPTS["smoke"] and not os.path.exists(path):  # smoke runs only need its parameters
-        path = path.replace(run_tag, "")
-    if not os.path.exists(path):
-        sys.exit(f"[ERROR] the Optuna configuration {path} does not exist: run "
+    path = resolve_config_path(variant)
+    if path is None:
+        sys.exit(f"[ERROR] the Optuna configuration {variant.optuna_config_path} does not exist: run "
                  "`--stage dev` first, or `git pull` the committed config.")
     with open(path) as f:
         config = json.load(f)
@@ -545,6 +679,35 @@ def stage_plots():
     print(f"[INFO] --plots-only: done, nothing trained. Plots are under {plot_path}")
 
 
+def subsample_dev(x, y, w_fit, njet, w_phys, max_rows):
+    """The Optuna development sample thinned to max_rows (kf.stratified_subsample over class x
+    n_jet x mc_campaign): returns (rows, w_fit, w_phys, summary) with both weights scaled by
+    N / n_kept of their stratum and w_fit re-balanced between the classes."""
+    campaign = (np.nan_to_num(x[:, names.index("mc_campaign")], nan=0).astype(np.int64)
+                if "mc_campaign" in names else np.zeros(len(y), np.int64))
+    strata = (y.astype(np.int64) * 3 + njet) * 1000 + campaign
+    rows, factor, report = kf.stratified_subsample(strata, y, max_rows, SEED)
+    w_fit_s, w_phys_s = w_fit[rows] * factor, w_phys[rows] * factor
+    sig = y[rows] == 1
+    w_fit_s[sig] *= w_fit_s[~sig].sum() / w_fit_s[sig].sum()
+    print(f"[INFO] Optuna development subsample: {len(rows)} of {len(y)} rows (DEV_MAX_ROWS / --dev-max-rows "
+          f"{max_rows}); per class x n_jet: rows | Sigma w_phys before -> after | N_eff(w_fit) before -> after")
+    nj = njet[rows]
+    for cls, cls_name in ((0, "background"), (1, "signal")):
+        for j, j_name in ((0, "0j"), (1, "1j"), (2, ">=2j")):
+            full, kept = (y == cls) & (njet == j), (y[rows] == cls) & (nj == j)
+            if not full.any():
+                continue
+            print(f"   {cls_name:>10s} {j_name:>4s}: {kept.sum()} / {full.sum()} | {w_phys[full].sum():.5g} -> "
+                  f"{w_phys_s[kept].sum():.5g} | {kf.effective_entries(w_fit[full]):.4g} -> "
+                  f"{kf.effective_entries(w_fit_s[kept]):.4g}")
+    keep_fraction = {f"{'sig' if c else 'bkg'}_{s // 1000 % 3}j_c{s % 1000}": round(n_k / n, 6)
+                     for (c, s), (n, n_k) in sorted(report.items())}
+    summary = dict(max_rows=int(max_rows), n_rows=int(len(rows)), n_dev_rows=int(len(y)), seed=SEED,
+                   strata="class x n_jet x mc_campaign", keep_fraction=keep_fraction)
+    return rows, w_fit_s, w_phys_s, summary
+
+
 def stage_dev():
     """Optuna with 5-fold CV on the development sample (the test sample is never touched)."""
     try:  # the on-disk study storage (sqlite) needs them: fail now, not after loading the data
@@ -558,10 +721,17 @@ def stage_dev():
     dev_idx, test_idx = kf.split_dev_test(d.y, TEST_FRACTION, SEED)
     print(f"[INFO] development sample {len(dev_idx)} events; untouched test sample {len(test_idx)}")
     x, y, w = d.x[dev_idx], d.y[dev_idx], d.w_fit[dev_idx]
+    mass_dev, w_phys_dev = d.mass[dev_idx], d.w_phys[dev_idx]
+    max_rows = OPTS["dev_max_rows"] if OPTS["dev_max_rows"] is not None else DEV_MAX_ROWS.get(channel_US)
+    dev_subsample = None
+    if max_rows and len(y) > max_rows:
+        rows, w, w_phys_dev, dev_subsample = subsample_dev(x, y, w, d.njet[dev_idx], w_phys_dev, max_rows)
+        x, y, mass_dev = x[rows], y[rows], mass_dev[rows]
     asimov = kf.is_asimov(OPTS["objective"])
     # binned Asimov Z of a validation fold, scaled to the full sample: a fold holds
-    # (1 - TEST_FRACTION) / N_FOLDS (x SMOKE_FRACTION) of the MC
-    asimov_inputs = (d.mass[dev_idx], d.w_phys[dev_idx]) if asimov else None
+    # (1 - TEST_FRACTION) / N_FOLDS (x SMOKE_FRACTION) of the MC (the dev subsample keeps the weight
+    # sums, so it needs no extra factor)
+    asimov_inputs = (mass_dev, w_phys_dev) if asimov else None
     asimov_scale = kf.N_FOLDS / (1 - TEST_FRACTION) / (SMOKE_FRACTION if OPTS["smoke"] else 1.0)
     del d
     cv_folds = kf.cv_fold_indices(y, SEED)
@@ -603,6 +773,8 @@ def stage_dev():
     setup = dict(objective=OPTS["objective"], search_space=kf.search_space_json(), max_estimators=max_estimators,
                  early_stopping_rounds=esr, checkpoint_every=checkpoint_every, seed=SEED, smoke=OPTS["smoke"],
                  n_dev_events=int(len(y)), training_weights=training_weights, variables=list(names),
+                 dev_subsample=dev_subsample, pruner=kf.pruner_json(),
+                 asimov_patience=kf.ASIMOV_PATIENCE_ROUNDS if asimov else None,
                  sculpting=dict(sidebands=kf.SCULPT_SIDEBANDS, window=kf.SCULPT_WINDOW, tight_max_fraction=kf.SCULPT_TIGHT_MAX_FRACTION,
                                 max_pull=kf.SCULPT_MAX_PULL) if asimov else None)
 
@@ -665,7 +837,9 @@ def stage_dev():
             objective=OPTS["objective"], n_folds=kf.N_FOLDS, seed=SEED, test_fraction=TEST_FRACTION,
             n_rounds_policy=policy, early_stopping_rounds=esr, max_estimators=max_estimators,
             search_space=kf.search_space_json(), cv=cv, training_weights=training_weights,
-            standardization=DO_STANDARDIZATION, variables=names, smoke=OPTS["smoke"])
+            standardization=DO_STANDARDIZATION, variables=names, smoke=OPTS["smoke"],
+            dev_subsample=dev_subsample, pruner=kf.pruner_json(),
+            asimov_patience=kf.ASIMOV_PATIENCE_ROUNDS if asimov else None)
         if asimov:
             config.update(sculpting=best.user_attrs.get("sculpt"), sculpting_feasible=feasible)
         with open(optuna_config_path, "w") as f:
@@ -934,6 +1108,7 @@ def train_variant(d, w_fit, variant, weights_label, config, params, n_rounds):
                              "OOF", "OOF (held-out fold)", d, [m["model"] for m in members], variant=variant)
     xgb_utils.plot_roc_per_fold(d.y, oof, d.folds, w_fit, era, plot_path, test_name)
     xgb_utils.plot_discriminator_per_fold(d.y, oof, d.folds, d.w_phys, era, plot_path, test_name)
+    xgb_utils.plot_discriminator_by_njet(d.y, oof, d.njet, d.w_phys, era, plot_path, test_name)
     if PLOT_LOSS:
         xgb_utils.plot_fold_loss_curves(members, plot_path, test_name, era,
                                         second_label="held-out fold (monitoring only)")
@@ -1236,12 +1411,11 @@ def load_compare_tuples(files, branches):
     signal_events, bkg_events = signal_region_yield(sig), signal_region_yield(bkg)
     print(f"[INFO] S = {signal_events:.3f}; B = {bkg_events:.3f}; "
           f"S/sqrt(B) = {signal_events / math.sqrt(bkg_events):.3f}")
-    signal_scale = bkg[weight_name].sum() / sig[weight_name].sum()
     y = np.concatenate([np.zeros(len(bkg[mass_name])), np.ones(len(sig[mass_name]))]).astype(np.int8)
     mass, rel_err, w_phys = (np.concatenate([bkg[c], sig[c]]).astype(np.float64)
                              for c in (mass_name, rel_err_name, weight_name))
     d = SimpleNamespace(y=y, mass=mass, rel_err=rel_err, w_phys=w_phys,
-                        w_abs=np.abs(np.where(y == 1, w_phys * signal_scale, w_phys)),
+                        w_abs=np.abs(w_phys),
                         signal_events=signal_events, bkg_events=bkg_events,
                         scores={b: np.concatenate([bkg[b], sig[b]]) for b in branches})
     if PLOT_MASS_WEIGHTS:
@@ -1256,8 +1430,7 @@ def stage_compare():
     variants = []
     for w_tag, opt_tag in COMPARE_VARIANTS:
         variant = make_variant(w_tag, opt_tag)
-        if opt_tag in OBJECTIVE_OPT_TAG.values() and not os.path.exists(variant.optuna_config_path) \
-                and not (OPTS["smoke"] and os.path.exists(variant.optuna_config_path.replace(run_tag, ""))):
+        if opt_tag in OBJECTIVE_OPT_TAG.values() and resolve_config_path(variant, verbose=False) is None:
             print(f"[WARNING] {variant.optuna_config_path} does not exist: variant {variant.label} skipped "
                   f"(run `python3 train.py {channel_US} {era} --stage dev --objective "
                   f"{dict((v, k) for k, v in OBJECTIVE_OPT_TAG.items())[opt_tag]}` first)")
