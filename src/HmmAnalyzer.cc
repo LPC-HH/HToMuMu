@@ -367,23 +367,37 @@ void HmmAnalyzer::EventLoop() {
         h_sumOfgpw->SetBinContent(1, value_h_sumOfgpw);
 
 
+        // Trigger selection
         bool trig_decision = (HLT_IsoMu24 == 1);
-        bool run_trig_checks = 
-            (trig_decision && Flag_HBHENoiseFilter && Flag_HBHENoiseIsoFilter &&
-             Flag_EcalDeadCellTriggerPrimitiveFilter && Flag_goodVertices &&
-             Flag_globalSuperTightHalo2016Filter && PV_npvsGood > 0);
 
-        if(!run_trig_checks) {
+        // Run 3 noise filters
+        bool run_trig_checks =
+            (trig_decision &&
+             Flag_goodVertices &&
+             Flag_globalSuperTightHalo2016Filter &&
+             Flag_EcalDeadCellTriggerPrimitiveFilter &&
+             Flag_BadPFMuonFilter &&
+             Flag_BadPFMuonDzFilter &&
+             Flag_hfNoisyHitsFilter &&
+             Flag_eeBadScFilter &&
+             PV_npvsGood > 0);
+
+        // ECAL bad calibration filter
+        // 2024: use the stored flag.
+        // 2022-2023: special handling may be required for prompt-reco data.
+        // 2025-2026: recommendations are still under review.
+        if (year == "2024") {
+            run_trig_checks = run_trig_checks && Flag_ecalBadCalibFilter;
+        }
+
+        if (!run_trig_checks) {
             continue;
         }
 
         h_nTrigger->Fill(0.5);
 
-        bool run_muChecks =
-            (nMuon >= 2 && Flag_BadPFMuonFilter &&
-             Flag_BadChargedCandidateFilter);
-        
-        //std::cout << "Running muon checks" << std::endl; 
+        bool run_muChecks = (nMuon >= 2);
+
         if (!run_muChecks) {
             continue;
         }
@@ -607,7 +621,8 @@ void HmmAnalyzer::EventLoop() {
         bool trig_match_mu2 = false;
         for (int trigger_index = 0; trigger_index < nTrigObj; trigger_index++) {
             //  float dR_TrigObj = 999.;
-            if (TrigObj_id[trigger_index] != 13 || !(TrigObj_filterBits[trigger_index] & (1 << 1))) 
+            const ULong64_t filter_bits = triggerObjectFilterBits(trigger_index);
+            if (TrigObj_id[trigger_index] != 13 || !(filter_bits & 8))
                 continue;
             float dR_TrigObj;
             if (!trig_match_mu1){
@@ -648,7 +663,7 @@ void HmmAnalyzer::EventLoop() {
                 t_pass_muon_trigger_match = false;
             }
         }
-        else if (ifSync){
+        else if (ifSync) {
             t_pass_muon_trigger_match = true;
         }
 
