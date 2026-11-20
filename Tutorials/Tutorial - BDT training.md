@@ -159,7 +159,12 @@ If you use **USE_WEIGHT_MASS_RES=True**, then the training weight will be *weigh
 
 ## After training
 
-The training ```run_train.sh {category}``` code will generate one file containing the model (python/xgboost/models/model_ggH_Combined_BFull_SNottH.xgb), one file containing the roc curve (python/xgboost/roc/ggH_Combined_BFull_SNottH_roc.txt), and will add the BDT score to the tuples.
+`python/xgboost/run_train.sh` trains VBF and then ggH with `train.py`, and stops if a channel fails. Every argument is optional; the defaults are hard-coded at the top of the script. With no arguments it runs `train.py <ch> Combined --stage all --use-optuna --objective asimov_fit --weights flatMassRes` for both channels. Override them with `--stage`, `--use-optuna`/`--no-optuna`, `--objective`, `--weights`, `--channels "VBF ggH"`, `--era` and `--recat`. Add `--dry-run` to print the commands without running them. Anything after `--` is passed to `train.py` as is (e.g. `-- --do-systematics`). See `bash run_train.sh --help`. To run it in the background:
+```
+cd python/xgboost
+nohup bash run_train.sh > training.log 2>&1 &
+```
+The training writes the fold models and the ROC files, and with `--stage all`/`apply` it adds the BDT score to the tuples.
 
 **Note (K-fold training) WIP:** the training now produces *five* fold models (`python/xgboost/models/model_ggH_Combined_BFull_SNottH_fold<k>_bsC.json`, k = 0..4) instead of a single one, and each MC event is scored by the model that did not train on it (out-of-fold). The fold is `event % 5`, so an event keeps its fold across the skim, the nominal tuple and every systematic variation, and the development/test/final stages are described in `python/xgboost/README.md` ("K-fold training and out-of-fold scoring"). The scored tuples additionally contain the integer branch `BDT_fold`.
 The tuples with the BDT score added are saved in root_io/tuples/BDT_score/(ggH/VBF)/BFull_SNottH/ 
