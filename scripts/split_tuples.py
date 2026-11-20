@@ -1,16 +1,19 @@
 import argparse
 import os
 from sys import path as sys_path
+
 import uproot
 
 # Read the (tens of GB) BDT_score files in chunks rather than memory-mapping them whole:
 # the whole-file map alone exceeds the 16 GiB per-process limit on the LPC login nodes.
 UPROOT_OPEN = dict(file_handler=uproot.MultithreadedFileSource)
-import numpy as np
 from pathlib import Path
 
+import numpy as np
+
 sys_path.insert(0, str(Path(__file__).resolve().parent.parent / "python"))
-from bdt_categories_io import load_bdt_categories, get_bdt_cuts, variant_dir_suffix
+from bdt_categories_io import get_bdt_cuts, load_bdt_categories, variant_dir_suffix
+
 
 def get_output_file_name(data_type, path):
     return os.path.join(
@@ -18,6 +21,11 @@ def get_output_file_name(data_type, path):
         {
             "data": "allData_combined.root",
             "signal": "output_signal_M125_13TeV_cats_pythia8.root",
+            "bkg": "output_bkg.root",
+            "DY": "output_DY.root",
+            "EWK": "output_EWK.root",
+            "TT": "output_TT.root",
+            "DiBoson": "output_DiBoson.root",
         }[data_type],
     )
 
@@ -28,15 +36,26 @@ def get_input_file_name(data_type, channel, path):
         {
             "data": "data_Combined.root",
             "signal": f"{channel}_Combined_BFull_SNottH.root",
+            "bkg": "background_Combined.root",
+            "DY": "DY_Combined_BFull_SNottH.root",
+            "EWK": "EWK_Combined_BFull_SNottH.root",
+            "TT": "TT_Combined_BFull_SNottH.root",
+            "DiBoson": "DiBoson_Combined_BFull_SNottH.root",
         }[data_type],
     )
 
 
 def get_tree_name(data_type, channel, category_name):
-    return {
-        "data": f"Data_13TeV_{category_name}",
-        "signal": f"{channel.lower()}_125_13TeV_{category_name}",
-    }[data_type]
+    if data_type == "data":
+        return f"Data_13TeV_{category_name}"
+
+    if data_type == "signal":
+        return f"{channel.lower()}_125_13TeV_{category_name}"
+
+    if data_type == "bkg":
+        return f"{channel.lower()}_bkg_{category_name}"
+
+    return f"{channel.lower()}_{data_type.lower()}_bkg_{category_name}"
 
 
 def split_tuples_by_category(
@@ -49,7 +68,8 @@ def split_tuples_by_category(
     file_append,
 ):
     """channel is the plain channel name (ggH/VBF); file_append ("reCat" and/or the variant's dir
-    suffix) picks the BDT_score/<sample>/ input directory and the bdt_cuts key, sample = channel + file_append."""
+    suffix) picks the BDT_score/<sample>/ input directory and the bdt_cuts key, sample = channel + file_append.
+    """
 
     channels = [channel] if data_type == "data" else ["ggH", "VBF"]
     with uproot.recreate(output_file_name) as file_output:
@@ -62,7 +82,11 @@ def split_tuples_by_category(
 
             branches = {}
             BDT_branch = f"BDT_{sample_channel}"
-            CAT_branch = f"is_{sample_channel}_categoryBDT" if RECATEGORIZE else f"is_{sample_channel}_category"
+            CAT_branch = (
+                f"is_{sample_channel}_categoryBDT"
+                if RECATEGORIZE
+                else f"is_{sample_channel}_category"
+            )
             selected_branches = [
                 "pileup_weight",
                 "diMuon_mass",
@@ -74,6 +98,10 @@ def split_tuples_by_category(
                 "leading_jet_eta",
                 "subleading_jet_eta",
             ]
+            # Keep all LHE weights for signal samples only
+            if data_type == "signal":
+                selected_branches += [f"weight_LHEScal_{i}" for i in range(9)]
+                selected_branches += [f"weight_LHEPd_{i}" for i in range(103)]
 
             # print(f"[Info] Processing sample: {channel}")
             print(f"[Info] Opening input file: {input_file_name}")
@@ -87,35 +115,15 @@ def split_tuples_by_category(
             #     print("Reweighting signal MC")
             #     reweight = 281.7/170.97
 
-            branches = uproot.open(input_file_name, **UPROOT_OPEN)["tree_output"].arrays(
-                selected_branches, library="np"
-            )
+            branches = uproot.open(input_file_name, **UPROOT_OPEN)[
+                "tree_output"
+            ].arrays(selected_branches, library="np")
             # Changing the weight from xs*gen_weight*pu*br*1000/SumGenweight to xs*gen_weight*1000/SumGenweight
             nominal_mass = branches["diMuon_mass"]
             bs_mass = branches["diMuon_bsConstrainedMass"]
 
-            print(
-                "[Mass migration] nominal <= 110, BS > 110:",
-                np.count_nonzero((nominal_mass <= 110) & (bs_mass > 110)),
-            )
-
-            print(
-                "[Mass migration] nominal > 110, BS <= 110:",
-                np.count_nonzero((nominal_mass > 110) & (bs_mass <= 110)),
-            )
-
-            print(
-                "[Input nominal below 110]:",
-                np.count_nonzero(nominal_mass < 110),
-            )
-
-            print(
-                "[Input BS below 110]:",
-                np.count_nonzero(bs_mass < 110),
-            )
-
-            if data_type != "data":
-                branches["weight"] = branches["weight"] / (branching_ratio) * reweight
+            if data_type == "signal":
+                branches["weight"] = branches["weight"] / branching_ratio * reweight
 
             # Renameing the mass variable to use the hgg fits code
             if use_bsConstrain:
@@ -140,48 +148,12 @@ def split_tuples_by_category(
 
                 bdt_selection = (score >= lower_bdt) & (score < upper_bdt) & is_category
 
-                category_name = f"{sample_channel}cat{len(bdt_cuts[sample]) - category - 1}"
+                category_name = (
+                    f"{sample_channel}cat{len(bdt_cuts[sample]) - category - 1}"
+                )
 
                 print(f"\n[CHECK] {category_name}")
                 print(f"BDT range: {lower_bdt} to {upper_bdt}")
-
-                print(
-                    "Nominal <= 110, BS in first bin:",
-                    np.count_nonzero(
-                        bdt_selection
-                        & (mass_nominal <= 110)
-                        & (mass_bs > 110)
-                        & (mass_bs < 110.25)
-                    ),
-                )
-
-                print(
-                    "Nominal > 110, BS <= 110:",
-                    np.count_nonzero(
-                        bdt_selection & (mass_nominal > 110) & (mass_bs <= 110)
-                    ),
-                )
-
-                print(
-                    "BS first bin 110-110.25:",
-                    np.count_nonzero(
-                        bdt_selection & (mass_bs > 110) & (mass_bs < 110.25)
-                    ),
-                )
-
-                print(
-                    "BS second bin 110.25-110.50:",
-                    np.count_nonzero(
-                        bdt_selection & (mass_bs >= 110.25) & (mass_bs < 110.50)
-                    ),
-                )
-
-                print(
-                    "Exactly BS mass = 110:",
-                    np.count_nonzero(bdt_selection & (mass_bs == 110)),
-                )
-
-
 
                 cuts = (
                     (branches[BDT_branch] > bdt_cuts[sample][category])
@@ -196,8 +168,9 @@ def split_tuples_by_category(
                 }
 
                 print(f"[Info] Final events: {len(branches['diMuon_mass'][cuts])}")
-                print(f"[Info] Final selected events: {len(selected_events['diMuon_mass'])}")
-
+                print(
+                    f"[Info] Final selected events: {len(selected_events['diMuon_mass'])}"
+                )
 
                 tree_name = get_tree_name(data_type, channel, category_name)
 
@@ -212,8 +185,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Split BDT-scored tuples into per-category trees."
     )
-    parser.add_argument("data_type", choices=["data", "signal"])
-    parser.add_argument("channel", choices=["ggH", "VBF"])
+    parser.add_argument(
+        "data_type", choices=["data", "signal", "bkg", "DY", "EWK", "TT", "DiBoson"],
+    )
+    parser.add_argument(
+        "channel", choices=["ggH", "VBF"],
+    )
     parser.add_argument(
         "-r",
         "--recategorize",
@@ -244,11 +221,13 @@ if __name__ == "__main__":
 
     print(f"[Config] Using data_type = {data_type}")
     print(f"[Config] Using channel   = {channel}")
-    print(f"[Config] BDT variant     = {args.variant} (BDT_score/<channel>{file_append}/, cuts key <channel>{file_append})")
+    print(
+        f"[Config] BDT variant     = {args.variant} (BDT_score/<channel>{file_append}/, cuts key <channel>{file_append})"
+    )
     print(f"[Config] Output file= {output_file_name}")
     print(f"[Config] Branching Ratio = {branching_ratio}")
     print(f"[Config] Use bsConstrain = {use_bsConstrain}")
-    print(f'[Config] Using BDT reCat = {RECATEGORIZE}')
+    print(f"[Config] Using BDT reCat = {RECATEGORIZE}")
 
     os.makedirs(out_path, exist_ok=True)
 
@@ -256,10 +235,18 @@ if __name__ == "__main__":
     bdt_categories_info = load_bdt_categories()
     ch_list = [ch + file_append for ch in ("ggH", "VBF")]
     bdt_cuts = {
-        ch: get_bdt_cuts(bdt_categories_info, ch, "Combined", "BFull_SNottH", mass_variable)
+        ch: get_bdt_cuts(
+            bdt_categories_info, ch, "Combined", "BFull_SNottH", mass_variable
+        )
         for ch in ch_list
     }
 
     split_tuples_by_category(
-        data_type, channel, output_file_name, branching_ratio, bdt_cuts, use_bsConstrain, file_append
+        data_type,
+        channel,
+        output_file_name,
+        branching_ratio,
+        bdt_cuts,
+        use_bsConstrain,
+        file_append,
     )
