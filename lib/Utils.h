@@ -70,14 +70,10 @@ double GetEventWeight(const float &gen_weight, const float &pileup_weight,
 std::pair<float, float> CSAngles(TLorentzVector vector_1,
                                  TLorentzVector vector_2, const int charge) {
     // https://github.com/alisw/AliPhysics/blob/master/PWGDQ/dielectron/core/AliDielectronPair.cxx
-    TLorentzVector proton_1_vector(
-        0., 0., -BEAM_ENERGY_GEV,
-        TMath::Sqrt((BEAM_ENERGY_GEV / 2) * (BEAM_ENERGY_GEV / 2) +
-                    PROTON_MASS * PROTON_MASS));
-    TLorentzVector proton_2_vector(
-        0., 0., BEAM_ENERGY_GEV,
-        TMath::Sqrt((BEAM_ENERGY_GEV / 2) * (BEAM_ENERGY_GEV / 2) +
-                    PROTON_MASS * PROTON_MASS));
+    const double beam_energy = BEAM_ENERGY_GEV / 2.0;
+    const double beam_pz = TMath::Sqrt(beam_energy * beam_energy - PROTON_MASS * PROTON_MASS);
+    TLorentzVector proton_1_vector(0., 0., -beam_pz, beam_energy);
+    TLorentzVector proton_2_vector(0., 0., beam_pz, beam_energy);
 
     TLorentzVector higgs_vector = vector_1 + vector_2;
     vector_1.Boost(-(higgs_vector.BoostVector())); // go to Higgs RFR

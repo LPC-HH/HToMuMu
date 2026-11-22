@@ -134,7 +134,7 @@ If you also want to produce the muon \(p_T\) systematic variations, run:
 
 ```bash
 python3 create_analyzer_jobs_LPC_muonsys.py
-bash condor_ctuple_job_sender_syst.sh
+bash condor_job_sender_muon_sys.sh
 ```
 
 ---
@@ -173,6 +173,12 @@ python3 ComputeWeights_muon_sys.py
 ```
 
 `ComputeWeights.py` computes the nominal generated-weight information, while `ComputeWeights_muon_sys.py` does the same for the muon systematic samples.
+
+Then run DY stitching from the same directory.
+
+```bash
+python3 compute_DY_stitching.py
+```
 
 ---
 
@@ -226,11 +232,12 @@ Go to the tuple directory:
 cd ../root_io/tuples/
 ```
 
+Update the analyzer and ctuple versions in `hadd_tuples_EOS.sh` and `hadd_tuples.sh` before running the commands.
+
 Run:
 
 ```bash
-bash hadd_tuples_EOS.sh -eos
-bash hadd_tuples
+bash hadd_tuples_EOS.sh -eos && bash hadd_tuples.sh
 ```
 
 This merges the nominal tuples required for the analysis.
@@ -248,8 +255,10 @@ cd ../../condor/
 Then run:
 
 ```bash
-bash submit_hadd_systematics.sh
+bash submit_hadd_systematics.sh 2.9.0
 ```
+
+Replace `2.9.0` with the ctuple version you are using.
 
 ---
 
@@ -269,7 +278,7 @@ voms-proxy-init --voms cms --valid 192:00
 
 Set the hardcoded locations at the top of `submit_bdt_systematics.sh`:
 
-- `SYST_TUPLE_DIR`: the systematic tuples to score (default: Matias's area)
+- `SYST_TUPLE_DIR`: the systematic tuples to score (default: your own EOS area)
 - `BDT_SCORE_DIR`: where the scored tuples go (default: your own area); `<channel>/BFull_SNottH/` is appended
 - `MODEL_NAME_PREFIX`: the fold models used, `models/model_<channel>_<MODEL_NAME_PREFIX>_fold<k>_bsC.json`
 

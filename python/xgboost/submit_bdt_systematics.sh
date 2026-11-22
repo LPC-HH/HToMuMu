@@ -20,12 +20,12 @@ SIG_SUBSET="NottH"
 
 # ---- Hardcoded locations: edit these ----
 # Systematic tuples to score (/store/group/lpchmumu is the same area as /store/user/lpchmumu)
-SYST_TUPLE_DIR="/store/group/lpchmumu/mbarrial/analyzer_HiggsMuMu_${ANALYZER_VERSION}/tuples_${TUPLES_VERSION}/systematics"
+SYST_TUPLE_DIR="/store/group/lpchmumu/${USER_NAME}/analyzer_HiggsMuMu_${ANALYZER_VERSION}/tuples_${TUPLES_VERSION}/systematics"
 # Scored output, in your own area; <channel>/B<bkg>_S<sig>/ is appended
 BDT_SCORE_DIR="/store/group/lpchmumu/${USER_NAME}/analyzer_HiggsMuMu_${ANALYZER_VERSION}/tuples_${TUPLES_VERSION}/systematics/BDT_score"
-# Match the default training weights. Override for a different nominal model.
+# Match run_train.sh defaults. Override for a different nominal model.
 # Models: models/model_<channel>_${MODEL_NAME_PREFIX}_fold<k>_bsC.json (+ preprocessing_*.pkl)
-MODEL_NAME_PREFIX="${MODEL_NAME_PREFIX:-${MODEL_ERA}_B${BKG_SUBSET}_S${SIG_SUBSET}_flatMassRes}"
+MODEL_NAME_PREFIX="${MODEL_NAME_PREFIX:-${MODEL_ERA}_B${BKG_SUBSET}_S${SIG_SUBSET}_flatMassRes_negLocal_asimovFit}"
 
 EOS_DIR="${SYST_TUPLE_DIR}"
 XROOTD="root://cmseos.fnal.gov"

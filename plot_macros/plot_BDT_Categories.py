@@ -12,19 +12,19 @@ from utils.labels import luminosity, x_range, n_bins, x_labels
 from utils.helper import get_canvas, save_figure, get_histograms_ratio
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "python"))
-from bdt_categories_io import save_bdt_category, variant_dir_suffix
+from bdt_categories_io import DEFAULT_BDT_VARIANT, save_bdt_category, variant_dir_suffix
 
 # directory-suffix flags, stripped so the positional arguments below are unaffected:
 #   --legacy     the pre-K-fold single-model scores
 #   --optimized  the Optuna-configured K-fold scores 
 #   --compare    the six-variant tuples of train.py --stage compare
-#   --variant <label>  the K-fold scores of any train.py --stage apply variant rain.py's VARIANT.label, e.g. asimovFit_flatMassRes). 
+#   --variant <label>  the K-fold scores for a train.py variant (default: asimovFit_flatMassRes)
 
-dir_suffix = ""
+dir_suffix = None
 for suffix_flag in ("--legacy", "--optimized", "--compare", "--variant"):
     if suffix_flag in sys.argv:
         i = sys.argv.index(suffix_flag)
-        if dir_suffix:
+        if dir_suffix is not None:
             print("--legacy, --optimized, --compare and --variant are mutually exclusive")
             exit()
         if suffix_flag == "--variant":
@@ -36,6 +36,9 @@ for suffix_flag in ("--legacy", "--optimized", "--compare", "--variant"):
         else:
             dir_suffix = suffix_flag[2:]
             del sys.argv[i]
+
+if dir_suffix is None:
+    dir_suffix = variant_dir_suffix(DEFAULT_BDT_VARIANT)
 
 score_variant = None
 if "--score" in sys.argv:

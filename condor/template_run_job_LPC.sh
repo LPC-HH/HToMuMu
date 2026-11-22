@@ -223,9 +223,20 @@ file inputs/*.root
 ###########################
 # Run executable
 ###########################
+output_file="${output_name}_${job_number}.root"
+good_lumi_file="${output_name}_${job_number}_GoodLumi.root"
+
+fail_job() {
+    echo "[ERROR] $2" >&2
+    exit "$1"
+}
+
 echo "Executing Analysis executable:"
 echo "./${executable} tmp_input_list.txt ${output_name}_${job_number}.root ${file_type} ${is_data} ${year} ${ifZ} ${ifH} ${muon_pt_syst} ${ifSync}"
-./${executable} tmp_input_list.txt ${output_name}_${job_number}.root ${file_type} ${is_data} ${year} ${ifZ} ${ifH} ${muon_pt_syst} ${ifSync}
+./"${executable}" tmp_input_list.txt "$output_file" ${file_type} ${is_data} ${year} ${ifZ} ${ifH} ${muon_pt_syst} ${ifSync} ||
+    fail_job 30 "HmmAnalyzer failed for job ${job_number}."
+[[ -s "$output_file" ]] ||
+    fail_job 31 "HmmAnalyzer output is missing or empty: ${output_file}."
 
 
 ls -l
@@ -236,29 +247,38 @@ ls -l
 
 if [[ "$file_type" == "data" ]]; then
     echo "Executing goodLumi check:"
-    cd RazorCommon/bin
-    cert_file=$(ls ../data/)
+    cd RazorCommon/bin || fail_job 32 "Could not enter RazorCommon/bin."
+    cert_files=(../data/Cert*.json)
+    [[ ${#cert_files[@]} -eq 1 && -s "${cert_files[0]}" ]] ||
+        fail_job 32 "Expected one nonempty good-lumi certification JSON."
+    cert_file="${cert_files[0]##*/}"
 
     echo "./FWLiteGoodLumi ../python/loadJson.py ../../${output_name}_${job_number}.root ../../${output_name}_${job_number}_GoodLumi.root"
-    sed -i "/JSONfile =/c\JSONfile = '../data/${cert_file}'" ../python/loadJson.py
-    #echo "Output goodLumi file: " $outfile
-    ./FWLiteGoodLumi ../python/loadJson.py ../../${output_name}_${job_number}.root ../../${output_name}_${job_number}_GoodLumi.root
+    sed -i "/JSONfile =/c\JSONfile = '../data/${cert_file}'" ../python/loadJson.py ||
+        fail_job 32 "Could not configure the good-lumi filter."
+    ./FWLiteGoodLumi ../python/loadJson.py "../../${output_file}" "../../${good_lumi_file}" ||
+        fail_job 33 "FWLiteGoodLumi failed for job ${job_number}."
 
-    cd ../../
+    cd ../../ || fail_job 32 "Could not return to the analyzer output directory."
     
     echo "changing outfile to be named like infile"
-    mv ${output_name}_${job_number}_GoodLumi.root ${output_name}_${job_number}.root
+    [[ -s "$good_lumi_file" ]] ||
+        fail_job 34 "Good-lumi output is missing or empty: ${good_lumi_file}."
+    mv -- "$good_lumi_file" "$output_file" ||
+        fail_job 35 "Could not replace analyzer output with the good-lumi output."
 fi
 
 ################################################################
 # Copy output file to /eos space -- define in submitter code
 ################################################################
-echo ${output_Directory}
-xrdfs root://cmseos.fnal.gov mkdir -p /store/group/lpchmumu/${output_Directory}
-
-xrdcp -f ${output_name}_${job_number}.root root://cmseos.fnal.gov//store/group/lpchmumu/${output_Directory}/${output_name}_${job_number}.root
-echo "Output file saved in root://cmseos.fnal.gov//store/group/lpchmumu/${output_Directory}/${output_name}_${job_number}.root"
-rm ${output_name}_${job_number}.root
+eos_output_dir="/store/group/lpchmumu/${output_Directory%/}"
+eos_output_url="root://cmseos.fnal.gov/${eos_output_dir}/${output_file}"
+xrdfs root://cmseos.fnal.gov mkdir -p "$eos_output_dir" ||
+    fail_job 36 "Could not create EOS directory: ${eos_output_dir}."
+xrdcp -f "$output_file" "$eos_output_url" ||
+    fail_job 37 "Could not upload ${output_file} to ${eos_output_url}."
+echo "Output file saved in ${eos_output_url}"
+rm -- "$output_file"
 
 rm inputs -rv
 

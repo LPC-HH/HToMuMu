@@ -12,7 +12,9 @@ from pathlib import Path
 import numpy as np
 
 sys_path.insert(0, str(Path(__file__).resolve().parent.parent / "python"))
-from bdt_categories_io import get_bdt_cuts, load_bdt_categories, variant_dir_suffix
+from bdt_categories_io import (
+    DEFAULT_BDT_VARIANT, get_bdt_cuts, load_bdt_categories, variant_dir_suffix,
+)
 
 
 def get_output_file_name(data_type, path):
@@ -200,8 +202,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "-v",
         "--variant",
-        default="base",
-        help="train.py variant label of the BDT scores (e.g. asimovFit_flatMassRes; default base). "
+        default=DEFAULT_BDT_VARIANT,
+        help="train.py variant label of the BDT scores (default: %(default)s). "
         "Reads BDT_score/<channel><dir suffix>/ (dir suffix = label without '_', e.g. "
         "asimovFitflatMassRes), uses the cuts saved by plot_BDT_Categories.py --variant <label>, "
         "and writes split_tuples/<channel><dir suffix>/",

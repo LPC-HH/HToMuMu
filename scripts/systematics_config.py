@@ -3,7 +3,9 @@ from sys import path as sys_path
 
 sys_path.insert(0, str(Path(__file__).resolve().parent.parent / "python"))
 
-from bdt_categories_io import load_bdt_categories, get_bdt_cuts, variant_dir_suffix
+from bdt_categories_io import (
+    DEFAULT_BDT_VARIANT, get_bdt_cuts, load_bdt_categories, variant_dir_suffix,
+)
 
 
 MASS_MIN = 110.0
@@ -13,7 +15,7 @@ MASS_MAX = 150.0
 # train.py variant label of the BDT (e.g. "base", "asimovFit_flatMassRes"). It selects the
 # <channel><suffix> entry of root_io/bdt_categories.json and the nominal BDT_score/<channel><suffix>/
 # folder, so it must match the model the systematic tuples were scored with.
-BDT_VARIANT = "base"
+BDT_VARIANT = DEFAULT_BDT_VARIANT
 # flashggFinalFit checkout; the JSONs go to <FLASHGG_PATH>Datacard/experimental_systematics/
 FLASHGG_PATH = "/uscms_data/d3/esledge/fits-hmm/CMSSW_14_1_0_pre4/src/flashggFinalFit/"
 # Nominal BDT-scored tuples: <dir>/<channel>/<SUBSET>/<process>_Combined_<SUBSET>.root

@@ -158,6 +158,7 @@ fi
 
 COPY_MAX_RETRIES=10
 COPY_RETRY_DELAY=10
+FAILED_MERGES=()
 
 
 merge()
@@ -194,8 +195,11 @@ merge()
     printf '%s\n' "${INPUTS[@]}" | xargs -n1 dirname | sort | uniq -c | sed 's/^/    /'
 
     # hadd equivalent that lifts the 100 GB TTree limit (see merge_large_tree.C)
-    INPUT_LIST="$(mktemp "${WORK_DIR}/.hadd_inputs_XXXXXX.txt")"
-    printf '%s\n' "${INPUTS[@]}" > "${INPUT_LIST}"
+    INPUT_LIST="$(mktemp "${WORK_DIR}/.hadd_inputs_XXXXXX.txt")" || return 1
+    if ! printf '%s\n' "${INPUTS[@]}" > "${INPUT_LIST}"; then
+        rm -f "${INPUT_LIST}"
+        return 1
+    fi
 
     root -l -b -q "${SCRIPT_DIR}/merge_large_tree.C+(\"${OUT_PATH}\",\"${INPUT_LIST}\")"
 
@@ -304,7 +308,9 @@ merge_selected()
     local TYPE="${NAME%%_*}"   # first field: EWK_pythia_2024 is selected by -t EWK
     local ERA="${NAME##*_}"    # last field
     in_list "${TYPE}" "${SEL_TYPES}" && in_list "${ERA}" "${SEL_ERAS}" || return 0
-    merge "$@"
+    if ! merge "$@"; then
+        FAILED_MERGES+=("$1")
+    fi
 }
 
 
@@ -594,6 +600,12 @@ merge_selected Data_2026_tuples.root \
 ############################################################
 # Finished
 ############################################################
+
+if (( ${#FAILED_MERGES[@]} > 0 )); then
+    echo "[ERROR] ${#FAILED_MERGES[@]} merge(s) failed:" >&2
+    printf '    %s\n' "${FAILED_MERGES[@]}" >&2
+    exit 1
+fi
 
 echo
 echo "============================================================"

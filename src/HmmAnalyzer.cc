@@ -517,7 +517,7 @@ void HmmAnalyzer::EventLoop() {
         for (int muon_index_1 = 0; muon_index_1 < nMuon; muon_index_1++) {
 
             if (!(Muon_isGlobal[muon_index_1] &&
-                  mu_pt_fsr[muon_index_1] > muon_pt_cut.at(yearst) &&
+                  mu_pt_fsr[muon_index_1] > 20. &&
                   Muon_mediumId[muon_index_1] &&
                   fabs(Muon_eta[muon_index_1]) < 2.4 &&
                   Muon_pfRelIso04_all[muon_index_1] < 0.25))
@@ -533,6 +533,10 @@ void HmmAnalyzer::EventLoop() {
                       Muon_mediumId[muon_index_2] &&
                       fabs(Muon_eta[muon_index_2]) < 2.4 &&
                       Muon_pfRelIso04_all[muon_index_2] < 0.25))
+                    continue;
+
+                if (!(mu_pt_fsr[muon_index_1] > muon_pt_cut.at(yearst) ||
+                      mu_pt_fsr[muon_index_2] > muon_pt_cut.at(yearst)))
                     continue;
 
                 float pair_pt_sum =

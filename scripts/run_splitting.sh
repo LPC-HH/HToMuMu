@@ -12,7 +12,7 @@ set -euo pipefail
 #          Without this option, split signal, data, and combined bkg.
 #   -r     Use the re-categorization BDT.
 #   -d     Delete previous split tuples for the selected mode and exit.
-#   -v     BDT variant label (default: base).
+#   -v     BDT variant label (default: asimovFit_flatMassRes).
 #
 # Examples:
 #   bash scripts/run_splitting.sh
@@ -24,7 +24,7 @@ set -euo pipefail
 
 RECAT_ARG=""
 REMOVE_PREVIOUS=false
-VARIANT="base"
+VARIANT="asimovFit_flatMassRes"
 BKGS_ONLY=false
 
 # -------------------------------------------------------

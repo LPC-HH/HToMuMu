@@ -829,9 +829,9 @@ void CreateTuple::setBranchesAddressesOutput() {
         
         //jet variables
         tree_output->Branch("jet_pt", &jet_pt);
-        tree_output->Branch("jet_pt_nanoAOD", &jet_pt_nanoAOD);
+        tree_output->Branch("jet_pt_nanoAOD", jet_syst_name == "nanoAOD" ? &jet_pt : &jet_pt_nanoAOD);
         tree_output->Branch("jet_mass", &jet_mass);
-        tree_output->Branch("jet_mass_nanoAOD", &jet_mass_nanoAOD);
+        tree_output->Branch("jet_mass_nanoAOD", jet_syst_name == "nanoAOD" ? &jet_mass : &jet_mass_nanoAOD);
         tree_output->Branch("jet_phi", &jet_phi);
         tree_output->Branch("jet_eta", &jet_eta);
         tree_output->Branch("jet_btagUParTAK4B", &jet_btagUParTAK4B);
@@ -1150,8 +1150,10 @@ void CreateTuple::setBranchesAddressesInput() {
     tree_input->SetBranchAddress("t_Mu_mediumId", &mu_mediumID);
     tree_input->SetBranchStatus("t_Mu_tightId", 1);
     tree_input->SetBranchAddress("t_Mu_tightId", &mu_tightID);
-    tree_input->SetBranchStatus("t_Jet_mass_nanoAOD", 1);
-    tree_input->SetBranchAddress("t_Jet_mass_nanoAOD", &jet_mass_nanoAOD);
+    if (jet_syst_name.empty() || (ifSync && jet_syst_name != "nanoAOD")) {
+        tree_input->SetBranchStatus("t_Jet_mass_nanoAOD", 1);
+        tree_input->SetBranchAddress("t_Jet_mass_nanoAOD", &jet_mass_nanoAOD);
+    }
     if(ifSync){
         tree_input->SetBranchStatus("t_pass_muon_trigger_match", 1);
         tree_input->SetBranchAddress("t_pass_muon_trigger_match", &pass_muon_trigger_match);
@@ -1607,8 +1609,6 @@ void CreateTuple::fillOutputTree() {
 
             TLorentzVector leading_jet_vector;
             TLorentzVector subleading_jet_vector;
-            TLorentzVector leading_jet_vector_nanoAOD;
-            TLorentzVector subleading_jet_vector_nanoAOD;
             leading_jet_vector.SetPtEtaPhiM(jet_pt->at(leading_jet_index),
                                             jet_eta->at(leading_jet_index),
                                             jet_phi->at(leading_jet_index),
@@ -1618,23 +1618,30 @@ void CreateTuple::fillOutputTree() {
                                                jet_phi->at(subleading_jet_index),
                                                jet_mass->at(subleading_jet_index));
 
-            leading_jet_vector_nanoAOD.SetPtEtaPhiM(jet_pt_nanoAOD->at(leading_jet_index),
-                                            jet_eta->at(leading_jet_index),
-                                            jet_phi->at(leading_jet_index),
-                                            jet_mass_nanoAOD->at(leading_jet_index));
-            subleading_jet_vector_nanoAOD.SetPtEtaPhiM(jet_pt_nanoAOD->at(subleading_jet_index),
-                                               jet_eta->at(subleading_jet_index),
-                                               jet_phi->at(subleading_jet_index),
-                                               jet_mass_nanoAOD->at(subleading_jet_index));
             TLorentzVector dijet_vector = leading_jet_vector + subleading_jet_vector;
-            TLorentzVector dijet_vector_nanoAOD = leading_jet_vector_nanoAOD + subleading_jet_vector_nanoAOD;
 
             diJet_pt = dijet_vector.Pt();
             diJet_eta = dijet_vector.Eta();
             diJet_phi = dijet_vector.Phi();
             diJet_mass = dijet_vector.M();
-            diJet_pt_nanoAOD = dijet_vector_nanoAOD.Pt();
-            diJet_mass_nanoAOD = dijet_vector_nanoAOD.M();
+            if (jet_syst_name.empty()) {
+                TLorentzVector leading_jet_vector_nanoAOD;
+                TLorentzVector subleading_jet_vector_nanoAOD;
+                leading_jet_vector_nanoAOD.SetPtEtaPhiM(jet_pt_nanoAOD->at(leading_jet_index),
+                                                       jet_eta->at(leading_jet_index),
+                                                       jet_phi->at(leading_jet_index),
+                                                       jet_mass_nanoAOD->at(leading_jet_index));
+                subleading_jet_vector_nanoAOD.SetPtEtaPhiM(jet_pt_nanoAOD->at(subleading_jet_index),
+                                                          jet_eta->at(subleading_jet_index),
+                                                          jet_phi->at(subleading_jet_index),
+                                                          jet_mass_nanoAOD->at(subleading_jet_index));
+                TLorentzVector dijet_vector_nanoAOD = leading_jet_vector_nanoAOD + subleading_jet_vector_nanoAOD;
+                diJet_pt_nanoAOD = dijet_vector_nanoAOD.Pt();
+                diJet_mass_nanoAOD = dijet_vector_nanoAOD.M();
+            } else if (jet_syst_name == "nanoAOD") {
+                diJet_pt_nanoAOD = diJet_pt;
+                diJet_mass_nanoAOD = diJet_mass;
+            }
             delta_eta_diJet = DeltaEta(jet_eta->at(leading_jet_index),
                                        jet_eta->at(subleading_jet_index));
             delta_phi_diJet = DeltaPhi(jet_phi->at(leading_jet_index),

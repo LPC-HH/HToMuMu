@@ -1,4 +1,4 @@
-from utils.sim_vs_data import draw_data_and_simul_and_ratio
+from utils.sim_vs_data import draw_data_and_simul_and_ratio, read_plot_histograms
 import sys
 from pathlib import Path
 
@@ -207,6 +207,11 @@ for era in eras:
             )
         except KeyError:
             print("No BDT category boundaries found for " + production_channel + dir_suffix + ", not drawing them")
+    histograms = read_plot_histograms(
+        variables, era, background_sources, signal_sources, True,
+        production_channel, bdt_cuts, bdt_subset, bdt_dir_suffix=dir_suffix,
+        version=version,
+    )
     for variable in variables:
         print(production_channel)
         draw_data_and_simul_and_ratio(
@@ -222,6 +227,7 @@ for era in eras:
             jet_pT_study=False,
             version=version,
             category_boundaries=category_boundaries if variable.startswith("BDT_") else None,
+            histograms=histograms[variable],
         )
 
     # draw_data_and_simul_and_ratio("PV", era, background_sources, signal_sources)

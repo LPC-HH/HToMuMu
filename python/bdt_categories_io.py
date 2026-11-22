@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 BDT_CATEGORIES_PATH = Path(__file__).resolve().parent.parent / "root_io" / "bdt_categories.json"
+DEFAULT_BDT_VARIANT = "asimovFit_flatMassRes"
 
 
 def variant_dir_suffix(label):

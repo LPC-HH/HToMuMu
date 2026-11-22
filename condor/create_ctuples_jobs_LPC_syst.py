@@ -109,6 +109,12 @@ jet_jes_syst_names = [
     "CMS_scale_j_HF_2024",
     "CMS_scale_j_Absolute_2024",
 
+    "CMS_scale_j_BBEC1_2025",
+    "CMS_scale_j_RelativeSample_2025",
+    "CMS_scale_j_EC2_2025",
+    "CMS_scale_j_HF_2025",
+    "CMS_scale_j_Absolute_2025",
+
     "CMS_res_j_eta0to1p93_pt0toInf_2022",
     "CMS_res_j_eta1p93to2p5_pt0toInf_2022",
     "CMS_res_j_eta2p5to3p0_pt0to50_2022",
@@ -143,6 +149,13 @@ jet_jes_syst_names = [
     "CMS_res_j_eta2p5to3p0_pt50toInf_2024",
     "CMS_res_j_eta3to5_pt0to50_2024",
     "CMS_res_j_eta3to5_pt50toInf_2024",
+
+    "CMS_res_j_eta0to1p93_pt0toInf_2025",
+    "CMS_res_j_eta1p93to2p5_pt0toInf_2025",
+    "CMS_res_j_eta2p5to3p0_pt0to50_2025",
+    "CMS_res_j_eta2p5to3p0_pt50toInf_2025",
+    "CMS_res_j_eta3to5_pt0to50_2025",
+    "CMS_res_j_eta3to5_pt50toInf_2025",
 ]
 
 
@@ -150,6 +163,7 @@ jet_systs = []
 for jes_name in jet_jes_syst_names:
     jet_systs.append(jes_name + "_up")
     jet_systs.append(jes_name + "_down")
+jet_systs.append("nanoAOD")
 
 
 def get_syst_points():

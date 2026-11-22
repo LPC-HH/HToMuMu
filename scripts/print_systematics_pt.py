@@ -305,7 +305,6 @@ def calculate_nominal():
 
 def calculate_all(nominal):
     ratios = {syst: {} for syst in ALL_SYSTEMATICS}
-    missing = []
 
     for i_syst, systematic in enumerate(ALL_SYSTEMATICS, start=1):
         print(f"\n[{i_syst}/{len(ALL_SYSTEMATICS)}] {systematic}")
@@ -314,16 +313,6 @@ def calculate_all(nominal):
             for process in PROCESSES:
                 up_path = systematic_file(channel, process, systematic, "up")
                 down_path = systematic_file(channel, process, systematic, "down")
-
-                if not up_path.is_file() or not down_path.is_file():
-                    if not up_path.is_file():
-                        missing.append((systematic, channel, process, "up", up_path))
-                    if not down_path.is_file():
-                        missing.append(
-                            (systematic, channel, process, "down", down_path)
-                        )
-                    print(f"  [MISSING] {channel} / {process}")
-                    continue
 
                 up_yields, up_events = read_category_yields(up_path, channel)
                 down_yields, down_events = read_category_yields(down_path, channel)
@@ -352,7 +341,7 @@ def calculate_all(nominal):
                         "down": down_yields[cat] / nominal_yield,
                     }
 
-    return ratios, missing
+    return ratios
 
 
 def print_detailed(ratios):
@@ -471,14 +460,25 @@ def print_datacard_lines(ratios):
             print("# " + " ".join(values))
 
 
+def find_missing_inputs():
+    missing = []
+    for channel in CHANNELS:
+        for process in PROCESSES:
+            path = nominal_file(channel, process)
+            if not path.is_file():
+                missing.append(("nominal", channel, process, "-", path))
+            for systematic in ALL_SYSTEMATICS:
+                for direction in ("up", "down"):
+                    path = systematic_file(channel, process, systematic, direction)
+                    if not path.is_file():
+                        missing.append((systematic, channel, process, direction, path))
+    return missing
+
+
 def print_missing(missing):
     print("\n" + "#" * 100)
-    print("# MISSING SYSTEMATIC FILES")
+    print("# MISSING INPUT FILES")
     print("#" * 100)
-
-    if not missing:
-        print("None")
-        return
 
     for systematic, channel, process, direction, path in missing:
         print(f"{systematic} | {channel} | {process} | " f"{direction} | {path}")
@@ -495,16 +495,19 @@ def main():
             print(f"Mass window: {MASS_MIN} < diMuon_bsConstrainedMass < {MASS_MAX}")
             print("The stored weight is used unchanged in every shifted tuple.")
             print("ggH and VBF signal processes are NEVER summed.")
-            print(f"Output saved to: {OUTPUT_JSON}")
+            missing = find_missing_inputs()
+            if missing:
+                print_missing(missing)
+                sys.exit(f"[ERROR] {len(missing)} required inputs missing. JSON was not updated. See {OUTPUT_TXT}.")
 
             nominal = calculate_nominal()
-            ratios, missing = calculate_all(nominal)
+            ratios = calculate_all(nominal)
             save_json(ratios)
+            print(f"Output saved to: {OUTPUT_JSON}")
             #print_detailed(ratios)
             print_python_dictionary(ratios)
             print_google_sheets(ratios)
             #print_datacard_lines(ratios)
-            print_missing(missing)
 
         finally:
             sys.stdout = original_stdout

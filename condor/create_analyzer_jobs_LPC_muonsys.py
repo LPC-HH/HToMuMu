@@ -63,24 +63,25 @@ list_datasets = [
 ]
 
 # # Use in case you want to run over a specific list of datasets!
-list_datasets = [
+# list_datasets = [
 # "VBF_Summer22",
 # "WZZ_Summer23BPix",
- "VBF_Summer25",
+ # "VBF_Summer25",
 # "VBF_Summer22EE",
 # "VBF_Summer23",
 # "VBF_Summer23BPix",
- "ggH_Summer25",
+ # "ggH_Summer25",
 # "ggH_Summer22",
 # "ggH_Summer22EE",
 # "ggH_Summer23",
 # "ggH_Summer23BPix",
 #    "ggH_Summer24",
-]
+# ]
 
 
 include_Z = "F"
 include_H = "T"
+ifSync = "F"
 
 
 run_muon_sys = [
@@ -360,6 +361,8 @@ for systematic in run_muon_sys:
             + include_H
             + " "
             + muon_pt_syst
+            + " "
+            + ifSync
         )
         jobfile_JDL.write("Arguments = " + args + "\n")
 
