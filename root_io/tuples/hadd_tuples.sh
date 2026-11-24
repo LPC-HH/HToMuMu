@@ -8,30 +8,51 @@ EOS_HADD_PATH="root://cmseos.fnal.gov/${inEOS_PATH}haddTuples/"
 #EOS_HADD_PATH="./"
 
 COPY_TO_EOS=false
+DELETE_AFTER_COPY=false
+WORK_DIR="."
 
-while getopts "c" opt; do
-    case $opt in
-        c) COPY_TO_EOS=true ;;
+for opt in "$@"; do
+    case "$opt" in
+        -c)
+            COPY_TO_EOS=true
+            DELETE_AFTER_COPY=false
+            ;;
+        -eos)
+            COPY_TO_EOS=true
+            DELETE_AFTER_COPY=true
+            ;;
+        *)
+            echo "Usage: $0 [-c|-eos]" >&2
+            exit 1
+            ;;
     esac
 done
 
+if $DELETE_AFTER_COPY; then
+    WORK_DIR=$(mktemp -d "${TMPDIR:-/tmp}/hadd_tuples_XXXXXX") || exit 1
+fi
 
 echo "=============================================="
 echo "Reading input tuples from:"
 echo "${EOS_HADD_PATH}"
 echo
-echo "Combined tuples will be stored locally."
+echo "Working directory for combined tuples: ${WORK_DIR}"
 echo "=============================================="
 
 
 ############### Combined ################
 
 FAILED_MERGES=()
+MERGED_FILES=()
 
 merge()
 {
-    if ! hadd -f "$@"; then
-        FAILED_MERGES+=("$1")
+    local output="$1"
+    shift
+    if hadd -f "${WORK_DIR}/${output}" "$@"; then
+        MERGED_FILES+=("${WORK_DIR}/${output}")
+    else
+        FAILED_MERGES+=("$output")
     fi
 }
 
@@ -134,6 +155,14 @@ if $COPY_TO_EOS; then
 
     eosmkdir "${inEOS_PATH}haddTuples/" 2>/dev/null || true
 
-    eos cp *_Combined_tuples.root \
-        "root://cmseos.fnal.gov/${inEOS_PATH}haddTuples/"
+    for output in "${MERGED_FILES[@]}"; do
+        if ! eos cp "$output" "${EOS_HADD_PATH}"; then
+            echo "[ERROR] EOS copy failed for ${output}. Local files are in ${WORK_DIR}." >&2
+            exit 1
+        fi
+    done
+
+    if $DELETE_AFTER_COPY; then
+        rm -- "${MERGED_FILES[@]}" && rmdir -- "${WORK_DIR}"
+    fi
 fi
